@@ -13,14 +13,18 @@ class MockVideoDiTCache:
     """
     autoregressive_index: int = -1
 
+@dataclass
+class MockVideoDiTConfig:
+    ...
 
 class MockVideoDiT(BaseVideoDiT[MockVideoDiTCache]):
     """
     A mock video DiT for testing purposes.
     """
-    def __init__(self):
+    def __init__(self, config: MockVideoDiTConfig):
         super().__init__()
-        
+        self.config = config
+
     def initialize_cache(self) -> MockVideoDiTCache:
         return MockVideoDiTCache()
 
