@@ -44,6 +44,22 @@ class BaseVideoDiT[VideoDiTCacheType](ABC):
         """
         ...
 
+    @property
+    @abstractmethod
+    def temporal_patch_size(self) -> int:
+        """
+        Get the temporal patch size.
+        """
+        ...
+
+    @property
+    @abstractmethod
+    def spatial_patch_size(self) -> int:
+        """
+        Get the spatial patch size.
+        """
+        ...
+
     def denoise(self, noisy_input: Tensor, timestep: Tensor, predicted_flow: Tensor) -> Tensor:
         """
         Recover the clean input from the noisy input.
