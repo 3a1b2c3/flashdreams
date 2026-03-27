@@ -14,9 +14,16 @@ class MockTextEncoder(BaseTextEncoder):
     """
     A mock text encoder for testing purposes.
     """
-    def __init__(self, config: MockTextEncoderConfig):
+    def __init__(
+        self, 
+        config: MockTextEncoderConfig, 
+        dtype: torch.dtype = torch.bfloat16, 
+        device: torch.device = torch.device("cuda")
+    ):
         super().__init__()
         self.config = config
+        self.dtype = dtype
+        self.device = device
 
     def encode(self, text: list[str]) -> Tensor:
         """
@@ -28,7 +35,13 @@ class MockTextEncoder(BaseTextEncoder):
         Returns:
             The encoded tensor. [B, seq_len, dim]
         """
-        embeddings = []
-        for t in text:
-            embeddings.append(torch.randn(self.config.seq_len, self.config.dim))
-        return torch.stack(embeddings)
+        embeddings = torch.stack([
+            torch.randn(
+                self.config.seq_len, 
+                self.config.dim, 
+                device=self.device, 
+                dtype=self.dtype
+            )
+            for _ in text
+        ])
+        return embeddings
