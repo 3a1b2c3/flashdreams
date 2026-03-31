@@ -37,7 +37,10 @@ class _NaiveKVCache:
         S = self._total_k.shape[1]
         if S >= self.sink_size + self.window_size:
             return torch.cat(
-                [self._total_k[:, : self.sink_size], self._total_k[:, -self.window_size :]],
+                [
+                    self._total_k[:, : self.sink_size],
+                    self._total_k[:, -self.window_size :],
+                ],
                 dim=1,
             )
         return self._total_k
@@ -47,7 +50,10 @@ class _NaiveKVCache:
         S = self._total_v.shape[1]
         if S >= self.sink_size + self.window_size:
             return torch.cat(
-                [self._total_v[:, : self.sink_size], self._total_v[:, -self.window_size :]],
+                [
+                    self._total_v[:, : self.sink_size],
+                    self._total_v[:, -self.window_size :],
+                ],
                 dim=1,
             )
         return self._total_v
@@ -94,8 +100,12 @@ def test_block_kvcache_matches_baseline(
     num_chunks = 8
 
     for chunk_idx in range(num_chunks):
-        new_k = torch.randn(batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype)
-        new_v = torch.randn(batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype)
+        new_k = torch.randn(
+            batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype
+        )
+        new_v = torch.randn(
+            batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype
+        )
 
         naive.update(new_k, new_v)
         k_baseline = naive.cached_k()
@@ -111,8 +121,12 @@ def test_block_kvcache_matches_baseline(
         torch.testing.assert_close(v_api, v_baseline)
 
         # now test that passing in the same index again, should only update the cache at the same positions
-        new_k = torch.randn(batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype)
-        new_v = torch.randn(batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype)
+        new_k = torch.randn(
+            batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype
+        )
+        new_v = torch.randn(
+            batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype
+        )
 
         naive.ovewrite_rightmost(new_k, new_v)
         k_baseline = naive.cached_k()
@@ -127,7 +141,9 @@ def test_block_kvcache_matches_baseline(
         torch.testing.assert_close(v_api, v_baseline)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for cudagraph test")
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA required for cudagraph test"
+)
 @pytest.mark.parametrize("sink_size,window_size", [(0, 8), (0, 24), (3, 5), (3, 21)])
 def test_block_kvcache_cudagraph_matches_baseline(
     dtype: torch.dtype,
@@ -159,8 +175,12 @@ def test_block_kvcache_cudagraph_matches_baseline(
     num_chunks = 8
 
     # Static buffers for CUDA graph capture/replay (steady-state path).
-    steady_k = torch.empty(batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype)
-    steady_v = torch.empty(batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype)
+    steady_k = torch.empty(
+        batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype
+    )
+    steady_v = torch.empty(
+        batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype
+    )
     graph: torch.cuda.CUDAGraph | None = None
     warmup_iters = 3
 
@@ -171,8 +191,12 @@ def test_block_kvcache_cudagraph_matches_baseline(
         return k_output, v_output
 
     for chunk_idx in range(num_chunks):
-        new_k = torch.randn(batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype)
-        new_v = torch.randn(batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype)
+        new_k = torch.randn(
+            batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype
+        )
+        new_v = torch.randn(
+            batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype
+        )
 
         naive.update(new_k, new_v)
         k_baseline = naive.cached_k()
@@ -203,8 +227,12 @@ def test_block_kvcache_cudagraph_matches_baseline(
         torch.testing.assert_close(v_api, v_baseline)
 
         # Overwrite same chunk (same as baseline test)
-        new_k = torch.randn(batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype)
-        new_v = torch.randn(batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype)
+        new_k = torch.randn(
+            batch, chunk_size, n_heads, dim_k, device=device, dtype=dtype
+        )
+        new_v = torch.randn(
+            batch, chunk_size, n_heads, dim_v, device=device, dtype=dtype
+        )
 
         naive.ovewrite_rightmost(new_k, new_v)
         k_baseline = naive.cached_k()

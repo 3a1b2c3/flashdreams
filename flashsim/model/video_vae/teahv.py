@@ -1,25 +1,37 @@
 import math
+from dataclasses import dataclass, field
 import torch
 from torch import Tensor
 
 from flashsim.model.video_vae.impl.teahv import TAEHV, TAEHVCache
 from flashsim.model.video_vae.base import BaseVideoVAE
+from flashsim.configs.base_config import InstantiateConfig
+
+AVAILABLE_TAEHV_CHECKPOINT_PATHS = {
+    "lighttae": "s3://flashsim/assets/checkpoints/autoencoders/lighttaew2_1.pth",
+}
+
+
+@dataclass
+class TeahvInterfaceConfig(InstantiateConfig["TeahvInterface"]):
+    _target: type["TeahvInterface"] = field(default_factory=lambda: TeahvInterface)
+
+    checkpoint_path: str = AVAILABLE_TAEHV_CHECKPOINT_PATHS["lighttae"]
+    parallel: bool = True
+
+    dtype: torch.dtype = torch.bfloat16
+    device: torch.device = torch.device("cuda")
 
 
 class TeahvInterface(BaseVideoVAE[TAEHVCache, TAEHVCache]):
-    def __init__(
-        self,
-        checkpoint_path: str,
-        parallel: bool = True,
-        dtype: torch.dtype = torch.float16,
-        device: torch.device = torch.device("cuda"),
-        **kwargs,
-    ):
+    def __init__(self, config: TeahvInterfaceConfig):
         # parallel=True: faster + higher memory
         # parallel=False: lower memory
-        self.parallel = parallel
-        self.need_scaled = "lighttae" in checkpoint_path
-        self.taehv = TAEHV(checkpoint_path, **kwargs).to(device=device, dtype=dtype)
+        self.parallel = config.parallel
+        self.need_scaled = "lighttae" in config.checkpoint_path
+        self.taehv = TAEHV(checkpoint_path=config.checkpoint_path).to(
+            device=config.device, dtype=config.dtype
+        )
 
         self.mean = torch.tensor(
             [
@@ -40,8 +52,8 @@ class TeahvInterface(BaseVideoVAE[TAEHVCache, TAEHVCache]):
                 0.2503,
                 -0.2921,
             ],
-            dtype=dtype,
-            device=device,
+            dtype=config.dtype,
+            device=config.device,
         )
 
         self.std = torch.tensor(
@@ -63,8 +75,8 @@ class TeahvInterface(BaseVideoVAE[TAEHVCache, TAEHVCache]):
                 2.8251,
                 1.9160,
             ],
-            dtype=dtype,
-            device=device,
+            dtype=config.dtype,
+            device=config.device,
         )
 
     def initialize_encode_cache(self) -> TAEHVCache:
@@ -110,3 +122,11 @@ class TeahvInterface(BaseVideoVAE[TAEHVCache, TAEHVCache]):
     @property
     def spatial_compression_ratio(self) -> int:
         return 8
+
+
+if __name__ == "__main__":
+    import tyro
+
+    config = tyro.cli(TeahvInterfaceConfig)
+    model = config.setup()
+    print(model)

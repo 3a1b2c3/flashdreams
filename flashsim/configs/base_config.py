@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Tuple, Type
+from typing import Any, Generic, TypeVar
 
 
 # Pretty printing class
@@ -9,7 +9,7 @@ class PrintableConfig:
     def __str__(self):
         lines = [self.__class__.__name__ + ":"]
         for key, val in vars(self).items():
-            if isinstance(val, Tuple):
+            if isinstance(val, tuple):
                 flattened_val = "["
                 for item in val:
                     flattened_val += str(item) + "\n"
@@ -19,13 +19,16 @@ class PrintableConfig:
         return "\n    ".join(lines)
 
 
+T = TypeVar("T")
+
+
 # Base instantiate configs
 @dataclass
-class InstantiateConfig(PrintableConfig):
+class InstantiateConfig(Generic[T], PrintableConfig):
     """Config class for instantiating an the class specified in the _target attribute."""
 
-    _target: Type
+    _target: type[T]
 
-    def setup(self, **kwargs) -> Any:
+    def setup(self, **kwargs: Any) -> T:
         """Returns the instantiated object using the config."""
         return self._target(self, **kwargs)

@@ -12,5 +12,5 @@ aws s3 sync \
 
 # 2. Run inference demo. Checkpoints are auto-downloaded at first run.
 pip install -e .
-python scripts/run_alpadreams_inference.py 
+python scripts/run_alpadreams_inference.py
 ```

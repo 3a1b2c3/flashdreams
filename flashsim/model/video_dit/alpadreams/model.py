@@ -106,6 +106,9 @@ class CosmosDiTConfig:
     # Noise level for KV cache update.
     context_noise: int = 128
 
+    device: torch.device = torch.device("cuda")
+    dtype: torch.dtype = torch.bfloat16
+
     def __post_init__(self):
         if self.enable_hdmap_condition:
             self.network.additional_concat_ch = (
@@ -120,16 +123,11 @@ class CosmosDiT(BaseVideoDiT[CosmosDiTCache]):
     Cosmos DiT for video generation.
     """
 
-    def __init__(
-        self,
-        config: CosmosDiTConfig,
-        dtype: torch.dtype = torch.bfloat16,
-        device: torch.device = torch.device("cuda"),
-    ):
+    def __init__(self, config: CosmosDiTConfig):
         super().__init__()
         self.config = config
-        self.dtype = dtype
-        self.device = device
+        self.dtype = config.dtype
+        self.device = config.device
 
         self.network = CosmosDiTNetwork(config=self.config.network).to(
             self.device, self.dtype
@@ -378,3 +376,11 @@ class CosmosDiT(BaseVideoDiT[CosmosDiTCache]):
 
     def _unpatchify(self, len_h: int, len_w: int, x: Tensor) -> Tensor:
         return self.network.unpatchify_and_maybe_gather_cp(pH=len_h, pW=len_w, x=x)
+
+
+# python -m flashsim.model.video_dit.alpadreams.model
+if __name__ == "__main__":
+    import tyro
+
+    config = tyro.cli(CosmosDiTConfig)
+    model = CosmosDiT(config=config)

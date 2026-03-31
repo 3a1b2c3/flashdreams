@@ -1,6 +1,5 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
 
-import os
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -10,8 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from loguru import logger
-from safetensors.torch import load_file
 from torch.distributed import ProcessGroup
+
+from flashsim.checkpoint.load import load_checkpoint
 
 CACHE_T = 2
 
@@ -1201,19 +1201,7 @@ def _video_vae(
 
     # load checkpoint
     if pretrained_path is not None:
-        ext = os.path.splitext(pretrained_path)[1].lower()
-
-        if ext == ".pth":
-            weights_dict = torch.load(
-                pretrained_path, map_location="cpu", weights_only=True
-            )
-        elif ext == ".safetensors":
-            weights_dict = load_file(pretrained_path, device="cpu")
-        else:
-            raise ValueError(
-                f"Unsupported checkpoint format: {ext}. Supported formats: .pth, .safetensors"
-            )
-
+        weights_dict = load_checkpoint(pretrained_path)
         for k in weights_dict.keys():
             if weights_dict[k].dtype != dtype:
                 weights_dict[k] = weights_dict[k].to(dtype)

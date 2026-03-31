@@ -7,12 +7,13 @@ https://huggingface.co/nvidia/Cosmos-Reason1-7B
 """
 
 import os
-
+from dataclasses import dataclass, field
 from loguru import logger
 import torch
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 from flashsim.model.text_encoder.base import BaseTextEncoder
+from flashsim.configs import InstantiateConfig
 
 
 def _str2bool(v: str | bool) -> bool:
@@ -24,6 +25,22 @@ def _str2bool(v: str | bool) -> bool:
         return False
     else:
         raise ValueError("Boolean value expected.")
+
+
+@dataclass
+class CosmosReason1TextEncoderConfig(InstantiateConfig["CosmosReason1TextEncoder"]):
+    _target: type["CosmosReason1TextEncoder"] = field(
+        default_factory=lambda: CosmosReason1TextEncoder
+    )
+
+    model_name: str = "nvidia/Cosmos-Reason1-7B"
+    max_length: int = 512
+    device: torch.device = torch.device("cuda")
+    dtype: torch.dtype = torch.bfloat16
+    embedding_concat_strategy: str = (
+        "full_concat"  # # Checkpoint uses full_concat -> 100352 dims
+    )
+    n_layers_per_group: int = 5
 
 
 class CosmosReason1TextEncoder(BaseTextEncoder):
@@ -49,15 +66,7 @@ class CosmosReason1TextEncoder(BaseTextEncoder):
     MEAN_POOLING = "mean_pooling"  # Mean of all layer outputs: 3584
     POOL_EVERY_N_LAYERS_AND_CONCAT = "pool_every_n_layers_and_concat"
 
-    def __init__(
-        self,
-        model_name: str = "nvidia/Cosmos-Reason1-7B",
-        max_length: int = 512,
-        device: torch.device | str = torch.device("cuda"),
-        dtype: torch.dtype = torch.bfloat16,
-        embedding_concat_strategy: str = "full_concat",  # Checkpoint uses full_concat -> 100352 dims
-        n_layers_per_group: int = 5,
-    ):
+    def __init__(self, config: CosmosReason1TextEncoderConfig):
         """
         Initialize Cosmos-Reason1 text encoder using Qwen2.5-VL.
 
@@ -74,35 +83,35 @@ class CosmosReason1TextEncoder(BaseTextEncoder):
             n_layers_per_group: Number of layers per group for pool_every_n strategy.
         """
 
-        self.max_length = max_length
-        self.device = device
-        self.dtype = dtype
-        self.embedding_concat_strategy = embedding_concat_strategy
-        self.n_layers_per_group = n_layers_per_group
+        self.max_length = config.max_length
+        self.device = config.device
+        self.dtype = config.dtype
+        self.embedding_concat_strategy = config.embedding_concat_strategy
+        self.n_layers_per_group = config.n_layers_per_group
 
         # Check if using local path
-        local_files_only = os.path.isdir(model_name) or _str2bool(
+        local_files_only = os.path.isdir(config.model_name) or _str2bool(
             os.getenv("LOCAL_FILES_ONLY", "false")
         )
 
         # Load processor and tokenizer
         self.processor = AutoProcessor.from_pretrained(
-            model_name,
+            config.model_name,
             cache_dir=os.getenv("HF_HOME", None),
             local_files_only=local_files_only,
         )
         self.tokenizer = self.processor.tokenizer
 
         # Load model (requires transformers >= 4.49.0)
-        logger.info(f"Loading Cosmos-Reason1 model from {model_name}")
+        logger.info(f"Loading Cosmos-Reason1 model from {config.model_name}")
         self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            model_name,
+            config.model_name,
             cache_dir=os.getenv("HF_HOME", None),
             local_files_only=local_files_only,
-            dtype=dtype,
+            dtype=config.dtype,
         )
 
-        self.model.to(device)
+        self.model.to(config.device)
         self.model.eval()
         self.model.requires_grad_(False)
 

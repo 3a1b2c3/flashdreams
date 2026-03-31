@@ -1,26 +1,37 @@
+from dataclasses import dataclass, field
 import math
 import torch
 from torch import Tensor
 
 from flashsim.model.video_vae.impl.wan import WanVAE, WanVAECache
 from flashsim.model.video_vae.base import BaseVideoVAE
+from flashsim.configs.base_config import InstantiateConfig
+
+
+AVAILABLE_WAN_VAE_CHECKPOINT_PATHS = {
+    "lightvae": "s3://flashsim/assets/checkpoints/autoencoders/lightvaew2_1.pth",
+    "vae": "s3://flashsim/assets/checkpoints/autoencoders/Wan2.1_VAE.pth",
+}
+
+
+@dataclass
+class WanVAEInterfaceConfig(InstantiateConfig["WanVAEInterface"]):
+    _target: type["WanVAEInterface"] = field(default_factory=lambda: WanVAEInterface)
+
+    checkpoint_path: str = AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"]
+
+    dtype: torch.dtype = torch.bfloat16
+    device: torch.device = torch.device("cuda")
 
 
 class WanVAEInterface(BaseVideoVAE[WanVAECache, WanVAECache]):
-    def __init__(
-        self,
-        checkpoint_path: str,
-        use_lightvae: bool = True,
-        dtype: torch.dtype = torch.float16,
-        device: torch.device = torch.device("cuda"),
-        **kwargs,
-    ):
+    def __init__(self, config: WanVAEInterfaceConfig):
+        use_lightvae = "lightvae" in config.checkpoint_path
         self.vae = WanVAE(
-            vae_path=checkpoint_path,
+            vae_path=config.checkpoint_path,
             use_lightvae=use_lightvae,
-            dtype=dtype,
-            device=device,
-            **kwargs,
+            dtype=config.dtype,
+            device=config.device,
         )
 
     def initialize_encode_cache(self) -> WanVAECache:
@@ -74,3 +85,11 @@ class WanVAEInterface(BaseVideoVAE[WanVAECache, WanVAECache]):
     @property
     def spatial_compression_ratio(self) -> int:
         return 8
+
+
+if __name__ == "__main__":
+    import tyro
+
+    config = tyro.cli(WanVAEInterfaceConfig)
+    model = config.setup()
+    print(model)

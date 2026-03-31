@@ -8,6 +8,7 @@ from flashsim.checkpoint.load import load_checkpoint
 
 S3_PTH_PATH = "s3://flashsim/assets/checkpoints/autoencoders/taew2_1.pth"
 
+
 def test_load_checkpoint_from_s3() -> None:
     """Test loading .pth checkpoints from S3."""
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -20,7 +21,7 @@ def test_load_checkpoint_from_s3() -> None:
         local_path = os.path.join(tmp_dir, S3_PTH_PATH.split("s3://")[-1])
         assert os.path.exists(local_path)
         assert os.path.getsize(local_path) > 0
-        
+
         state_dict_from_local = torch.load(local_path)
         for k, v in state_dict.items():
             assert (v == state_dict_from_local[k]).all()

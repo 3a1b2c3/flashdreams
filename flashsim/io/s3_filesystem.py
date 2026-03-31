@@ -23,7 +23,9 @@ class S3FileSystem(FileSystemBase):
         self.s3_client = boto3.client("s3", **config)
 
     @contextmanager
-    def create_stream(self, path: Union[str, os.PathLike], mode: str) -> Generator[io.IOBase, None, None]:
+    def create_stream(
+        self, path: Union[str, os.PathLike], mode: str
+    ) -> Generator[io.IOBase, None, None]:
         """
         Create a stream to read from or write to S3.
 
@@ -55,14 +57,18 @@ class S3FileSystem(FileSystemBase):
         else:
             raise ValueError(f"Unsupported mode: {mode}")
 
-    def concat_path(self, path: Union[str, os.PathLike], suffix: str) -> Union[str, os.PathLike]:
+    def concat_path(
+        self, path: Union[str, os.PathLike], suffix: str
+    ) -> Union[str, os.PathLike]:
         """Concatenate S3 path with suffix."""
         path_str = str(path)
         if path_str.endswith("/"):
             return f"{path_str}{suffix}"
         return f"{path_str}/{suffix}"
 
-    def rename(self, path: Union[str, os.PathLike], new_path: Union[str, os.PathLike]) -> None:
+    def rename(
+        self, path: Union[str, os.PathLike], new_path: Union[str, os.PathLike]
+    ) -> None:
         """
         Rename (or move) an object in S3.
 

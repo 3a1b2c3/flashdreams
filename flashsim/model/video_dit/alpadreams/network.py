@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Type
 
 import torch
 import torch.nn as nn
@@ -37,8 +36,8 @@ class CosmosDiTNetworkCache:
 
 
 @dataclass
-class CosmosDiTNetworkConfig(InstantiateConfig):
-    _target: Type = field(default_factory=lambda: CosmosDiTNetwork)
+class CosmosDiTNetworkConfig(InstantiateConfig["CosmosDiTNetwork"]):
+    _target: type["CosmosDiTNetwork"] = field(default_factory=lambda: CosmosDiTNetwork)
 
     in_channels: int = 16
     out_channels: int = 16
