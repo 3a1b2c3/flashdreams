@@ -27,6 +27,21 @@ DEFAULT_CAMERA_VIEW_MAPPING: Final = dict(
 )
 
 
+AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS = {
+    "single_view": {
+        "pixel_shuffle": "s3://flashsim/assets/checkpoints/alpadreams/16N@cosmos_v2_2b_SF_res720p_30fps_i2v_hdmap_chunk4_pixel_shuffle_resume.pt",
+        "vae_encoding": {
+            "chunk2": "s3://flashsim/assets/checkpoints/alpadreams/32n_cosmos_v2_2b_SF_res720p_30fps_i2v_hdmap_chunk2_vae_encode_loc6_gcp.pt",
+            "chunk3": "s3://flashsim/assets/checkpoints/alpadreams/32n_cosmos_v2_2b_SF_res720p_30fps_i2v_hdmap_chunk3_vae_encode_loc6_gcp.pt",
+        },
+    },
+    "4views": {
+        "pixel_shuffle": "s3://flashsim/assets/checkpoints/alpadreams/32n_cosmos_v2_2b_SF_4view_res720p_fps30_chunk4_i2v_hdmap_pixel_shuffle_loc8st2_gcp.pt",
+        "vae_encoding": "s3://flashsim/assets/checkpoints/alpadreams/32n_cosmos_v2_2b_SF_4view_res720p_fps30_chunk4_i2v_hdmap_vae_encoding_loc8st2_gcp.pt",
+    },
+}
+
+
 @dataclass
 class CosmosDiTCondition:
     """
