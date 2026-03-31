@@ -100,7 +100,6 @@ class AlpadreamsPipeline:
         """
         # 1. encode the hdmap
         encoded_hdmap = self.tokenizer.encode(hdmap, cache=cache.tokenizer_cache)
-        B, V, T, C, H, W = encoded_hdmap.shape
 
         # 2. run DiT denoising
         cache.dit_cache.autoregressive_index = autoregressive_index
