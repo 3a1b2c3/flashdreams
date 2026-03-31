@@ -18,7 +18,9 @@ def test_alpadreams_streaming_inference():
 
     autoregressive_index = 0
     num_frames = pipeline.get_num_frames(autoregressive_index)
-    hdmap = torch.randn(1, num_views, num_frames, 3, height, width, device=device, dtype=dtype)
+    hdmap = torch.randn(
+        1, num_views, num_frames, 3, height, width, device=device, dtype=dtype
+    )
     decoded_video = pipeline.streaming_inference(
         autoregressive_index, hdmap=hdmap, cache=cache
     )
@@ -27,7 +29,9 @@ def test_alpadreams_streaming_inference():
 
     autoregressive_index = 1
     num_frames = pipeline.get_num_frames(autoregressive_index)
-    hdmap = torch.randn(1, num_views, num_frames, 3, height, width, device=device, dtype=dtype)
+    hdmap = torch.randn(
+        1, num_views, num_frames, 3, height, width, device=device, dtype=dtype
+    )
     decoded_video = pipeline.streaming_inference(
         autoregressive_index, hdmap=hdmap, cache=cache
     )

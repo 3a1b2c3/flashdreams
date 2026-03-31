@@ -37,7 +37,7 @@ text = [[PROMPT]]  # [B, V]
 print("loaded hdmap_video.shape:", hdmap_video.shape)
 
 # initialize pipeline
-pipeline = ALPADREAMS_CONFIGS["sv_2steps_chunk2_loc6"].setup()
+pipeline = ALPADREAMS_CONFIGS["sv_2steps_chunk3_loc6_vae_vae"].setup()
 cache = pipeline.initialize_cache(text=text, image=first_frame)
 
 # streaming inference
