@@ -339,7 +339,7 @@ class WanDiTNetwork(nn.Module):
         Args:
             x: Input tokens of shape [..., L, D_in] after patchify.
                 The layout is assumed to be
-                "... (t h w) (d nt nh nw)".
+                "... (t h w) (c kt kh kw)".
             timesteps: Diffusion timesteps of shape [...].
             cache: Per-block KV caches.
             rope_freqs: RoPE frequencies of shape [L, 1, 1, head_dim // 2] after CP.
