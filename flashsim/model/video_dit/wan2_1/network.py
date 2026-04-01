@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -18,80 +18,69 @@ from flashsim.model.video_dit.wan2_1.modules import (
 
 @dataclass
 class WanDiTNetworkCache:
+    """Cache container for all transformer blocks."""
+
     block_caches: list[BlockCache]
 
     def __getitem__(self, index: int) -> BlockCache:
+        """Get cache for a specific block."""
         return self.block_caches[index]
 
     def before_update(self, chunk_idx: int) -> None:
+        """Run pre-update hooks for all block caches."""
         for block_cache in self.block_caches:
             block_cache.before_update(chunk_idx)
 
     def after_update(self, chunk_idx: int) -> None:
+        """Run post-update hooks for all block caches."""
         for block_cache in self.block_caches:
             block_cache.after_update(chunk_idx)
 
 
 class WanDiTNetwork(nn.Module):
-    r"""
-    Wan diffusion backbone supporting both text-to-video and image-to-video.
-    """
+    """WAN diffusion backbone for text-to-video and image-to-video."""
 
     def __init__(
         self,
-        model_type="t2v",
-        patch_size=(1, 2, 2),
-        text_len=512,
-        in_dim=16,
-        dim=2048,
-        ffn_dim=8192,
-        freq_dim=256,
-        text_dim=4096,
-        out_dim=16,
-        num_heads=16,
-        num_layers=32,
-        cross_attn_norm=True,
-        eps=1e-6,
+        model_type: str = "t2v",
+        patch_size: tuple[int, int, int] = (1, 2, 2),
+        text_len: int = 512,
+        in_dim: int = 16,
+        dim: int = 2048,
+        ffn_dim: int = 8192,
+        freq_dim: int = 256,
+        text_dim: int = 4096,
+        out_dim: int = 16,
+        num_heads: int = 16,
+        num_layers: int = 32,
+        cross_attn_norm: bool = True,
+        eps: float = 1e-6,
         concat_padding_mask: bool = False,
-        additional_concat_ch: int = 0,  # hdmap
-    ):
-        r"""
-        Initialize the diffusion model backbone.
+        additional_concat_ch: int = 0,
+    ) -> None:
+        """Initialize WAN DiT backbone.
 
         Args:
-            model_type (`str`, *optional*, defaults to 't2v'):
-                Model variant - 't2v' (text-to-video) or 'i2v' (image-to-video) or 'flf2v' (first-last-frame-to-video)
-            patch_size (`tuple`, *optional*, defaults to (1, 2, 2)):
-                3D patch dimensions for video embedding (t_patch, h_patch, w_patch)
-            text_len (`int`, *optional*, defaults to 512):
-                Fixed length for text embeddings
-            in_dim (`int`, *optional*, defaults to 16):
-                Input video channels (C_in)
-            dim (`int`, *optional*, defaults to 2048):
-                Hidden dimension of the transformer
-            ffn_dim (`int`, *optional*, defaults to 8192):
-                Intermediate dimension in feed-forward network
-            freq_dim (`int`, *optional*, defaults to 256):
-                Dimension for sinusoidal time embeddings
-            text_dim (`int`, *optional*, defaults to 4096):
-                Input dimension for text embeddings
-            out_dim (`int`, *optional*, defaults to 16):
-                Output video channels (C_out)
-            num_heads (`int`, *optional*, defaults to 16):
-                Number of attention heads
-            num_layers (`int`, *optional*, defaults to 32):
-                Number of transformer blocks
-            cross_attn_norm (`bool`, *optional*, defaults to False):
-                Enable cross-attention normalization
-            eps (`float`, *optional*, defaults to 1e-6):
-                Epsilon value for normalization layers
-            concat_padding_mask (`bool`, *optional*, defaults to False):
-                Enable concat padding mask
+            model_type: Model variant. Supported values: ``"t2v"``, ``"i2v"``.
+            patch_size: 3D patch size ``(t_patch, h_patch, w_patch)``.
+            text_len: Fixed maximum text length.
+            in_dim: Input latent channels.
+            dim: Transformer hidden dimension.
+            ffn_dim: Feed-forward hidden dimension.
+            freq_dim: Sinusoidal timestep embedding dimension.
+            text_dim: Input text embedding dimension.
+            out_dim: Output latent channels.
+            num_heads: Number of attention heads.
+            num_layers: Number of transformer blocks.
+            cross_attn_norm: Whether to apply normalization before cross-attention.
+            eps: Epsilon for normalization layers.
+            concat_padding_mask: Whether one mask channel is concatenated into input.
+            additional_concat_ch: Extra conditioning channels (e.g. HDMap).
         """
 
         super().__init__()
 
-        assert model_type in ["t2v", "i2v"]
+        assert model_type in ["t2v", "i2v"], "model_type must be 't2v' or 'i2v'"
         self.model_type = model_type
 
         self.patch_size = patch_size
@@ -109,7 +98,7 @@ class WanDiTNetwork(nn.Module):
         self.concat_padding_mask = concat_padding_mask
         self.additional_concat_ch = additional_concat_ch
 
-        # embeddings
+        # Embedding layers
         in_dim = in_dim + 1 if self.concat_padding_mask else in_dim
         self.patch_embedding = nn.Linear(
             in_dim * patch_size[0] * patch_size[1] * patch_size[2], dim
@@ -129,7 +118,7 @@ class WanDiTNetwork(nn.Module):
                 dim,
             )
 
-        # blocks
+        # Transformer blocks
         self.blocks = nn.ModuleList(
             [
                 Block(
@@ -144,37 +133,44 @@ class WanDiTNetwork(nn.Module):
             ]
         )
 
-        # head
+        # Final projection head
         self.head = Head(dim, out_dim, patch_size, eps)
 
         self.is_shuffle_op_fused = False
 
     def initialize_context_parallel(self, cp_group: ProcessGroup | None = None) -> None:
-        """
-        Set the context parallel group for the network.
+        """Set context-parallel process group for all blocks.
 
-        Must be called before preparing cache.
+        This must be called before ``initialize_cache`` when CP is used.
         """
         for block in self.blocks:
             block.set_context_parallel_group(cp_group)
 
     def initialize_cache(
         self,
-        # self attn
         chunk_size: int,
         window_size: int,
         sink_size: int,
-        # cross attn
-        text_embeddings: Tensor,  # umt5 text embedding. shape [1, 512, 4096]
-        img_embeddings: Optional[
-            Tensor
-        ] = None,  # CLIP image embedding for I2V. shape [1, 256, 1280]
+        text_embeddings: Tensor,
+        img_embeddings: Optional[Tensor] = None,
     ) -> WanDiTNetworkCache:
-        """
-        Initialize the cache for the DiT.
+        """Initialize block caches from text/image context embeddings.
+
+        Args:
+            chunk_size: Number of tokens appended per self-attention update.
+            window_size: Rolling-window size in tokens for self-attention cache.
+            sink_size: Sink-token capacity preserved across updates.
+            text_embeddings: Text embeddings. UMT5 has shape [..., 512, 4096].
+            img_embeddings: Optional image embeddings for I2V. CLIP has shape [..., 256, 1280].
+
+        Returns:
+            ``WanDiTNetworkCache`` containing per-block caches.
         """
         context_text = self.text_embedding(text_embeddings)
         if self.model_type == "i2v":
+            assert img_embeddings is not None, (
+                "img_embeddings is required when model_type='i2v'"
+            )
             context_img = self.img_emb(img_embeddings)
         else:
             context_img = None
@@ -188,16 +184,16 @@ class WanDiTNetwork(nn.Module):
             ],
         )
 
-    def fuse_ops_into_weights(self):
-        """
-        Fuse some ops into the weights of the network.
+    def fuse_ops_into_weights(self) -> None:
+        """Fuse inference-only tensor reorders into model weights.
 
-        Note this function should be called only after loading the checkpoint.
+        This should be called after loading checkpoint weights.
         """
         self._fuse_shuffle_op_into_head()
 
-    def _fuse_shuffle_op_into_head(self):
-        """
+    def _fuse_shuffle_op_into_head(self) -> None:
+        """Fuse WAN output-channel shuffle into ``self.head`` weights.
+
         In the WAN model, the patchify operation is
         "b c (t kt) (h kh) (w kw) -> b (t h w) (c kt kh kw)",
 
@@ -209,8 +205,8 @@ class WanDiTNetwork(nn.Module):
         To fix this, we could fuse this shuffle op into the last linear layer of the head,
         so that we do not have to do this shuffle op explicitly before returning the result.
 
-        Calling this function to modify the head in place, is equivalent to the following code
-        before returning the result:
+        Calling this function to modify the head in place is equivalent to
+        applying the following permutation right before returning the output:
         ```python
         x = rearrange(
             x,
@@ -248,38 +244,42 @@ class WanDiTNetwork(nn.Module):
     def forward(
         self,
         x: Tensor,
-        timesteps: Optional[Tensor],
-        block_kv_caches: List[BlockCache],
+        timesteps: Tensor,
+        cache: WanDiTNetworkCache,
         rope_freqs: Tensor,
         current_chunk_idx: int = 0,
-        hdmap: Optional[Tensor] = None,
+        hdmap: Tensor | None = None,
         eager_mode: bool = True,
-    ):
-        r"""
+    ) -> Tensor:
+        """Run one denoising forward pass.
+
         Args:
-            x (Tensor): Input tensor with shape [B, L, D] after CP. The layout is assumed to be
+            x: Input tokens of shape [B, L, D_in] after patchify.
+                The layout is assumed to be
                 "b (t h w) (d nt nh nw)".
-            timesteps (Optional[Tensor]): Timesteps with shape [B].
-            block_kv_caches (List[BlockCache]): KV caches for the blocks.
-            rope_freqs (Tensor): RoPE frequencies with shape [L, 1, 1, D // 2] after CP.
-            hdmap (Optional[Tensor]): HDMap condition tensor with shape [B, L, additional_concat_ch] after CP.
-                assuming same layout as x.
+            timesteps: Diffusion timesteps of shape [B].
+            cache: Per-block KV caches.
+            rope_freqs: RoPE frequencies of shape [L, 1, 1, head_dim // 2] after CP.
+            current_chunk_idx: Current chunk index for streaming cache update.
+            hdmap: Optional HDMap tensor of shape [B, L, D_hdmap] after patchify.
+            eager_mode: If True, run cache before/after update hooks.
+
+        Returns:
+            Tensor of shape [B, L, prod(patch_size) * out_dim].
         """
         assert x.ndim == 3, "x is expected to be 3D tensor with shape [B, L, D]"
         assert rope_freqs.ndim == 4, (
             "rope_freqs is expected to be 4D tensor with shape [L, 1, 1, D // 2]"
         )
         assert timesteps.ndim == 1, (
-            "timesteps is expected to be 2D tensor with shape [B]"
+            "timesteps is expected to be 1D tensor with shape [B]"
         )
-        assert self.is_shuffle_op_fused, (
-            "needs to call _fuse_shuffle_op_into_head() before running forward"
-        )
+        assert self.is_shuffle_op_fused, "call fuse_ops_into_weights() before forward"
 
-        # patch embedding
+        # Patch embedding
         x = self.patch_embedding(x)  # (B, L, D)
 
-        # patch embedding for hdmap
+        # Optional HDMap embedding
         if self.additional_concat_ch > 0:
             assert hdmap is not None, (
                 "hdmap is expected to be provided for additional concat channels"
@@ -287,31 +287,32 @@ class WanDiTNetwork(nn.Module):
             additional_x = self.additional_patch_embedding(hdmap)
             x = x + additional_x  # (B, L, D)
 
-        # time embeddings
+        # Timestep embedding and modulation projection
         e = self.time_embedding(
             sinusoidal_embedding_1d(self.freq_dim, timesteps).type_as(x)
         )  # [B, D]
         e0 = self.time_projection(e).unflatten(1, (6, self.dim))  # [B, 6, D]
 
-        # transformer blocks
+        # Transformer blocks
         if eager_mode:
-            block_kv_caches.before_update(current_chunk_idx)
+            cache.before_update(current_chunk_idx)
         for block_idx, block in enumerate(self.blocks):
             x = block(
                 x=x,
                 e=e0,
                 rope_freqs=rope_freqs,
-                block_kv_cache=block_kv_caches[block_idx],
+                cache=cache[block_idx],
             )
         if eager_mode:
-            block_kv_caches.after_update(current_chunk_idx)
+            cache.after_update(current_chunk_idx)
 
-        # head
+        # Final head
         x = self.head(x, e.unsqueeze(1))  # (B, L, D)
         return x
 
 
-def test_basic(i2v: bool = False, use_hdmap: bool = False):
+def test_basic(i2v: bool = False, use_hdmap: bool = False) -> None:
+    """Quick local smoke test for WAN network forward pass."""
     torch.manual_seed(42)
     # 14B model
     device = "cuda"

@@ -11,19 +11,29 @@ from flashsim.attention import BlockKVCache, RingAttention
 from flashsim.model.video_dit.alpadreams.rope import apply_rope_freqs
 
 
-def sinusoidal_embedding_1d(dim, position):
-    # preprocess
-    assert dim % 2 == 0
+def sinusoidal_embedding_1d(dim: int, position: Tensor) -> Tensor:
+    """Create 1D sinusoidal embeddings.
+
+    Args:
+        dim: Embedding dimension. Must be even.
+        position: Position tensor of shape [L].
+
+    Returns:
+        Tensor of shape [L, dim] with concatenated cos/sin features.
+    """
+    assert dim % 2 == 0, "dim must be even for sinusoidal embedding"
     half = dim // 2
     position = position.type(torch.float64)
 
-    # calculation
-    sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
-    x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
-    return x
+    sinusoid = torch.outer(
+        position, torch.pow(10000, -torch.arange(half).to(position).div(half))
+    )
+    return torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
 
 
 class MLPProj(torch.nn.Module):
+    """Project conditioning embeddings with a small normalized MLP."""
+
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
         self.proj = torch.nn.Sequential(
@@ -34,41 +44,48 @@ class MLPProj(torch.nn.Module):
             torch.nn.LayerNorm(out_dim),
         )
 
-    def forward(self, image_embeds: Tensor) -> Tensor:
-        return self.proj(image_embeds)
+    def forward(self, x: Tensor) -> Tensor:
+        """Project input embeddings to the target dimension."""
+        return self.proj(x)
 
 
 class Head(nn.Module):
-    def __init__(self, dim: int, out_dim: int, patch_size: tuple[int, int, int], eps: float = 1e-6):
+    """Final projection head with AdaLN-style modulation."""
+
+    def __init__(
+        self,
+        dim: int,
+        out_dim: int,
+        patch_size: tuple[int, int, int],
+        eps: float = 1e-6,
+    ):
         super().__init__()
         self.dim = dim
         self.out_dim = out_dim
         self.patch_size = patch_size
         self.eps = eps
 
-        # layers
+        # Output projection
         out_dim = math.prod(patch_size) * out_dim
         self.norm = nn.LayerNorm(dim, eps, elementwise_affine=False)
         self.head = nn.Linear(dim, out_dim)
 
-        # modulation
+        # AdaLN-style modulation
         self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
 
     def forward(self, x: Tensor, e: Tensor) -> Tensor:
-        r"""
+        """Apply adaptive normalization and project to patch output.
+
         Args:
-            x (Tensor): Input tensor with shape [batch_size, seq_len, n_heads * head_dim]
-            e (Tensor): Modulation tensor with shape [batch_size, 1, n_heads * head_dim]
+            x: Hidden states of shape [..., L, dim].
+            e: Modulation tensor of shape [..., 1, dim].
 
         Returns:
-            Tensor: Output tensor with shape [batch_size, seq_len, n_heads * head_dim]
+            Tensor of shape [..., L, prod(patch_size) * out_dim].
         """
-        assert x.ndim == 3, "x is expected to be 3D tensor with shape [batch_size, seq_len, n_heads * head_dim]"
-        assert e.ndim == 3, "e is expected to be 3D tensor with shape [batch_size, 1, n_heads * head_dim]"
-
-        # TODO(ruilong): These can be fused into a normlinear layer.
-        e = (self.modulation + e).chunk(2, dim=1)  # [B, 1, D] each
-        x = self.norm(x) * (1 + e[1]) + e[0]  # [B, L, D]
+        assert x.ndim == e.ndim, "x and e must have the same number of dimensions"
+        e = (self.modulation + e).chunk(2, dim=-2)  # [..., 1, D] each
+        x = self.norm(x) * (1 + e[1]) + e[0]  # [..., L, D]
         x = self.head(x)
         return x
 
@@ -131,15 +148,15 @@ class MultiHeadAttention(nn.Module):
         kv_cache: BlockKVCache | None = None,
         rope_freqs: Tensor | None = None,
     ) -> BlockKVCache:
-        """Compute K/V from ``context`` and optionally merge into ``kv_cache``.
+        """Project ``context`` into K/V and optionally append to ``kv_cache``.
 
         Args:
-            context: Tensor of shape [..., L, n * d] used to compute K/V.
-            kv_cache: Existing cache to update, or None to allocate from this step.
-            rope_freqs: RoPE frequencies, shape [L, 1, 1, d // 2].
+            context: Context tensor of shape [..., L, context_dim].
+            kv_cache: Existing cache to update, or ``None`` to create a new cache.
+            rope_freqs: Optional RoPE frequencies for K, shape [L, 1, 1, d // 2].
 
         Returns:
-            KV cache containing the merged keys and values.
+            Updated ``BlockKVCache`` containing keys and values.
         """
         batch_shape = context.shape[:-2]
         batch_size = math.prod(batch_shape)
@@ -181,15 +198,15 @@ class MultiHeadAttention(nn.Module):
         kv_cache: BlockKVCache,
         rope_freqs: Tensor | None = None,
     ) -> Tensor:
-        """Run attention using ``x`` as queries and ``kv_cache`` as K/V source.
+        """Run attention with queries from ``x`` against cached K/V.
 
         Args:
-            x: Query tensor of shape [..., L, n * d].
-            kv_cache: KV cache for inference.
-            rope_freqs: RoPE frequencies, shape [L, 1, 1, d // 2].
+            x: Query tensor of shape [..., L, query_dim].
+            kv_cache: KV cache used as attention context.
+            rope_freqs: Optional RoPE frequencies for Q, shape [L, 1, 1, d // 2].
 
         Returns:
-            Output tensor of shape [..., L, n * d] after projection.
+            Tensor of shape [..., L, query_dim] after output projection.
         """
         batch_shape = x.shape[:-2]
         batch_size = math.prod(batch_shape)
@@ -233,7 +250,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class SelfAttention(MultiHeadAttention):
-    """Self-attention: queries and K/V are derived from the same ``x`` each step."""
+    """Self-attention that always refreshes K/V cache from current ``x``."""
 
     def initialize_cache(
         self,
@@ -275,20 +292,20 @@ class SelfAttention(MultiHeadAttention):
         kv_cache: BlockKVCache,
         rope_freqs: Tensor,
     ) -> Tensor:
-        """Same as base ``forward`` with ``update_kv_cache=True``."""
+        """Update cache from ``x`` and return self-attention output."""
         return super().forward(x, kv_cache, rope_freqs=rope_freqs, update_kv_cache=True)
 
 
 @dataclass
 class CrossAttnCache:
     """Cache container for cross-attention."""
-    
+
     text: BlockKVCache
-    img: BlockKVCache | None = None  # only used for I2V
+    img: BlockKVCache | None = None  # Optional image cache for I2V.
 
 
 class CrossAttention(MultiHeadAttention):
-    """Cross-attention: K/V live only in ``kv_cache``; ``forward`` does not refresh them."""
+    """Cross-attention with static cached context."""
 
     def __init__(self, i2v: bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -303,10 +320,10 @@ class CrossAttention(MultiHeadAttention):
         """Compute K/V from image ``context``.
 
         Args:
-            context: Tensor of shape [..., L, n * d] used to compute K/V.
+            context: Tensor of shape [..., L, context_dim].
 
         Returns:
-            KV cache containing the merged keys and values.
+            ``BlockKVCache`` containing projected image keys and values.
         """
         batch_shape = context.shape[:-2]
         batch_size = math.prod(batch_shape)
@@ -319,10 +336,18 @@ class CrossAttention(MultiHeadAttention):
 
     def initialize_cache(
         self,
-        context_text: Tensor,  # [B, L, D]
-        context_img: Tensor | None = None,  # [B, L, D]
+        context_text: Tensor,
+        context_img: Tensor | None = None,
     ) -> CrossAttnCache:
-        """Initialize cross-attention cache from the provided context."""
+        """Initialize cross-attention cache.
+
+        Args:
+            context_text: Text context tensor [B, L_text, D].
+            context_img: Optional image context tensor [B, L_img, D] for I2V.
+
+        Returns:
+            ``CrossAttnCache`` with text K/V and optional image K/V.
+        """
         text_cache = self.compute_kv(context_text)
         if self.i2v:
             img_cache = self.compute_kv_image(context_img)
@@ -335,7 +360,7 @@ class CrossAttention(MultiHeadAttention):
         x: Tensor,
         kv_cache: CrossAttnCache,
     ) -> Tensor:
-        """Attend with queries from ``x``"""
+        """Run cross-attention with queries from ``x`` and cached context."""
         batch_shape = x.shape[:-2]
         batch_size = math.prod(batch_shape)
         L, D = x.shape[-2:]
@@ -345,29 +370,36 @@ class CrossAttention(MultiHeadAttention):
         q = self.norm_q(self.q(x)).reshape(batch_size, L, n, d)
         out = self.attn_op(q, kv_cache.text.cached_k(), kv_cache.text.cached_v())
         if self.i2v:
-            assert kv_cache.img is not None, "kv_cache_img is expected to be provided for I2V cross-attention"
-            out_img = self.attn_op_image(q, kv_cache.img.cached_k(), kv_cache.img.cached_v())
+            assert kv_cache.img is not None, (
+                "kv_cache_img is expected to be provided for I2V cross-attention"
+            )
+            out_img = self.attn_op_image(
+                q, kv_cache.img.cached_k(), kv_cache.img.cached_v()
+            )
             out = out + out_img
         out = out.reshape(batch_shape + (L, n * d))
         return self.o(out)
+
 
 @dataclass
 class BlockCache:
     """Per-block cache container for self-attention and cross-attention."""
 
     self_attn: BlockKVCache
-    cross_attn: BlockKVCache
+    cross_attn: CrossAttnCache
 
     def before_update(self, chunk_idx: int) -> None:
-        """Run cache pre-update hook for the current chunk."""
+        """Run pre-update hook for self-attention cache."""
         self.self_attn.before_update(chunk_idx)
 
     def after_update(self, chunk_idx: int) -> None:
-        """Run cache post-update hook for the current chunk."""
+        """Run post-update hook for self-attention cache."""
         self.self_attn.after_update(chunk_idx)
 
 
 class Block(nn.Module):
+    """Transformer block with self-attn, cross-attn, and FFN branches."""
+
     def __init__(
         self,
         dim,
@@ -384,7 +416,7 @@ class Block(nn.Module):
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
 
-        # layers
+        # Core submodules
         self.norm1 = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
         self.self_attn = SelfAttention(
             query_dim=dim,
@@ -392,7 +424,11 @@ class Block(nn.Module):
             head_dim=dim // num_heads,
             eps=eps,
         )
-        self.norm3 = nn.LayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.norm3 = (
+            nn.LayerNorm(dim, eps, elementwise_affine=True)
+            if cross_attn_norm
+            else nn.Identity()
+        )
         self.cross_attn = CrossAttention(
             query_dim=dim,
             n_heads=num_heads,
@@ -401,22 +437,36 @@ class Block(nn.Module):
             eps=eps,
         )
         self.norm2 = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
-        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(
+            nn.Linear(dim, ffn_dim),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(ffn_dim, dim),
+        )
 
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
 
     def initialize_cache(
-        self, 
-        # self-attention
+        self,
         chunk_size: int,
         window_size: int,
         sink_size: int,
-        # cross-attention
-        context_text: Tensor,  # [B, L, D]
-        context_img: Tensor | None = None,  # [B, L, D]
+        context_text: Tensor,
+        context_img: Tensor | None = None,
     ) -> BlockCache:
-        """Initialize per-branch caches for this transformer block."""
-        batch_size = context_text.shape[0]
+        """Initialize per-branch caches for this transformer block.
+
+        Args:
+            chunk_size: Number of tokens appended per streaming update step.
+            window_size: Rolling-window capacity in tokens.
+            sink_size: Sink-token capacity retained permanently.
+            context_text: Text context tensor [..., L_text, D].
+            context_img: Optional image context tensor [..., L_img, D] for I2V.
+
+        Returns:
+            ``BlockCache`` initialized for this block.
+        """
+        batch_shape = context_text.shape[:-2]
+        batch_size = math.prod(batch_shape)
         device = context_text.device
         dtype = context_text.dtype
 
@@ -433,39 +483,42 @@ class Block(nn.Module):
         )
 
     def set_context_parallel_group(self, cp_group: ProcessGroup | None) -> None:
+        """Set context-parallel process group for self-attention."""
         self.self_attn.set_context_parallel_group(cp_group)
 
     def forward(
         self,
         x: Tensor,
         e: Tensor,
-        block_kv_cache: BlockCache,
+        cache: BlockCache,
         rope_freqs: Tensor,
     ) -> Tensor:
-        r"""
-        Args:
-            x (Tensor): Input tensor with shape [batch_size, seq_len, n_heads * head_dim]
-            e (Tensor): Modulation tensor with shape [batch_size, 6, n_heads * head_dim]
-            block_kv_cache (BlockCache): KV cache for the attention block
-            rope_freqs (Tensor): RoPE frequencies with shape [seq_len, 1, 1, head_dim // 2]
-        Returns:
-            Tensor: Output tensor with shape [batch_size, seq_len, n_heads * head_dim]
-        """
-        e = (self.modulation + e).chunk(6, dim=1)  # [B, 1, D] each
+        """Run one transformer block update.
 
-        y = self.norm1(x) * (1 + e[1]) + e[0]  # [B, L, D]
+        Args:
+            x: Input tensor with shape [..., L, D].
+            e: Modulation tensor with shape [..., 6, D].
+            cache: KV cache container for this block.
+            rope_freqs: RoPE frequencies with shape [L, 1, 1, head_dim // 2].
+
+        Returns:
+            Updated hidden states with shape [..., L, D].
+        """
+        e = (self.modulation + e).chunk(6, dim=-2)  # [..., 1, D] each
+
+        y = self.norm1(x) * (1 + e[1]) + e[0]  # [..., L, D]
         y = self.self_attn(
             y,
             rope_freqs=rope_freqs,
-            kv_cache=block_kv_cache.self_attn,
+            kv_cache=cache.self_attn,
         )
-        x = x + (y * e[2])  # [B, L, D]
+        x = x + (y * e[2])  # [..., L, D]
 
         x = x + self.cross_attn(
             self.norm3(x),
-            kv_cache=block_kv_cache.cross_attn,
+            kv_cache=cache.cross_attn,
         )
-        y = self.norm2(x) * (1 + e[4]) + e[3]  # [B, L, D]
+        y = self.norm2(x) * (1 + e[4]) + e[3]  # [..., L, D]
         y = self.ffn(y)
-        x = x + (y * e[5])  # [B, L, D]
+        x = x + (y * e[5])  # [..., L, D]
         return x
