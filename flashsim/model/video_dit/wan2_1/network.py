@@ -136,7 +136,8 @@ class WanDiTNetwork(nn.Module):
         # Final projection head
         self.head = Head(dim, out_dim, patch_size, eps)
 
-        self.is_shuffle_op_fused = False
+        self._is_shuffle_op_fused = False
+        self._parameters_updated_after_loading_checkpoint = False
 
     def initialize_context_parallel(self, cp_group: ProcessGroup | None = None) -> None:
         """Set context-parallel process group for all blocks.
@@ -184,41 +185,42 @@ class WanDiTNetwork(nn.Module):
             ],
         )
 
-    def fuse_ops_into_weights(self) -> None:
-        """Fuse inference-only tensor reorders into model weights.
+    def update_parameters_after_loading_checkpoint(self) -> None:
+        # This function should be called after loading the checkpoint, to fuse some operations in the model
+        # weights to reduce computation during inference.
+        if self._parameters_updated_after_loading_checkpoint:
+            return
 
-        This should be called after loading checkpoint weights.
+        self._fuse_shuffle_op_into_last_layer()
+        self._parameters_updated_after_loading_checkpoint = True
+
+    def _fuse_shuffle_op_into_last_layer(self) -> None:
         """
-        self._fuse_shuffle_op_into_head()
-
-    def _fuse_shuffle_op_into_head(self) -> None:
-        """Fuse WAN output-channel shuffle into ``self.head`` weights.
-
         In the WAN model, the patchify operation is
         "b c (t kt) (h kh) (w kw) -> b (t h w) (c kt kh kw)",
 
         while the unpatchify operation is
         "b (t h w) (kt kh kw c) -> b c (t kt) (h kh) (w kw)"
 
-        This is likely a bug in the WAN model where the last dimension is shuffled after the network.
+        This is likely a bug in the Cosmos model where the last dimension is shuffled after the network.
 
-        To fix this, we could fuse this shuffle op into the last linear layer of the head,
+        To fix this, we could fuse this shuffle op into the last linear layer,
         so that we do not have to do this shuffle op explicitly before returning the result.
 
-        Calling this function to modify the head in place is equivalent to
-        applying the following permutation right before returning the output:
+        Calling this function to modify the last layer in place, is equivalent to the following code
+        after the last layer:
         ```python
         x = rearrange(
             x,
-            "B L (nt nh nw d) -> B L (d nt nh nw)",
-            nt=self.patch_size[0],
-            nh=self.patch_size[1],
-            nw=self.patch_size[2],
-            d=self.out_dim,
-        ) # [B, L, D]
+            "... (kt kh kw c) -> ... (c kt kh kw)",
+            kt=self.patch_size[0],
+            kh=self.patch_size[1],
+            kw=self.patch_size[2],
+            c=self.out_dim,
+        )
         ```
         """
-        if self.is_shuffle_op_fused:
+        if self._is_shuffle_op_fused:
             return
 
         self.head.head.weight.data = rearrange(
@@ -248,50 +250,45 @@ class WanDiTNetwork(nn.Module):
         cache: WanDiTNetworkCache,
         rope_freqs: Tensor,
         current_chunk_idx: int = 0,
-        hdmap: Tensor | None = None,
+        hdmap_condition: Tensor | None = None,
         eager_mode: bool = True,
     ) -> Tensor:
         """Run one denoising forward pass.
 
         Args:
-            x: Input tokens of shape [B, L, D_in] after patchify.
+            x: Input tokens of shape [..., L, D_in] after patchify.
                 The layout is assumed to be
-                "b (t h w) (d nt nh nw)".
-            timesteps: Diffusion timesteps of shape [B].
+                "... (t h w) (d nt nh nw)".
+            timesteps: Diffusion timesteps of shape [...].
             cache: Per-block KV caches.
             rope_freqs: RoPE frequencies of shape [L, 1, 1, head_dim // 2] after CP.
             current_chunk_idx: Current chunk index for streaming cache update.
-            hdmap: Optional HDMap tensor of shape [B, L, D_hdmap] after patchify.
+            hdmap_condition: Optional HDMap tensor of shape [..., L, D_hdmap] after patchify.
             eager_mode: If True, run cache before/after update hooks.
 
         Returns:
-            Tensor of shape [B, L, prod(patch_size) * out_dim].
+            Tensor of shape [..., L, prod(patch_size) * out_dim].
         """
-        assert x.ndim == 3, "x is expected to be 3D tensor with shape [B, L, D]"
-        assert rope_freqs.ndim == 4, (
-            "rope_freqs is expected to be 4D tensor with shape [L, 1, 1, D // 2]"
+        assert self._parameters_updated_after_loading_checkpoint, (
+            "We expect to have called update_parameters_after_loading_checkpoint() after loading the checkpoint"
         )
-        assert timesteps.ndim == 1, (
-            "timesteps is expected to be 1D tensor with shape [B]"
-        )
-        assert self.is_shuffle_op_fused, "call fuse_ops_into_weights() before forward"
 
         # Patch embedding
-        x = self.patch_embedding(x)  # (B, L, D)
+        x = self.patch_embedding(x)  # (..., L, D)
 
         # Optional HDMap embedding
         if self.additional_concat_ch > 0:
-            assert hdmap is not None, (
+            assert hdmap_condition is not None, (
                 "hdmap is expected to be provided for additional concat channels"
             )
-            additional_x = self.additional_patch_embedding(hdmap)
-            x = x + additional_x  # (B, L, D)
+            additional_x = self.additional_patch_embedding(hdmap_condition)
+            x = x + additional_x  # (..., L, D)
 
         # Timestep embedding and modulation projection
         e = self.time_embedding(
             sinusoidal_embedding_1d(self.freq_dim, timesteps).type_as(x)
-        )  # [B, D]
-        e0 = self.time_projection(e).unflatten(1, (6, self.dim))  # [B, 6, D]
+        )  # [..., D]
+        e0 = self.time_projection(e).unflatten(1, (6, self.dim))  # [..., 6, D]
 
         # Transformer blocks
         if eager_mode:
@@ -307,7 +304,7 @@ class WanDiTNetwork(nn.Module):
             cache.after_update(current_chunk_idx)
 
         # Final head
-        x = self.head(x, e.unsqueeze(1))  # (B, L, D)
+        x = self.head(x, e.unsqueeze(1))  # (..., L, D)
         return x
 
 
@@ -362,11 +359,11 @@ def test_basic(i2v: bool = False, use_hdmap: bool = False) -> None:
     )
     _camera = torch.randn(1, num_tokens_per_chunk, 1536, device=device, dtype=dtype)
     if use_hdmap:
-        hdmap = torch.randn(
+        hdmap_condition = torch.randn(
             1, additional_concat_ch, T, H, W, device=device, dtype=dtype
         )
-        hdmap = rearrange(
-            hdmap,
+        hdmap_condition = rearrange(
+            hdmap_condition,
             "b c (t kt) (h kh) (w kw) -> b (t h w) (c kt kh kw)",
             kt=network.patch_size[0],
             kh=network.patch_size[1],
@@ -374,10 +371,10 @@ def test_basic(i2v: bool = False, use_hdmap: bool = False) -> None:
         )
 
     else:
-        hdmap = None
+        hdmap_condition = None
 
     network.initialize_context_parallel()
-    network.fuse_ops_into_weights()
+    network.update_parameters_after_loading_checkpoint()
 
     network_cache = network.initialize_cache(
         chunk_size=num_tokens_per_chunk,
@@ -395,7 +392,7 @@ def test_basic(i2v: bool = False, use_hdmap: bool = False) -> None:
             network_cache,
             rope_freqs=rope_freqs,
             current_chunk_idx=0,
-            hdmap=hdmap,
+            hdmap_condition=hdmap_condition,
         )
         return output
 
