@@ -5,7 +5,7 @@ import io
 import json
 import os
 from contextlib import contextmanager
-from typing import Generator, Union
+from typing import Generator, Union, Any
 from urllib.parse import urlparse
 
 import boto3
@@ -163,6 +163,46 @@ class S3FileSystem(FileSystemBase):
 
         return bucket, key
 
+    def list_files_recursive(self, s3_dir: Union[str, os.PathLike]) -> list[str]:
+        """List all files in a directory in S3."""
+        bucket, prefix = self._parse_s3_uri(str(s3_dir).removesuffix("/"))
+        prefix = prefix.removesuffix("/")
+        scan_prefix = f"{prefix}/" if prefix else ""
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        out: list[str] = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=scan_prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key.endswith("/") and obj.get("Size", 0) == 0:
+                    continue
+                suffix = key[len(scan_prefix) :] if scan_prefix else key
+                if suffix:
+                    out.append(suffix)
+        return sorted(out)
+
+    def download_to_local(
+        self, s3_uri: Union[str, os.PathLike], local_path: Union[str, os.PathLike]
+    ) -> None:
+        """Download a file from S3 to local."""
+        bucket, key = self._parse_s3_uri(str(s3_uri))
+        local_path_str = str(local_path)
+        os.makedirs(os.path.dirname(local_path_str), exist_ok=True)
+        self.s3_client.download_file(bucket, key, local_path_str)
+
+    def head_object(
+        self, s3_uri: Union[str, os.PathLike], checksum_mode: bool = False
+    ) -> dict[str, Any]:
+        """Get the metadata of a file in S3."""
+        bucket, key = self._parse_s3_uri(str(s3_uri))
+        kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
+        if checksum_mode:
+            kwargs["ChecksumMode"] = "ENABLED"
+        return self.s3_client.head_object(**kwargs)
+
+    def close(self) -> None:
+        """Close the S3 client."""
+        self.s3_client.close()
+
 
 class S3StorageWriter(FileSystemWriter):
     def __init__(self, credential_path: str, path: str, **kwargs) -> None:
@@ -177,10 +217,6 @@ class S3StorageWriter(FileSystemWriter):
         super().__init__(path=path, sync_files=False, **kwargs)
         self.fs = S3FileSystem(credential_path)
         self.path = self.fs.init_path(path)
-
-    @classmethod
-    def validate_checkpoint_id(cls, checkpoint_id: Union[str, os.PathLike]) -> bool:
-        return S3FileSystem.validate_checkpoint_id(checkpoint_id)
 
 
 class S3StorageReader(FileSystemReader):
@@ -197,6 +233,22 @@ class S3StorageReader(FileSystemReader):
         self.path = self.fs.init_path(path)
         # self.sync_files = False
 
-    @classmethod
-    def validate_checkpoint_id(cls, checkpoint_id: Union[str, os.PathLike]) -> bool:
-        return S3FileSystem.validate_checkpoint_id(checkpoint_id)
+
+if __name__ == "__main__":
+    import time
+
+    credential_path = "credentials/s3_checkpoint.secret"
+    s3_uri = "s3://flashsim/assets/"
+    local_path = "/tmp/flashsim/assets/"
+    fs = S3FileSystem(credential_path)
+    paths = fs.list_files_recursive(s3_uri)
+    for path in paths:
+        print(path)
+
+    for path in paths:
+        print("downloading", path)
+        tic = time.time()
+        fs.download_to_local(os.path.join(s3_uri, path), os.path.join(local_path, path))
+        toc = time.time()
+        print("downloaded", path, "in", toc - tic, "seconds")
+        break

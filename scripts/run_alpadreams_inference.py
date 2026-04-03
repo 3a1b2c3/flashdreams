@@ -4,8 +4,11 @@ import torch
 import numpy as np
 import mediapy as media
 from einops import rearrange
+from huggingface_hub import login as huggingface_login
 
 from flashsim.configs.alpadreams import ALPADREAMS_CONFIGS
+from flashsim.io.s3_sync import sync_s3_dir_to_local
+
 
 EXAMPLE_DATA_DIR = os.path.join(
     os.path.dirname(__file__), "../assets/example_data/alpadreams"
@@ -17,6 +20,29 @@ PROMPT = (
     "traffic signs, and buildings. Clear visibility, realistic lighting, photorealistic quality. "
     "High resolution dashcam footage of city driving."
 )
+
+# download example data from S3
+CREDENTIAL_PATH = os.path.join(
+    os.path.dirname(__file__), "../credentials/s3_checkpoint.secret"
+)
+assert os.path.exists(CREDENTIAL_PATH), (
+    f"Credential file not found at {CREDENTIAL_PATH}"
+)
+sync_s3_dir_to_local(
+    s3_dir="s3://flashsim/assets/example_data/alpadreams",
+    s3_credential_path=CREDENTIAL_PATH,
+    cache_dir=EXAMPLE_DATA_DIR,
+    max_workers=10,
+    show_progress=True,
+    verify_checksum=True,
+    desc="Syncing from S3",
+)
+
+# login huggingface
+HF_TOKEN = os.getenv("HF_TOKEN")
+assert HF_TOKEN is not None, "HF_TOKEN is not set"
+huggingface_login(HF_TOKEN)
+print("logged in to huggingface")
 
 device = torch.device("cuda")
 dtype = torch.bfloat16

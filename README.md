@@ -3,14 +3,7 @@
 ## Instructions to run Alpadreams Inference.
 
 ```bash
-# 1. Download sampled data from S3 bucket.
-aws s3 sync \
-    s3://flashsim/assets/example_data/alpadreams \
-    ./assets/example_data/alpadreams \
-    --profile team-sil-videogen \
-    --endpoint-url https://pdx.s8k.io
-
-# 2. setup credentials in `credentials/s3_checkpoint.secret` similarly with I4:
+# 1. setup credentials in `credentials/s3_checkpoint.secret` similarly with I4:
 # {
 #     "aws_access_key_id": "team-sil-videogen",
 #     "aws_secret_access_key": <KEY>,
@@ -18,8 +11,15 @@ aws s3 sync \
 #     "region_name": "us-east-1"
 # }
 
+# 2. setup huggingface token and huggingface home to cache
+export HF_TOKEN=<YOUR_TOKEN>
+export HF_HOME=~/.cache/huggingface
 
-# 2. Run inference demo. Checkpoints are auto-downloaded at first run.
+# 3. setup where to cache flashsim checkpoints
+export FLASHSIM_CACHE_DIR=~/.cache/flashsim
+
+# 4. Run inference demo.
+# Checkpoints and example data are auto-downloaded at first run.
 pip install -e .
 python scripts/run_alpadreams_inference.py
 ```
