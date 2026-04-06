@@ -13,6 +13,7 @@ from flashsim.model.video_dit.alpadreams.model import (
     CosmosDiTConfig,
     AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS,
 )
+from flashsim.model.video_vae.pshuffle import PixelShuffleVAEInterfaceConfig
 
 ALPADREAMS_CONFIGS = {}
 
@@ -71,4 +72,32 @@ ALPADREAMS_CONFIGS["sv_2steps_chunk3_loc6_vae_vae"] = derive_conifg(
             "vae_encoding"
         ]["chunk3"],
     ),
+)
+
+ALPADREAMS_CONFIGS["mv_2steps_chunk4_loc8_pshuffle_lighttae"] = (
+    AlpadreamsPipelineConfig(
+        tokenizer=PixelShuffleVAEInterfaceConfig(),
+        detokenizer=TeahvInterfaceConfig(
+            checkpoint_path=AVAILABLE_TAEHV_CHECKPOINT_PATHS["lighttae"],
+        ),
+        text_encoder=CosmosReason1TextEncoderConfig(),
+        dit=CosmosDiTConfig(
+            enable_hdmap_condition=True,
+            encode_with_pixel_shuffle=True,
+            enable_cross_view_attn=True,
+            # For 720P set to 3.0; for 480P set to 2.0;
+            h_extrapolation_ratio=3.0,
+            w_extrapolation_ratio=3.0,
+            # Difussion schedule
+            denoising_timesteps=[1000, 450],
+            # Local attn: Number of tokens along T dimension.
+            window_size_t=8,
+            # Chunk size: Number of tokens along T dimension.
+            len_t=4,
+            # Checkpoint path
+            checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS["4views"][
+                "pixel_shuffle"
+            ],
+        ),
+    )
 )

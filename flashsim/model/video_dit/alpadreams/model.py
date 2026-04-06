@@ -125,12 +125,15 @@ class CosmosDiTConfig(InstantiateConfig["CosmosDiT"]):
     dtype: torch.dtype = torch.bfloat16
 
     def __post_init__(self):
+        # Propagate configurations to the network.
         if self.enable_hdmap_condition:
             self.network.additional_concat_ch = (
                 192 if self.encode_with_pixel_shuffle else 16
             )
         else:
             self.network.additional_concat_ch = 0
+
+        self.network.enable_cross_view_attn = self.enable_cross_view_attn
 
 
 class CosmosDiT(BaseVideoDiT[CosmosDiTCache]):

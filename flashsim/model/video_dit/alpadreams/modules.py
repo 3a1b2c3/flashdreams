@@ -683,7 +683,7 @@ class Block(nn.Module):
         if self.enable_cross_view_attn:
             normed_x_cv = self.layer_norm_cross_view_attn(x)
             x = rearrange(normed_x_cv, "b v t hw d -> b t v hw d")
-            if self.cross_view_attn.cp_enabled:
+            if self.cross_view_attn.is_context_parallel_enabled():
                 # When cross-view attention is CP-enabled, assume views are split
                 # across GPUs in rank order. For 4 views on 2 GPUs, that is
                 # [0, 1] on one rank group and [2, 3] on the other.

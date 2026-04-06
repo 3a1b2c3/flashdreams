@@ -36,19 +36,23 @@ class AlpadreamsPipelineConfig(InstantiateConfig["AlpadreamsPipeline"]):
     text_encoder: CosmosReason1TextEncoderConfig = field(
         default_factory=lambda: CosmosReason1TextEncoderConfig()
     )
+    image_encoder: WanVAEInterfaceConfig | TeahvInterfaceConfig = field(
+        default_factory=lambda: WanVAEInterfaceConfig()
+    )
     dit: CosmosDiTConfig = field(default_factory=lambda: CosmosDiTConfig())
 
 
 class AlpadreamsPipeline:
     def __init__(self, config: AlpadreamsPipelineConfig):
         self.text_encoder = config.text_encoder.setup()
-        self.detokenizer = config.detokenizer.setup()
+        self.image_encoder = config.image_encoder.setup()
         self.tokenizer = config.tokenizer.setup()
+        self.detokenizer = config.detokenizer.setup()
         self.dit = config.dit.setup()
 
     def initialize_cache(
         self, text: list[list[str]], image: Tensor, view_names: list[str] | None = None
-    ):
+    ) -> AlpadreamsPipelineCache:
         """
         Initialize the cache for the Alpadreams pipeline.
 
@@ -61,7 +65,7 @@ class AlpadreamsPipeline:
         encoded_height = video_height // self.tokenizer.spatial_compression_ratio
         encoded_width = video_width // self.tokenizer.spatial_compression_ratio
 
-        image_embedding = self.tokenizer.encode(image)
+        image_embedding = self.image_encoder.encode(image)
         text_embeddings = torch.stack(
             [self.text_encoder.encode(t) for t in text], dim=0
         )
@@ -86,7 +90,7 @@ class AlpadreamsPipeline:
     @torch.no_grad()
     def streaming_inference(
         self, autoregressive_index: int, hdmap: Tensor, cache: AlpadreamsPipelineCache
-    ):
+    ) -> Tensor:
         """
         Stream the inference of the video diffusion pipeline.
 
@@ -99,15 +103,20 @@ class AlpadreamsPipeline:
             The decoded video. [B, V, T, C, H, W]
         """
         # 1. encode the hdmap
+        if hasattr(cache.tokenizer_cache, "autoregressive_index"):
+            cache.tokenizer_cache.autoregressive_index = autoregressive_index
         encoded_hdmap = self.tokenizer.encode(hdmap, cache=cache.tokenizer_cache)
 
         # 2. run DiT denoising
-        cache.dit_cache.autoregressive_index = autoregressive_index
+        if hasattr(cache.dit_cache, "autoregressive_index"):
+            cache.dit_cache.autoregressive_index = autoregressive_index
         clean_input = self.dit.generate(
             condition=CosmosDiTCondition(hdmap=encoded_hdmap), cache=cache.dit_cache
         )
 
         # 3. decode the clean input
+        if hasattr(cache.detokenizer_cache, "autoregressive_index"):
+            cache.detokenizer_cache.autoregressive_index = autoregressive_index
         decoded_video = self.detokenizer.decode(
             clean_input, cache=cache.detokenizer_cache
         )

@@ -71,7 +71,9 @@ def sync_s3_dir_to_local(
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
     should_download = world_rank == 0
-    s3_fs = S3FileSystem(credential_path=s3_credential_path) if should_download else None
+    s3_fs = (
+        S3FileSystem(credential_path=s3_credential_path) if should_download else None
+    )
 
     def _validate_local_file(local_path: str, key: str) -> None:
         """Validate local file using remote size and optional FULL_OBJECT SHA256 checksum."""
@@ -123,7 +125,10 @@ def sync_s3_dir_to_local(
             if object_suffixes:
                 worker_count = min(max(1, max_workers), len(object_suffixes))
                 with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                    futures = [executor.submit(_download_one, obj_suffix) for obj_suffix in object_suffixes]
+                    futures = [
+                        executor.submit(_download_one, obj_suffix)
+                        for obj_suffix in object_suffixes
+                    ]
                     with tqdm.tqdm(
                         total=len(object_suffixes),
                         desc=desc,
@@ -141,8 +146,8 @@ def sync_s3_dir_to_local(
 
 if __name__ == "__main__":
     sync_s3_dir_to_local(
-        s3_dir="s3://flashsim/assets/example_data", 
-        s3_credential_path="credentials/s3_checkpoint.secret", 
+        s3_dir="s3://flashsim/assets/example_data",
+        s3_credential_path="credentials/s3_checkpoint.secret",
         cache_dir="/tmp/flashsim/assets/example_data",
         max_workers=10,
         show_progress=True,
