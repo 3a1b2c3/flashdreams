@@ -68,7 +68,7 @@ PYTHONPATH=. torchrun   --standalone   --nnodes=1   --nproc_per_node=1 \
 ```
 
 
-## Instructions to run Causal-forcing I2V Inference.
+## Instructions to run Causal-forcing T2V and I2V Inference.
 
 ```bash
 # 0. request interactive node with pre-built container save as above alpadreams demo.
