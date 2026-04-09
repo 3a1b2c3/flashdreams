@@ -19,12 +19,14 @@ srun \
     /bin/bash
 
 # 1. setup credentials in the file `credentials/s3_checkpoint.secret` similarly with I4:
-# {
-#     "aws_access_key_id": "team-sil-videogen",
-#     "aws_secret_access_key": <YOUR-SIL-VIDEOGEN-PDX-KEY>,
-#     "endpoint_url": "https://pdx.s8k.io",
-#     "region_name": "us-east-1"
-# }
+cat > credentials/s3_checkpoint.secret.2 <<EOF
+{
+  "aws_access_key_id": "team-sil-videogen",
+  "aws_secret_access_key": <YOUR-SIL-VIDEOGEN-PDX-KEY>,
+  "endpoint_url": "https://pdx.s8k.io",
+  "region_name": "us-east-1"
+}
+EOF
 
 # 2. setup huggingface
 # - (required) huggingface token
