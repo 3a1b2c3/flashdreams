@@ -10,7 +10,7 @@ from huggingface_hub import login as huggingface_login
 from flashsim.distributed import init as distributed_init
 from flashsim.configs.alpadreams import ALPADREAMS_CONFIGS
 from flashsim.io.s3_sync import sync_s3_dir_to_local
-from flashsim.pipeline.alpadreams import ProfileEvents
+from flashsim.model.video_dit.profiling import ProfileEvents
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_cameras", type=int, default=1, help="Number of cameras.")

@@ -11,7 +11,7 @@ from huggingface_hub import login as huggingface_login
 from flashsim.distributed import init as distributed_init
 from flashsim.configs.lingbot_world import LINGBOT_WORLD_CONFIGS
 from flashsim.io.s3_sync import sync_s3_dir_to_local
-from flashsim.pipeline.lingbot_world import ProfileEvents
+from flashsim.model.video_dit.profiling import ProfileEvents
 
 
 def SE3_inverse(T: torch.Tensor) -> torch.Tensor:
