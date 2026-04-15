@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 
 from flashsim.checkpoint.load import load_checkpoint
@@ -55,10 +54,10 @@ class LingbotWorldDiTCache:
 
     image: Tensor  # first frame of the video [B, V, 1, C, H, W]
     condition_video_input_mask_first_block: (
-        Tensor  # condition video input mask [B, V, T, 4, H, W] all ones
+        Tensor  # condition video input mask [B, V, T, 4, H, W]
     )
     condition_video_input_mask_other_blocks: (
-        Tensor  # condition video input mask [B, V, T, 4, H, W] all zeros
+        Tensor  # condition video input mask [B, V, T, 4, H, W]
     )
 
     network_cache: LingbotWorldDiTNetworkCache
@@ -87,13 +86,11 @@ class LingbotWorldDiTConfig(InstantiateConfig["LingbotWorldDiT"]):
     w_extrapolation_ratio: float = 1.0
 
     # Difussion schedule
-    denoising_timesteps: list[int] = field(
-        default_factory=lambda: [1000, 750, 500, 250]
-    )
-    warp_denoising_step: bool = True
+    denoising_timesteps: list[int] = field(default_factory=lambda: [999, 978, 947, 825])
+    warp_denoising_step: bool = False
 
     # Local attn: Number of tokens along T dimension.
-    window_size_t: int = 21
+    window_size_t: int = 60  # official code uses global attn (no sliding window)
     sink_size_t: int = 0
 
     # Chunk size: Number of tokens along T dimension. (after patchification)
@@ -106,7 +103,7 @@ class LingbotWorldDiTConfig(InstantiateConfig["LingbotWorldDiT"]):
     context_noise: int = 0
 
     # Speedup.
-    compile_network: bool = False
+    compile_network: bool = True
 
 
 class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
@@ -182,7 +179,6 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         width: int,
         text_embeddings: Tensor,  # [B, V, L, D]
         image_embeddings: Tensor,  # [B, V, 1, C, H, W] after VAE spatial compression
-        view_names: list[str] | None = None,
     ) -> LingbotWorldDiTNetworkCache:
         """
         Initialize the cache for the video DiT.
@@ -192,7 +188,6 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
             width: The video width after VAE spatial compression.
             text_embeddings: Text embeddings [B, V, L, D]
             image_embeddings: VAE encoded first latent [B, V, 1, C, H, W]
-            view_names: List of view names.
 
         Returns:
             The cache for the video DiT.
@@ -232,13 +227,18 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         )
 
         B, V, _, _, H, W = image_embeddings.shape
-        condition_video_input_mask_first_block = torch.ones(
+        condition_video_input_mask_first_block = torch.zeros(
             B, V, len_t, 4, H, W, device=self.device, dtype=self.dtype
         )
+        condition_video_input_mask_first_block[:, :, :1, :, :, :] = 1.0
         condition_video_input_mask_other_blocks = torch.zeros(
             B, V, len_t, 4, H, W, device=self.device, dtype=self.dtype
         )
-        image = F.pad(image_embeddings, (0, 0, 0, 0, 0, 0, 0, len_t - 1))
+        # TODO[FIXME]: official code pads zeros to the image *before* VAE encode,
+        # meaning the first frame condition should gradually fade out over
+        # sequential rollout.
+        # image = F.pad(image_embeddings, (0, 0, 0, 0, 0, 0, 0, len_t - 1))
+        image = image_embeddings  # a block of latents
 
         cache = LingbotWorldDiTCache(
             len_h=len_h,
@@ -325,11 +325,18 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         assert noisy_input.shape == input_shape
 
         # I2V
+        thw_start = autoregressive_index * len_thw
+        thw_end = thw_start + len_thw
         if autoregressive_index == 0:
+            condition_image = cache.image[:, :, thw_start:thw_end, :]
             condition_video_input_mask = cache.condition_video_input_mask_first_block
         else:
+            if thw_end <= cache.image.shape[2]:
+                condition_image = cache.image[:, :, thw_start:thw_end, :]
+            else:
+                condition_image = cache.image[:, :, -len_thw:, :]
             condition_video_input_mask = cache.condition_video_input_mask_other_blocks
-        y = torch.cat([condition_video_input_mask, cache.image], dim=-1)
+        y = torch.cat([condition_video_input_mask, condition_image], dim=-1)
 
         predicted_flow = self.network(
             x=torch.cat([noisy_input, y], dim=-1),

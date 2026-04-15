@@ -120,8 +120,8 @@ class Block(nn.Module):
             e: Modulation tensor with shape [..., 6, D].
             cache: KV cache container for this block.
             rope_freqs: RoPE frequencies with shape [L, 1, 1, head_dim // 2].
-            plucker_embedding: Optional Camera Control.Plucker embedding of
-                shape [..., (L1+...+Ln), D], camera-to-world space.
+            plucker_embedding: Optional Camera Control. Plucker embedding of
+                shape [..., L, D], camera-to-world space.
 
         Returns:
             Updated hidden states with shape [..., L, D].

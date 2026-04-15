@@ -121,3 +121,21 @@ PYTHONPATH=. torchrun   --standalone   --nnodes=1   --nproc_per_node=1 \
 #     --prompt_or_txt_path assets/example_data/i2v/prompt.txt  \
 #     --image_path assets/example_data/i2v/image.jpg
 ```
+
+## Instructions to run Lingbot-World Camera Control I2V Inference.
+reference: [Lingbot-World Repo](https://github.com/robbyant/lingbot-world?tab=readme-ov-file#fast-inference)
+
+```bash
+# 0. request interactive node with pre-built container save as above alpadreams demo.
+
+# 1. setup huggingface
+# - (required) huggingface token
+export HF_TOKEN=<YOUR-HF-TOKEN>
+# - (optional) huggingface cache path
+export HF_HOME=~/.cache/huggingface # default
+
+# 2. Run inference script. Checkpoint will be auto-downloaded at first run from huggingface.
+PYTHONPATH=. torchrun   --standalone   --nnodes=1   --nproc_per_node=1 \
+    scripts/run_lingbot_world.py \
+    --total_blocks 21
+```

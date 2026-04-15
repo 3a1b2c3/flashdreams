@@ -389,7 +389,7 @@ class LingbotWorldDiTNetwork(nn.Module):
             hdmap_condition: Optional HDMap tensor of shape [..., L, D_hdmap] after patchify.
             eager_mode: If True, run cache before/after update hooks.
             plucker: Optional Camera Control.Plucker embedding of shape
-                [..., (L1+...+Ln), D], camera-to-world space.
+                [..., L, D], camera-to-world space.
 
         Returns:
             Tensor of shape [..., L, prod(patch_size) * out_dim].
@@ -439,6 +439,7 @@ class LingbotWorldDiTNetwork(nn.Module):
                 e=torch.broadcast_to(e0, batch_shape + e0.shape[-2:]),
                 rope_freqs=rope_freqs,
                 cache=cache[block_idx],
+                plucker_embedding=plucker_embedding,
             )
         if eager_mode:
             cache.after_update(current_chunk_idx)

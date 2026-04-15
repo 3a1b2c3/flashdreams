@@ -175,7 +175,7 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
         def setup_network(
             config: WanDiTNetworkConfig,
             checkpoint_path: str,
-            compile_network: bool = False,
+            compile_network: bool,
         ) -> WanDiTNetwork:
             network = WanDiTNetwork(config=config)
             network = network.to(device=self.device, dtype=self.dtype)
