@@ -1,5 +1,6 @@
-"""Minimal WebSocket control-to-frames streaming demo.
+"""Minimal control-to-frames streaming demo (WebSocket or Viser-only).
 
-Install the optional extra: ``pip install -e '.[streaming]'``, then run
-``python -m projects.streaming_ws server`` / ``client``.
+- ``pip install -e '.[streaming]'`` — WebSocket ``server`` / ``client``.
+- ``pip install -e '.[streaming_viser]'`` — ``python -m projects.streaming_ws viser``
+  (camera updates trigger mock batches; no separate WS client).
 """

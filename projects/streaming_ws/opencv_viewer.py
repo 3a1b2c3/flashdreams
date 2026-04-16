@@ -14,7 +14,9 @@ import numpy as np
 from PIL import Image
 
 
-def show_webp_in_window(data: bytes, *, window_name: str, window_created: list[bool]) -> None:
+def show_webp_in_window(
+    data: bytes, *, window_name: str, window_created: list[bool]
+) -> None:
     """Decode WebP bytes and draw one frame. Call ``waitKey(1)`` so the window stays responsive."""
     import cv2
 

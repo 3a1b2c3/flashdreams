@@ -38,6 +38,10 @@ streaming = [
 streaming_viewer = [
     "opencv-python==4.10.0.84",
 ]
+# Optional: ``python -m projects.streaming_ws viser`` — Viser UI, camera-driven mock (https://viser.studio/main/).
+streaming_viser = [
+    "viser>=1.0.26",
+]
 
 [tool.setuptools.packages.find]
 exclude = ["tests"]

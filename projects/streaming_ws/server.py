@@ -4,6 +4,9 @@ Defaults match a **mock cloud renderer**: 1280×720 WebP batches of 8 frames, pl
 fixed **200 ms** ``asyncio.sleep`` per CTRL-driven batch (prefill batches skip the
 sleep). Tune ``--stub-latency-ms``, ``--frame-width``, ``--frame-height`` for other
 scenarios.
+
+For a **Viser-only** browser mock (camera movement as trigger), use
+``python -m projects.streaming_ws viser`` (``streaming_viser`` extra).
 """
 
 from __future__ import annotations
