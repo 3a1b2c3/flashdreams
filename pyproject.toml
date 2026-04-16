@@ -30,6 +30,10 @@ dependencies = [
 dev = [
     "pytest==8.1.1",
 ]
+streaming = [
+    "pillow==11.1.0",
+    "websockets==14.2",
+]
 
 [tool.setuptools.packages.find]
 exclude = ["tests"]
