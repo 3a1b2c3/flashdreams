@@ -46,15 +46,14 @@ class WanDiTCache:
         int  # number of tokens along the spatial width dimension after patchification
     )
     num_tokens_per_chunk: int  # number of tokens per chunk after CP
-    batch_size: int  # batch size
-    num_views: int  # number of views
+    batch_shape: tuple[int, ...]  # The batch shape for (...)
 
-    network_cache: WanDiTNetworkCache
-    network_cache_negative: WanDiTNetworkCache | None
+    network_cache_conditioned: WanDiTNetworkCache
+    network_cache_unconditioned: WanDiTNetworkCache | None
     rope_adapter: RotaryPositionEmbedding3D
 
     # For KV cache update in the end.
-    x0: Tensor | None = None  # clean latent [B, V, pTHW, D]
+    x0: Tensor | None = None  # clean latent [..., pTHW, D]
     condition: WanDiTCondition | None = None
 
     autoregressive_index: int = -1
@@ -173,9 +172,10 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
         self,
         height: int,
         width: int,
-        text_embeddings: Tensor,  # [B, V, L, D]
-        text_embeddings_negative: Tensor | None = None,  # [B, V, L, D]
-        image_embeddings: Tensor | None = None,  # [B, V, L, D]
+        positive_text_embeddings: Tensor,  # [..., L, D]
+        negative_text_embeddings: Tensor | None = None,  # [..., L, D]
+        image_embeddings: Tensor | None = None,  # [..., L, D]
+        image_latents: Tensor | None = None,  # [..., T, C, H, W]
     ) -> WanDiTNetworkCache:
         """
         Initialize the cache for the video DiT.
@@ -183,9 +183,10 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
         Args:
             height: The video height after VAE spatial compression.
             width: The video width after VAE spatial compression.
-            text_embeddings: Text embeddings [B, V, L, D]
-            text_embeddings_negative: Text embeddings [B, V, L, D]
-            image_embeddings: CLIP Image embeddings [B, V, L, D]
+            positive_text_embeddings: Positive text embeddings [..., L, D]
+            negative_text_embeddings: Negative text embeddings [..., L, D]
+            image_embeddings: CLIP Image embeddings [..., L, D]
+            image_latent: VAE encoded image latent [..., T, C, H, W]
 
         Returns:
             The cache for the video DiT.
@@ -216,32 +217,32 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
             num_tokens_per_chunk //= self.cp_groups.THW_group.size()
             num_tokens_window_size //= self.cp_groups.THW_group.size()
             num_tokens_sink_size //= self.cp_groups.THW_group.size()
-        network_cache = self.network.initialize_cache(
+        network_cache_conditioned = self.network.initialize_cache(
             chunk_size=num_tokens_per_chunk,
             window_size=num_tokens_window_size,
             sink_size=num_tokens_sink_size,
-            text_embeddings=text_embeddings,
+            text_embeddings=positive_text_embeddings,
             img_embeddings=image_embeddings,
         )
-        if text_embeddings_negative is not None:
-            network_cache_negative = self.network.initialize_cache(
+        # CFG guidance
+        if negative_text_embeddings is not None:
+            network_cache_unconditioned = self.network.initialize_cache(
                 chunk_size=num_tokens_per_chunk,
                 window_size=num_tokens_window_size,
                 sink_size=num_tokens_sink_size,
-                text_embeddings=text_embeddings_negative,
+                text_embeddings=negative_text_embeddings,
                 img_embeddings=image_embeddings,
             )
         else:
-            network_cache_negative = None
+            network_cache_unconditioned = None
         cache = WanDiTCache(
             len_h=len_h,
             len_w=len_w,
-            network_cache=network_cache,
-            network_cache_negative=network_cache_negative,
+            network_cache_conditioned=network_cache_conditioned,
+            network_cache_unconditioned=network_cache_unconditioned,
             rope_adapter=rope_adapter,
             num_tokens_per_chunk=num_tokens_per_chunk,
-            batch_size=text_embeddings.shape[0],
-            num_views=text_embeddings.shape[1],
+            batch_shape=positive_text_embeddings.shape[:-2],
         )
         cache = self._patchify(cache)
         return cache
@@ -281,21 +282,21 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
 
     def _predict_x0(
         self,
-        x0: Tensor | None,  # clean latent [B, V, pT, pHW, D]
-        timestep: Tensor,  # [1] or [B]
+        x0: Tensor | None,  # clean latent [..., pT, pHW, D]
+        timestep: Tensor,  # [1]
         condition: WanDiTCondition,
         cache: WanDiTNetworkCache,
         rng: torch.Generator | None = None,
     ) -> Tensor:
         autoregressive_index = cache.autoregressive_index
         assert autoregressive_index >= 0, "Index must be updated before predicting flow"
+        assert timestep.shape == (1,), "Timestep must be a scalar shape"
         alpha = self.scheduler.timestep_to_sigma(timestep)
 
         rope_freqs = cache.rope_adapter.shift_t(
             offset=autoregressive_index * self.config.len_t
         )
-        batch_size = cache.batch_size
-        num_views = cache.num_views
+        batch_shape = cache.batch_shape
         len_thw = cache.num_tokens_per_chunk
 
         token_dim = (
@@ -304,7 +305,7 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
             * self.config.network.patch_size[1]
             * self.config.network.patch_size[2]
         )
-        input_shape = (batch_size, num_views, len_thw, token_dim)
+        input_shape = (*batch_shape, len_thw, token_dim)
 
         if x0 is None:
             # pure noise
@@ -315,31 +316,35 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
             noisy_input = add_noise(x0, alpha, rng=rng)
 
         assert noisy_input.shape == input_shape
-        predicted_flow = self.network(
+        predicted_flow_conditioned = self.network(
             x=noisy_input,
             timesteps=timestep,
             rope_freqs=rope_freqs,
-            cache=cache.network_cache,
+            cache=cache.network_cache_conditioned,
             current_chunk_idx=autoregressive_index,
             eager_mode=True,
         )
+
+        # CFG guidance
         if (
-            cache.network_cache_negative is not None
+            cache.network_cache_unconditioned is not None
             and self.config.guidance_scale > 1.0
         ):
             predicted_flow_unconditioned = self.network(
                 x=noisy_input,
                 timesteps=timestep,
                 rope_freqs=rope_freqs,
-                cache=cache.network_cache_negative,
+                cache=cache.network_cache_unconditioned,
                 current_chunk_idx=autoregressive_index,
                 eager_mode=True,
             )
             predicted_flow = (
                 predicted_flow_unconditioned
                 + self.config.guidance_scale
-                * (predicted_flow - predicted_flow_unconditioned)
+                * (predicted_flow_conditioned - predicted_flow_unconditioned)
             )
+        else:
+            predicted_flow = predicted_flow_conditioned
 
         x0 = denoise(noisy_input, alpha, predicted_flow)
 

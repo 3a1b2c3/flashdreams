@@ -12,6 +12,7 @@ from flashsim.model.video_dit.wan2_1.model import (
     NEGATIVE_PROMPT,
 )
 
+torch.manual_seed(42)
 device = torch.device("cuda")
 dtype = torch.bfloat16
 
@@ -27,17 +28,18 @@ dit = WanDiTConfig(
     len_t=21,
 ).setup(device=device)
 
+video_height = 480
+video_width = 832
 with torch.no_grad():
     TEXT_PROMPT = "Two anthropomorphic cats in comfy boxing gear and bright gloves fight intensely on a spotlighted stage."
-
-    text_embeddings = text_encoder.encode([TEXT_PROMPT]).unsqueeze(0)
-    text_embeddings_negative = text_encoder.encode([NEGATIVE_PROMPT]).unsqueeze(0)
+    positive_text_embeddings = text_encoder.encode([TEXT_PROMPT])  # [1, L, D]
+    negative_text_embeddings = text_encoder.encode([NEGATIVE_PROMPT])  # [1, L, D]
 
     cache = dit.initialize_cache(
-        height=480 // 8,
-        width=832 // 8,
-        text_embeddings=text_embeddings,
-        text_embeddings_negative=text_embeddings_negative,
+        height=video_height // vae.spatial_compression_ratio,
+        width=video_width // vae.spatial_compression_ratio,
+        positive_text_embeddings=positive_text_embeddings,
+        negative_text_embeddings=negative_text_embeddings,
     )
     cache.autoregressive_index = 0
 
@@ -53,7 +55,7 @@ with torch.no_grad():
     print("Generated video shape:", generated_video.shape)
 
     # export result
-    canvas = rearrange(generated_video, "1 v t c h w -> t h (v w) c")
+    canvas = rearrange(generated_video, "1 t c h w -> t h w c")
     canvas = (canvas.float().cpu().numpy() + 1.0) / 2.0  # range [0, 1]
     canvas = (canvas * 255).astype(np.uint8)
     save_path = "outputs/wan2_1_t2v_1.3b.mp4"
