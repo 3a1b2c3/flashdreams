@@ -31,7 +31,7 @@ class LingbotWorldDiTCondition:
     Condition for the Lingbot World DiT.
     """
 
-    plucker: Tensor  # [B, V, T, C, H, W]
+    plucker: Tensor  # [..., T, C, H, W]
 
     _is_patchified: bool = False
 
@@ -49,22 +49,22 @@ class LingbotWorldDiTCache:
         int  # number of tokens along the spatial width dimension after patchification
     )
     num_tokens_per_chunk: int  # number of tokens per chunk after CP
-    batch_size: int  # batch size
-    num_views: int  # number of views
+    batch_shape: tuple[int, ...]  # The batch shape for (...)
 
-    image: Tensor  # first frame of the video [B, V, 1, C, H, W]
+    image: Tensor  # first frame of the video [..., 1, C, H, W]
     condition_video_input_mask_first_block: (
-        Tensor  # condition video input mask [B, V, T, 4, H, W]
+        Tensor  # condition video input mask [..., T, 4, H, W]
     )
     condition_video_input_mask_other_blocks: (
-        Tensor  # condition video input mask [B, V, T, 4, H, W]
+        Tensor  # condition video input mask [..., T, 4, H, W]
     )
 
-    network_cache: LingbotWorldDiTNetworkCache
+    network_cache_conditioned: LingbotWorldDiTNetworkCache
+    network_cache_unconditioned: LingbotWorldDiTNetworkCache | None
     rope_adapter: RotaryPositionEmbedding3D
 
     # For KV cache update in the end.
-    x0: Tensor | None = None  # clean latent [B, V, pTHW, D]
+    x0: Tensor | None = None  # clean latent [..., pTHW, D]
     condition: LingbotWorldDiTCondition | None = None
 
     autoregressive_index: int = -1
@@ -104,6 +104,10 @@ class LingbotWorldDiTConfig(InstantiateConfig["LingbotWorldDiT"]):
 
     # Speedup.
     compile_network: bool = True
+
+    # CFG guidance scale.
+    guidance_scale: float = 1.0
+    shift: float = 8.0
 
 
 class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
@@ -153,7 +157,7 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         # define scheduler
         num_train_timestep = 1000
         self.scheduler = FlowMatchScheduler(
-            shift=5.0, sigma_min=0.0, extra_one_step=True
+            shift=self.config.shift, sigma_min=0.0, extra_one_step=True
         )
         self.scheduler.set_timesteps(num_train_timestep, training=True)
         if self.config.warp_denoising_step:
@@ -177,8 +181,10 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         self,
         height: int,
         width: int,
-        text_embeddings: Tensor,  # [B, V, L, D]
-        image_embeddings: Tensor,  # [B, V, 1, C, H, W] after VAE spatial compression
+        positive_text_embeddings: Tensor,  # [..., L, D]
+        negative_text_embeddings: Tensor | None = None,  # [..., L, D]
+        image_embeddings: Tensor | None = None,  # [..., L, D]
+        image_latents: Tensor | None = None,  # [..., T, C, H, W]
     ) -> LingbotWorldDiTNetworkCache:
         """
         Initialize the cache for the video DiT.
@@ -186,8 +192,10 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         Args:
             height: The video height after VAE spatial compression.
             width: The video width after VAE spatial compression.
-            text_embeddings: Text embeddings [B, V, L, D]
-            image_embeddings: VAE encoded first latent [B, V, 1, C, H, W]
+            positive_text_embeddings: Positive text embeddings [..., L, D]
+            negative_text_embeddings: Negative text embeddings [..., L, D]
+            image_embeddings: CLIP Image embeddings [..., L, D]
+            image_latent: VAE encoded image latent [..., T, C, H, W]
 
         Returns:
             The cache for the video DiT.
@@ -211,43 +219,52 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
         # RoPE CP splits along same dimension as self-attention CP.
         rope_adapter.set_context_parallel_group(cp_group=self.cp_groups.THW_group)
 
-        num_tokens_per_frame = len_h * len_w
-        num_tokens_per_chunk = num_tokens_per_frame * len_t
-        num_tokens_window_size = num_tokens_per_frame * self.config.window_size_t
-        num_tokens_sink_size = num_tokens_per_frame * self.config.sink_size_t
+        num_tokens_per_chunk = len_t * len_h * len_w
+        num_tokens_window_size = self.config.window_size_t * len_h * len_w
+        num_tokens_sink_size = self.config.sink_size_t * len_h * len_w
         if self.cp_groups.THW_group is not None:
             num_tokens_per_chunk //= self.cp_groups.THW_group.size()
             num_tokens_window_size //= self.cp_groups.THW_group.size()
             num_tokens_sink_size //= self.cp_groups.THW_group.size()
-        network_cache = self.network.initialize_cache(
+        network_cache_conditioned = self.network.initialize_cache(
             chunk_size=num_tokens_per_chunk,
             window_size=num_tokens_window_size,
             sink_size=num_tokens_sink_size,
-            text_embeddings=text_embeddings,
+            text_embeddings=positive_text_embeddings,
         )
+        # CFG guidance
+        if negative_text_embeddings is not None:
+            network_cache_unconditioned = self.network.initialize_cache(
+                chunk_size=num_tokens_per_chunk,
+                window_size=num_tokens_window_size,
+                sink_size=num_tokens_sink_size,
+                text_embeddings=negative_text_embeddings,
+            )
+        else:
+            network_cache_unconditioned = None
 
-        B, V, _, _, H, W = image_embeddings.shape
+        *batch_shape, _, _, H, W = image_latents.shape
         condition_video_input_mask_first_block = torch.zeros(
-            B, V, len_t, 4, H, W, device=self.device, dtype=self.dtype
+            *batch_shape, len_t, 4, H, W, device=self.device, dtype=self.dtype
         )
         condition_video_input_mask_first_block[:, :, :1, :, :, :] = 1.0
         condition_video_input_mask_other_blocks = torch.zeros(
-            B, V, len_t, 4, H, W, device=self.device, dtype=self.dtype
+            *batch_shape, len_t, 4, H, W, device=self.device, dtype=self.dtype
         )
         # TODO[FIXME]: official code pads zeros to the image *before* VAE encode,
         # meaning the first frame condition should gradually fade out over
         # sequential rollout.
-        # image = F.pad(image_embeddings, (0, 0, 0, 0, 0, 0, 0, len_t - 1))
-        image = image_embeddings  # a block of latents
+        # image = F.pad(image_latents, (0, 0, 0, 0, 0, 0, 0, len_t - 1))
+        image = image_latents  # a block of latents
 
         cache = LingbotWorldDiTCache(
             len_h=len_h,
             len_w=len_w,
-            network_cache=network_cache,
+            network_cache_conditioned=network_cache_conditioned,
+            network_cache_unconditioned=network_cache_unconditioned,
             rope_adapter=rope_adapter,
             num_tokens_per_chunk=num_tokens_per_chunk,
-            batch_size=text_embeddings.shape[0],
-            num_views=text_embeddings.shape[1],
+            batch_shape=positive_text_embeddings.shape[:-2],
             image=image,
             condition_video_input_mask_first_block=condition_video_input_mask_first_block,
             condition_video_input_mask_other_blocks=condition_video_input_mask_other_blocks,
@@ -290,21 +307,21 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
 
     def _predict_x0(
         self,
-        x0: Tensor | None,  # clean latent [B, V, pT, pHW, D]
-        timestep: Tensor,  # [1] or [B]
+        x0: Tensor | None,  # clean latent [..., pT, pHW, D]
+        timestep: Tensor,  # [1]
         condition: LingbotWorldDiTCondition,
         cache: LingbotWorldDiTNetworkCache,
         rng: torch.Generator | None = None,
     ) -> Tensor:
         autoregressive_index = cache.autoregressive_index
         assert autoregressive_index >= 0, "Index must be updated before predicting flow"
+        assert timestep.shape == (1,), "Timestep must be a scalar shape"
         alpha = self.scheduler.timestep_to_sigma(timestep)
 
         rope_freqs = cache.rope_adapter.shift_t(
             offset=autoregressive_index * self.config.len_t
         )
-        batch_size = cache.batch_size
-        num_views = cache.num_views
+        batch_shape = cache.batch_shape
         len_thw = cache.num_tokens_per_chunk
 
         token_dim = (
@@ -313,7 +330,7 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
             * self.config.network.patch_size[1]
             * self.config.network.patch_size[2]
         )
-        input_shape = (batch_size, num_views, len_thw, token_dim)
+        input_shape = (*batch_shape, len_thw, token_dim)
 
         if x0 is None:
             # pure noise
@@ -322,31 +339,54 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
             )
         else:
             noisy_input = add_noise(x0, alpha, rng=rng)
+
         assert noisy_input.shape == input_shape
 
         # I2V
         thw_start = autoregressive_index * len_thw
         thw_end = thw_start + len_thw
         if autoregressive_index == 0:
-            condition_image = cache.image[:, :, thw_start:thw_end, :]
+            condition_image = cache.image[..., thw_start:thw_end, :]
             condition_video_input_mask = cache.condition_video_input_mask_first_block
         else:
             if thw_end <= cache.image.shape[2]:
-                condition_image = cache.image[:, :, thw_start:thw_end, :]
+                condition_image = cache.image[..., thw_start:thw_end, :]
             else:
-                condition_image = cache.image[:, :, -len_thw:, :]
+                condition_image = cache.image[..., -len_thw:, :]
             condition_video_input_mask = cache.condition_video_input_mask_other_blocks
+
         y = torch.cat([condition_video_input_mask, condition_image], dim=-1)
 
-        predicted_flow = self.network(
+        predicted_flow_conditioned = self.network(
             x=torch.cat([noisy_input, y], dim=-1),
             timesteps=timestep,
             rope_freqs=rope_freqs,
-            cache=cache.network_cache,
+            cache=cache.network_cache_conditioned,
             current_chunk_idx=autoregressive_index,
             eager_mode=True,
             plucker=condition.plucker,
         )
+        # CFG guidance
+        if (
+            cache.network_cache_unconditioned is not None
+            and self.config.guidance_scale > 1.0
+        ):
+            predicted_flow_unconditioned = self.network(
+                x=torch.cat([noisy_input, y], dim=-1),
+                timesteps=timestep,
+                rope_freqs=rope_freqs,
+                cache=cache.network_cache_unconditioned,
+                current_chunk_idx=autoregressive_index,
+                eager_mode=True,
+                plucker=condition.plucker,
+            )
+            predicted_flow = (
+                predicted_flow_unconditioned
+                + self.config.guidance_scale
+                * (predicted_flow_conditioned - predicted_flow_unconditioned)
+            )
+        else:
+            predicted_flow = predicted_flow_conditioned
 
         x0 = denoise(noisy_input, alpha, predicted_flow)
 
@@ -364,10 +404,10 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
             if x._is_patchified:
                 return x
             else:
-                # x.image stores [B, V, T*num_blocks, C, H, W]
+                # x.image stores [..., T*num_blocks, C, H, W]
                 per_block_images = torch.split(
                     x.image,
-                    dim=2,
+                    dim=-4,
                     split_size_or_sections=self.config.len_t,
                 )
                 per_block_images = [
@@ -378,7 +418,7 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
                     )
                     for image in per_block_images
                 ]
-                x.image = torch.cat(per_block_images, dim=2)
+                x.image = torch.cat(per_block_images, dim=-2)
 
                 x.condition_video_input_mask_first_block = (
                     self.network.patchify_and_maybe_split_cp(
@@ -429,41 +469,3 @@ class LingbotWorldDiT(BaseVideoDiT[LingbotWorldDiTCache]):
             process_groups=process_groups,
             cp_dims=cp_dims,
         )
-
-
-# python -m projects.lingbot_world.dit.model
-if __name__ == "__main__":
-    device = torch.device("cuda")
-    dtype = torch.bfloat16
-    height = 720
-    width = 1280
-
-    model = LingbotWorldDiTConfig(
-        checkpoint_path=AVAILABLE_LINGBOT_WORLD_CHECKPOINT_PATHS["LingBot-World-Fast"],
-        network=LingbotWorldDiTNetwork14BConfig(
-            control_type="cam",
-            patch_embedding_type="conv3d",
-            in_dim=16 + 20,  # i2v
-        ),
-    ).setup(device=device)
-
-    text_embeddings = torch.randn(1, 1, 512, 4096, device=device, dtype=dtype)
-    image_embeddings = torch.randn(
-        1, 1, 1, 16, height // 8, width // 8, device=device, dtype=dtype
-    )
-    cache = model.initialize_cache(
-        height=height // 8,
-        width=width // 8,
-        text_embeddings=text_embeddings,
-        image_embeddings=image_embeddings,
-    )
-
-    with torch.no_grad():
-        cache.autoregressive_index = 0
-        plucker = torch.randn(
-            1, 1, 3, 6 * 64, height // 8, width // 8, device=device, dtype=dtype
-        )
-        video = model.generate(
-            condition=LingbotWorldDiTCondition(plucker=plucker), cache=cache
-        )
-    print(video.shape)

@@ -300,7 +300,7 @@ class WanDiT(BaseVideoDiT[WanDiTCache]):
         len_thw = cache.num_tokens_per_chunk
 
         token_dim = (
-            self.config.network.in_dim
+            self.config.network.out_dim
             * self.config.network.patch_size[0]
             * self.config.network.patch_size[1]
             * self.config.network.patch_size[2]

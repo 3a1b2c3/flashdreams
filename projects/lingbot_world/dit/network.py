@@ -133,9 +133,7 @@ class LingbotWorldDiTNetwork(WanDiTNetwork):
         if plucker is not None:
             plucker_embedding = self.patch_embedding_wancamctrl(plucker)
             plucker_hidden_states = self.c2ws_hidden_states_layer2(
-                F.silu(
-                    self.c2ws_hidden_states_layer1(plucker_embedding)
-                )
+                F.silu(self.c2ws_hidden_states_layer1(plucker_embedding))
             )
             plucker_embedding = plucker_embedding + plucker_hidden_states
         else:

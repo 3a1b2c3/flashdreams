@@ -76,7 +76,7 @@ class LingbotWorldPipeline:
         encoded_width = video_width // self.tokenizer.spatial_compression_ratio
 
         image_padded = F.pad(image, (0, 0, 0, 0, 0, 0, 0, 81 - 1))
-        image_embeddings = self.image_encoder.encode(image_padded)
+        image_latents = self.image_encoder.encode(image_padded)
         text_embeddings = torch.stack(
             [self.text_encoder.encode(t) for t in text], dim=0
         )
@@ -84,8 +84,8 @@ class LingbotWorldPipeline:
         dit_cache = self.dit.initialize_cache(
             height=encoded_height,
             width=encoded_width,
-            image_embeddings=image_embeddings,
-            text_embeddings=text_embeddings,
+            positive_text_embeddings=text_embeddings,
+            image_latents=image_latents,
         )
 
         tokenizer_cache = self.tokenizer.initialize_encode_cache()

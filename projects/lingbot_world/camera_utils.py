@@ -39,6 +39,7 @@ def compute_relative_poses(
         max_norm = 1.0
     return relative_poses, max_norm
 
+
 def create_meshgrid(
     n_frames: int,
     height: int,
