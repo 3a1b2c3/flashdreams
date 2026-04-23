@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# INTERNAL helper: discover flashsim test files and invoke pytest.
+#
+# It assumes flashsim and its integrations are already installed in the active
+# Python environment. CWD is changed to the repo root so the discovery globs
+# resolve correctly regardless of where the caller invoked us from.
+#
+# Usage:
+#   ./tests/run_tests_local.sh [TEST_TARGET...]
+set -euo pipefail
+
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+uv run pytest -m "not manual" "${TEST_TARGETS[@]}"
