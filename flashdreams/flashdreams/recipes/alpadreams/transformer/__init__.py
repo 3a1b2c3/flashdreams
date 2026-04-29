@@ -441,7 +441,7 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         )
 
         view_indices: Tensor | None = None
-        if cfg.num_views > 1:
+        if cfg.network.enable_cross_view_attn:
             assert view_names is not None and len(view_names) == cfg.num_views, (
                 f"view_names of length {cfg.num_views} required when "
                 f"num_views > 1 (got {view_names})"
