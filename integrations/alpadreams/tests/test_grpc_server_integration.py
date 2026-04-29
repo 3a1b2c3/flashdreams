@@ -21,14 +21,7 @@ from alpadreams.grpc.protos import (
 )
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-EXAMPLE_SCENE_ZIP = REPO_ROOT / "assets" / "example_data" / "alpadreams" / "clipgt.zip"
-
-
-def _load_example_scene_zip_bytes() -> bytes:
-    if not EXAMPLE_SCENE_ZIP.exists():
-        pytest.skip(f"Missing integration-test scene archive at {EXAMPLE_SCENE_ZIP}.")
-    return EXAMPLE_SCENE_ZIP.read_bytes()
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _make_initial_frame_png_bytes(height: int, width: int) -> bytes:
@@ -137,13 +130,9 @@ def _initial_chunk_size(num_frames_per_block: int) -> int:
     return 1 + (len_t - 1) * 4
 
 
-@pytest.mark.manual
-def test_grpc_server_start_render_close_roundtrip(tmp_path: Path) -> None:
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is required for this integration test.")
-
-    hdmap_zip_bytes = _load_example_scene_zip_bytes()
-
+def test_grpc_server_start_render_close_roundtrip(
+    tmp_path: Path, example_scene_zip_bytes: bytes
+) -> None:
     resolution_h = 704
     resolution_w = 1280
     num_frames_per_block = 8
@@ -209,7 +198,7 @@ def test_grpc_server_start_render_close_roundtrip(tmp_path: Path) -> None:
         try:
             start_request = video_model_pb2.SessionRequest(
                 static_world_map=video_model_pb2.StaticWorldMap(
-                    hdmap_parquets=hdmap_zip_bytes
+                    hdmap_parquets=example_scene_zip_bytes
                 ),
                 text_prompt=video_model_pb2.TextPrompt(
                     positive=(
