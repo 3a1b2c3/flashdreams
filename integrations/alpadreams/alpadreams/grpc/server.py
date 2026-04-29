@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import gc
 import os
 import threading
 import time
@@ -24,16 +25,12 @@ import grpc
 import numpy as np
 import torch
 import torch.distributed as dist
-from alpadreams.conditioning.bbox_conditioned_api import (
-    BboxConditionedConformanceWrapper,
-    BboxConditionedState,
-    BboxConditionedT2V,
+from alpadreams.conditioning.conditioning_wrapper import (
+    AlpadreamsConditioningState,
+    AlpadreamsConditioningWrapper,
+    TextPrompt,
 )
 from alpadreams.conditioning.renderer import LudusRenderer
-from alpadreams.conditioning.video_model_api import TextPrompt, get_av_text_prompts
-from alpadreams.conditioning.video_model_flashdreams_pipeline import (
-    FlashDreamsPipelineVideoModelAPI,
-)
 from alpadreams.conditioning.world_scenario.data_types import SceneData
 from alpadreams.conditioning.world_scenario.ftheta import FThetaCamera
 from alpadreams.grpc.profiling_server import (
@@ -66,7 +63,7 @@ from flashdreams.core.distributed.context_parallel import (
 
 VERBOSE = False
 
-RESO_MAP: dict[str, tuple[int, int]] = {
+RESOLUTION_MAP: dict[str, tuple[int, int]] = {
     "480p": (832, 480),
     "720p": (1280, 720),
     "704p": (1280, 704),
@@ -198,16 +195,15 @@ def capture_exceptions(func: Callable) -> Callable:
     return wrapper
 
 
-def build_bbox_conditioned_api(
+def build_alpadreams_conditioning_wrapper(
     rank: int,
     n_cameras: int,
     local_attn_size: int,
     sink_size: int,
-    enable_conformance: bool,
     device: torch.device,
     cp_size: int = 1,
     seed_for_every_rollout: int | None = None,
-    reso: str = "704p",
+    resolution: str = "704p",
     encode_with_pixel_shuffle: bool = False,
     denoising_step_list: list[int] | None = None,
     num_frames_per_block: int = 12,
@@ -217,7 +213,7 @@ def build_bbox_conditioned_api(
     upsampler: str = "none",
     kv_cache_on_side_stream: bool = False,
     no_tae: bool = False,
-) -> BboxConditionedT2V:
+) -> AlpadreamsConditioningWrapper:
     logger.info(
         f"[Rank {rank}] Initializing WorldModelService with {n_cameras} cameras on device {device}"
     )
@@ -225,9 +221,9 @@ def build_bbox_conditioned_api(
     if denoising_step_list is None:
         denoising_step_list = [1000, 500]
 
-    video_model_api = FlashDreamsPipelineVideoModelAPI(
+    api = AlpadreamsConditioningWrapper(
         n_cameras=n_cameras,
-        resolution_wh=RESO_MAP[reso],
+        resolution_wh=RESOLUTION_MAP[resolution],
         local_attn_size=local_attn_size,
         sink_size=sink_size,
         cp_size=cp_size,
@@ -248,29 +244,13 @@ def build_bbox_conditioned_api(
             "Context-parallel server orchestration enabled; view split/gather is handled inside flashdreams pipeline."
         )
 
-    # Wrap with bbox conditioning (renderer will be created in start_generation)
-    api = BboxConditionedT2V(
-        video_model=video_model_api,
-        wrap_with_conformance=False,  # We'll wrap the entire thing
-        device=device,
-    )
-
-    # Optionally wrap with conformance
-    if enable_conformance:
-        # TODO: add a base class such that both BboxConditionedT2V and BboxConditionedConformanceWrapper inherit from it
-        api = BboxConditionedConformanceWrapper(api)  # type: ignore
-
     return api
 
 
 class WorldModelEngine:
-    DEFAULT_BEV_HEIGHT_M = 40.0
-    DEFAULT_BEV_FOV_DEG = 50.0
-
     def __init__(
         self,
         device: str = "cuda",
-        enable_conformance: bool = True,
         # image encoding related
         output_format: str = "png",
         jpeg_quality: int = 90,
@@ -279,9 +259,8 @@ class WorldModelEngine:
         local_attn_size: int | None = None,
         sink_size: int | None = None,
         context_parallel_size: int = 1,
-        perform_mirror_augment: bool = False,
         seed_for_every_rollout: int | None = None,
-        reso: str = "704p",
+        resolution: str = "704p",
         encode_with_pixel_shuffle: bool = False,
         denoising_step_list: list[int] | None = None,
         num_frames_per_block: int | None = None,
@@ -315,25 +294,18 @@ class WorldModelEngine:
         # Save configurations
         self.device = torch.device(device)
         self.n_cameras = n_cameras
-        self.perform_mirror_augment = perform_mirror_augment
         self.seed_for_every_rollout_default = seed_for_every_rollout
-        self.default_bev_height_m = self.DEFAULT_BEV_HEIGHT_M
-        self.default_bev_fov_deg = self.DEFAULT_BEV_FOV_DEG
-        logger.info(
-            f"BEV defaults: height={self.default_bev_height_m:.2f}m, fov={self.default_bev_fov_deg:.2f}deg"
-        )
 
         # Load the video generation model (SV when n_cameras=1, MV when n_cameras>1)
-        self.api = build_bbox_conditioned_api(
+        self.api = build_alpadreams_conditioning_wrapper(
             rank=self.rank,
             n_cameras=n_cameras,
             local_attn_size=local_attn_size,
             sink_size=sink_size,
-            enable_conformance=enable_conformance,
             device=self.device,
             cp_size=context_parallel_size,
             seed_for_every_rollout=seed_for_every_rollout,
-            reso=reso,
+            resolution=resolution,
             encode_with_pixel_shuffle=encode_with_pixel_shuffle,
             denoising_step_list=denoising_step_list,
             num_frames_per_block=num_frames_per_block,
@@ -356,10 +328,6 @@ class WorldModelEngine:
 
         # Session storage: session_id -> SessionState
         self.sessions: dict[str, SessionState] = {}
-        self._bev_render_executor = futures.ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix=f"bev-render-rank-{self.rank}",
-        )
 
     @property
     def is_master(self) -> bool:
@@ -367,18 +335,7 @@ class WorldModelEngine:
 
     def _set_rollout_seed_for_next_generation(self, seed: int | None) -> None:
         """Set seed used by the underlying model for next start_generation call."""
-        bbox_api = (
-            self.api.api
-            if isinstance(self.api, BboxConditionedConformanceWrapper)
-            else self.api
-        )
-        video_model_api = bbox_api.video_model_api
-        if hasattr(video_model_api, "set_rollout_seed"):
-            video_model_api.set_rollout_seed(seed)
-        else:
-            logger.warning(
-                f"Backend {type(video_model_api).__name__} does not support explicit rollout seed updates."
-            )
+        self.api.set_rollout_seed(seed)
 
     def _cleanup_session(self, session_id: str) -> None:
         """
@@ -394,8 +351,6 @@ class WorldModelEngine:
         # Remove session from storage if it exists
         session = self.sessions.get(session_id)
         if session is not None:
-            if session.bev_renderer is not None:
-                session.bev_renderer.cleanup()
             del self.sessions[session_id]
             logger.info(f"Removed session {session_id} from storage")
 
@@ -456,9 +411,6 @@ class WorldModelEngine:
         hdmap_parquets = kwargs.get("hdmap_parquets")
         skip_video_generation = kwargs.get("skip_video_generation")
         return_hdmap_frames = kwargs.get("return_hdmap_frames")
-        return_bev_map = kwargs.get("return_bev_map")
-        bev_height_m = kwargs.get("bev_height_m")
-        bev_fov_deg = kwargs.get("bev_fov_deg")
         effective_seed = kwargs.get("effective_seed")
         # -------------------------------------------------------------------
         assert len(text_prompts) == 1, (
@@ -490,9 +442,6 @@ class WorldModelEngine:
                 f"      ├────> HD map parquets: {len(hdmap_parquets)} bytes\n"
                 f"      ├────> Flag: skip_video_generation: {skip_video_generation}\n"
                 f"      ├────> Flag: return_hdmap_frames: {return_hdmap_frames}\n"
-                f"      ├────> Flag: return_bev_map: {return_bev_map}\n"
-                f"      ├────> BEV height override: {bev_height_m}\n"
-                f"      ├────> BEV FOV override: {bev_fov_deg}\n"
                 f"      ╰────> Effective random seed: {effective_seed}\n"
             )
 
@@ -538,7 +487,6 @@ class WorldModelEngine:
                 camera_names=camera_names,
                 target_resolution_hw=(res_H, res_W),
                 device=self.device,
-                perform_mirror_augment=self.perform_mirror_augment,
             )
         logger.info(
             f"[Rank {self.rank}] Loaded scene: {scene_data.scene_id}, num_frames: {scene_data.num_frames}"
@@ -550,26 +498,6 @@ class WorldModelEngine:
 
         # 3. Create multi-camera renderer
         renderer = self.api.create_renderer(scene_data, camera_names)
-
-        session_bev_height_m = (
-            float(bev_height_m)
-            if bev_height_m is not None and float(bev_height_m) > 0.0
-            else self.default_bev_height_m
-        )
-        session_bev_fov_deg = (
-            float(bev_fov_deg)
-            if bev_fov_deg is not None and float(bev_fov_deg) > 0.0
-            else self.default_bev_fov_deg
-        )
-        bev_renderer = None
-        effective_return_bev_map = bool(return_bev_map)
-        if effective_return_bev_map:
-            logger.warning(
-                "[Rank {}] return_bev_map requested (height={}m, fov={}deg) but BEV rendering is currently disabled.".format(
-                    self.rank, session_bev_height_m, session_bev_fov_deg
-                )
-            )
-            effective_return_bev_map = False
 
         # 4. Store session state (generation deferred to first render_video_chunk)
         for cam_name, rig_to_cam in rig_to_camera_transforms.items():
@@ -586,8 +514,6 @@ class WorldModelEngine:
             text_prompts=text_prompts,
             skip_video_generation=skip_video_generation,
             return_hdmap_frames=return_hdmap_frames,
-            return_bev_map=effective_return_bev_map,
-            bev_renderer=bev_renderer,
             effective_seed=effective_seed,
         )
         self.sessions[session_id] = session_state
@@ -631,15 +557,6 @@ class WorldModelEngine:
         # Get session state
         session_state = self.sessions[session_id]
         skip_video_generation = session_state.skip_video_generation
-        return_bev_map = session_state.return_bev_map
-
-        bev_future: futures.Future[torch.Tensor] | None = None
-        if return_bev_map and session_state.bev_renderer is not None:
-            bev_future = self._bev_render_executor.submit(
-                session_state.bev_renderer.render_bev_frames,
-                rig_poses_flu,
-                frame_timestamps_us,
-            )
 
         # multiGPU: split views to all ranks.
         V_group = self.api.V_group
@@ -789,15 +706,6 @@ class WorldModelEngine:
             )
             response.camera_outputs.append(cam_output_pb)
 
-        if bev_future is not None:
-            try:
-                bev_frames = bev_future.result()
-                response.bev_map_frames.extend(self._encode_images(bev_frames))
-            except Exception as exc:
-                logger.warning(
-                    f"[Rank {self.rank}] BEV rendering failed for session {session_id}: {exc}"
-                )
-
         # Store finalization state for deferred execution (after gRPC response is sent)
         # This allows the response to be returned immediately while KV cache update
         # happens in parallel using the network idle time.
@@ -846,31 +754,17 @@ class WorldModelEngine:
         if dist.is_initialized():
             dist.barrier(device_ids=[self.device.index])
         tic = time.time_ns()
-        bbox_api = (
-            self.api.api
-            if isinstance(self.api, BboxConditionedConformanceWrapper)
-            else self.api
-        )
-        video_model_api = bbox_api.video_model_api
         if (
             session_state.bbox_state is None
-            or session_state.bbox_state.latent_cache is None
+            or session_state.bbox_state.pipeline_cache is None
         ):
             logger.warning(
-                f"[Rank {self.rank}] Missing latent cache for finalization in session {session_id}"
+                f"[Rank {self.rank}] Missing pipeline cache for finalization in session {session_id}"
             )
-        elif hasattr(video_model_api, "finalize_block_generation"):
-            video_model_api.finalize_block_generation(
-                session_state.bbox_state.latent_cache,
-                finalization_state,
-            )
-        elif hasattr(video_model_api, "model") and hasattr(
-            video_model_api.model, "finalize_block_generation"
-        ):
-            video_model_api.model.finalize_block_generation(finalization_state)
         else:
-            logger.warning(
-                f"[Rank {self.rank}] Backend {type(video_model_api).__name__} does not expose finalize_block_generation."
+            self.api.finalize_block_generation(
+                session_state.bbox_state.pipeline_cache,
+                finalization_state,
             )
         duration_ns = time.time_ns() - tic
         logger.info(
@@ -964,7 +858,6 @@ class WorldModelService(
     def __init__(
         self,
         device: str = "cuda",
-        enable_conformance: bool = True,
         output_format: str = "png",
         jpeg_quality: int = 90,
         recording_dir: Path | str | None = None,
@@ -972,9 +865,8 @@ class WorldModelService(
         local_attn_size: int | None = None,
         sink_size: int | None = None,
         context_parallel_size: int = 1,
-        perform_mirror_augment: bool = False,
         seed_for_every_rollout: int | None = None,
-        reso: str = "704p",
+        resolution: str = "704p",
         encode_with_pixel_shuffle: bool = False,
         denoising_step_list: list[int] | None = None,
         num_frames_per_block: int | None = None,
@@ -990,7 +882,6 @@ class WorldModelService(
 
         Args:
             device: Device to run inference on ("cuda" or "cpu").
-            enable_conformance: Whether to enable input/output validation.
             output_format: Output image format ("png" or "jpeg").
             jpeg_quality: JPEG quality (1-100) if using JPEG format.
             recording_dir: Directory to save session recordings (None to disable).
@@ -1001,16 +892,14 @@ class WorldModelService(
         """
         super().__init__(
             device=device,
-            enable_conformance=enable_conformance,
             output_format=output_format,
             jpeg_quality=jpeg_quality,
             n_cameras=n_cameras,
             local_attn_size=local_attn_size,
             sink_size=sink_size,
             context_parallel_size=context_parallel_size,
-            perform_mirror_augment=perform_mirror_augment,
             seed_for_every_rollout=seed_for_every_rollout,
-            reso=reso,
+            resolution=resolution,
             encode_with_pixel_shuffle=encode_with_pixel_shuffle,
             denoising_step_list=denoising_step_list,
             num_frames_per_block=num_frames_per_block,
@@ -1162,26 +1051,16 @@ class WorldModelService(
         # 3. Parse debug options
         skip_video_generation = False
         return_hdmap_frames = False
-        return_bev_map = False
-        bev_height_m = 0.0
-        bev_fov_deg = 0.0
         if request.HasField("debug_options"):
             skip_video_generation = request.debug_options.skip_video_generation
             return_hdmap_frames = request.debug_options.return_hdmap_frames
-            return_bev_map = request.debug_options.return_bev_map
-            bev_height_m = request.debug_options.bev_height_m
-            bev_fov_deg = request.debug_options.bev_fov_deg
             if skip_video_generation:
                 logger.info("HDMap-only mode enabled (skip_video_generation=True)")
             if return_hdmap_frames:
                 logger.info("HDMap frames will be returned with video")
-            if return_bev_map:
-                height_log = (
-                    bev_height_m if bev_height_m > 0.0 else self.default_bev_height_m
-                )
-                fov_log = bev_fov_deg if bev_fov_deg > 0.0 else self.default_bev_fov_deg
-                logger.info(
-                    f"BEV map frames will be returned with video (height={height_log:.2f}m, fov={fov_log:.2f}deg)"
+            if request.debug_options.return_bev_map:
+                logger.warning(
+                    "debug_options.return_bev_map is ignored; BEV rendering path was removed."
                 )
 
         request_seed = int(request.random_seed)
@@ -1209,9 +1088,6 @@ class WorldModelService(
             hdmap_parquets=request.static_world_map.hdmap_parquets,
             skip_video_generation=skip_video_generation,
             return_hdmap_frames=return_hdmap_frames,
-            return_bev_map=return_bev_map,
-            bev_height_m=bev_height_m,
-            bev_fov_deg=bev_fov_deg,
             effective_seed=effective_seed,
         )
         logger.info(f"Session {session_id} started successfully")
@@ -1449,8 +1325,6 @@ class SessionState:
         text_prompts: list,
         skip_video_generation: bool = False,
         return_hdmap_frames: bool = False,
-        return_bev_map: bool = False,
-        bev_renderer: Any | None = None,
         effective_seed: int | None = None,
     ):
         self.session_id = session_id
@@ -1468,12 +1342,10 @@ class SessionState:
         # Debug options (from session request)
         self.skip_video_generation = skip_video_generation
         self.return_hdmap_frames = return_hdmap_frames
-        self.return_bev_map = return_bev_map
-        self.bev_renderer = bev_renderer
         self.effective_seed = effective_seed
 
         # Generation state (populated after first render_video_chunk)
-        self.bbox_state: BboxConditionedState | None = None
+        self.bbox_state: AlpadreamsConditioningState | None = None
         self.generation_started: bool = False
 
         # Pending KV cache finalization state (for async finalization after response)
@@ -1516,11 +1388,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="Maximum number of worker threads (default: 10)",
-    )
-    parser.add_argument(
-        "--no_conformance",
-        action="store_true",
-        help="Disable input/output validation",
     )
     parser.add_argument(
         "--enable_profiling",
@@ -1582,19 +1449,13 @@ def parse_args() -> argparse.Namespace:
         help="Context parallel world size. Should be multiple of or divisor of n_cameras.",
     )
     parser.add_argument(
-        "--perform_mirror_augment",
-        action="store_true",
-        help="Perform mirror augment the scene. If False, only load the scene data without mirror augmentation.",
-        default=False,
-    )
-    parser.add_argument(
         "--seed_for_every_rollout",
         type=int,
         default=None,
         help="Seed for every rollout. If None, only seed at the beginning of the server.",
     )
     parser.add_argument(
-        "--reso",
+        "--resolution",
         type=str,
         choices=["480p", "720p", "704p"],
         default="704p",
@@ -1739,15 +1600,13 @@ def main() -> None:
     # Common model kwargs shared between WorldModelService (rank 0) and WorldModelEngine (other ranks)
     model_kwargs = dict(
         device=device,
-        enable_conformance=not args.no_conformance,
         output_format=args.output_format,
         jpeg_quality=args.jpeg_quality,
         n_cameras=args.n_cameras,
         local_attn_size=args.local_attn_size,
         sink_size=args.sink_size,
         context_parallel_size=args.context_parallel_size,
-        perform_mirror_augment=args.perform_mirror_augment,
-        reso=args.reso,
+        resolution=args.resolution,
         encode_with_pixel_shuffle=args.encode_with_pixel_shuffle,
         denoising_step_list=denoising_step_list,
         num_frames_per_block=args.num_frames_per_block,
@@ -1823,8 +1682,6 @@ def main() -> None:
             logger.critical(f"Shutting down engine on rank {world_rank}...")
 
     # Release CUDA graphs before destroying process group (otherwise may pin NCCL communicator memory)
-    import gc
-
     if world_rank == 0:
         del server
         del service
