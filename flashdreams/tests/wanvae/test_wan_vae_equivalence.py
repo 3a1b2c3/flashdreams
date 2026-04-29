@@ -2,17 +2,15 @@
 
 Requires GPU. Do not run automatically; the user runs this manually after
 each refactor step. Compares the upstream reference :class:`WanVAE` in
-:mod:`impl_reference` (sibling module in this folder) against the
-rewrite in :mod:`flashdreams.recipes.wan.autoencoder.vae` on a streaming
-causal encode + decode.
+the sibling :mod:`.impl_reference` module against the rewrite in
+:mod:`flashdreams.recipes.wan.autoencoder.vae` on a streaming causal
+encode + decode.
 """
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-# Sibling module; `conftest.py` adds this directory to `sys.path`.
-import impl_reference as _impl_reference  # noqa: E402
 import pytest
 import torch
 
@@ -24,6 +22,8 @@ from flashdreams.recipes.wan.autoencoder.vae import (
 from flashdreams.recipes.wan.autoencoder.vae import (
     WanVAE as WanVAENew,
 )
+
+from . import impl_reference as _impl_reference
 
 WanVAELegacy = _impl_reference.WanVAE
 
