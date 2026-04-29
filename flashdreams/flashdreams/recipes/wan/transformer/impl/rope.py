@@ -1,4 +1,5 @@
 from typing import TypeVar
+
 import torch
 from einops import repeat
 from torch import Tensor
@@ -8,14 +9,20 @@ from torch.distributed.tensor.device_mesh import DeviceMesh
 from flashdreams.core.distributed.context_parallel import split_inputs_cp
 
 try:
-    from transformer_engine.pytorch.attention.rope import apply_rotary_pos_emb  # type: ignore[import-untyped]
+    from transformer_engine.pytorch.attention.rope import (
+        apply_rotary_pos_emb,  # type: ignore[import-untyped]
+    )
 except (ImportError, OSError):
     try:
-        from transformer_engine.pytorch.attention import apply_rotary_pos_emb  # type: ignore[import-untyped]
+        from transformer_engine.pytorch.attention import (
+            apply_rotary_pos_emb,  # type: ignore[import-untyped]
+        )
     except (ImportError, OSError):
         from loguru import logger
 
-        logger.info("transformer_engine is unavailable; using pure PyTorch RoPE fallback.")
+        logger.info(
+            "transformer_engine is unavailable; using pure PyTorch RoPE fallback."
+        )
 
         def _rotate_half(x: Tensor, interleaved: bool = False) -> Tensor:
             if interleaved:
@@ -58,6 +65,7 @@ except (ImportError, OSError):
             cos = torch.cos(rope).to(dtype=t.dtype)
             sin = torch.sin(rope).to(dtype=t.dtype)
             return t * cos + _rotate_half(t, interleaved) * sin
+
 
 T = TypeVar("T")
 
