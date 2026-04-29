@@ -45,10 +45,14 @@ from flashdreams.recipes.wan.autoencoder.vae import (
     WanVAE as WanVAENew,
 )
 
-# Sibling module: when run as a script (not via pytest), `conftest.py` is
-# not loaded, so add this directory to `sys.path` ourselves.
+# Sibling module: this script is meant to be run as `python file.py` (its
+# own process), so a simple sys.path hack is sufficient. The package-form
+# relative import used by `test_wan_vae_equivalence.py` doesn't apply
+# here because `__name__ == "__main__"` and there is no parent package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from impl_reference import WanVAE as WanVAELegacy  # noqa: E402
+import impl_reference as _impl_reference  # noqa: E402
+
+WanVAELegacy = _impl_reference.WanVAE
 
 
 def _build_pair(
@@ -65,11 +69,10 @@ def _build_pair(
     def _cached(_path):
         return weights
 
-    targets = (
-        "impl_reference.load_checkpoint",
-        "flashdreams.recipes.wan.autoencoder.vae.load_checkpoint",
-    )
-    with patch(targets[0], _cached), patch(targets[1], _cached):
+    with (
+        patch.object(_impl_reference, "load_checkpoint", _cached),
+        patch("flashdreams.recipes.wan.autoencoder.vae.load_checkpoint", _cached),
+    ):
         legacy = WanVAELegacy(
             vae_path=checkpoint_path,
             use_lightvae=use_lightvae,

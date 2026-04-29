@@ -3,9 +3,9 @@
 Requires GPU + network (downloads the lighttae checkpoint from S3) and
 is therefore marked ``@pytest.mark.manual`` -- opt in via
 ``pytest -m manual ...``. Compares the upstream reference :class:`TAEHV`
-in :mod:`impl_reference` (sibling module in this folder) against the
-rewrite in :mod:`flashdreams.recipes.taehv.impl` on a streaming causal
-decode (5 same-shape body chunks).
+in the sibling :mod:`.impl_reference` module against the rewrite in
+:mod:`flashdreams.recipes.taehv.impl` on a streaming causal decode (5
+same-shape body chunks).
 
 The default ``_MODES`` table only exercises ``eager`` (no compile, no
 CUDA graph). Add a ``compile_cg`` row to also smoke-test the
@@ -18,8 +18,6 @@ from __future__ import annotations
 import copy
 from unittest.mock import patch
 
-# Sibling module; ``conftest.py`` adds this directory to ``sys.path``.
-import impl_reference as _impl_reference  # noqa: E402
 import pytest
 import torch
 
@@ -27,6 +25,8 @@ from flashdreams.core.checkpoint.load import load_checkpoint
 from flashdreams.recipes.taehv import AVAILABLE_TAEHV_CHECKPOINT_PATHS
 from flashdreams.recipes.taehv import impl as _impl_new
 from flashdreams.recipes.taehv.impl import TAEHV as TAEHVNew
+
+from . import impl_reference as _impl_reference
 
 TAEHVLegacy = _impl_reference.TAEHV
 

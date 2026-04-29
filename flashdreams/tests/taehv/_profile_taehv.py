@@ -40,10 +40,14 @@ from flashdreams.recipes.taehv import (  # noqa: E402
 )
 from flashdreams.recipes.taehv.impl import TAEHV as TAEHVNew  # noqa: E402
 
-# Sibling module: when run as a script (not via pytest), `conftest.py` is
-# not loaded, so add this directory to `sys.path` ourselves.
+# Sibling module: this script is meant to be run as `python file.py` (its
+# own process), so a simple sys.path hack is sufficient. The package-form
+# relative import used by `test_taehv_equivalence.py` doesn't apply here
+# because `__name__ == "__main__"` and there is no parent package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from impl_reference import TAEHV as TAEHVLegacy  # noqa: E402
+import impl_reference as _impl_reference  # noqa: E402
+
+TAEHVLegacy = _impl_reference.TAEHV
 
 
 def _build_pair(
@@ -64,11 +68,10 @@ def _build_pair(
     def _cached(_path):
         return copy.copy(weights)
 
-    targets = (
-        "impl_reference.load_checkpoint",
-        "flashdreams.recipes.taehv.impl.load_checkpoint",
-    )
-    with patch(targets[0], _cached), patch(targets[1], _cached):
+    with (
+        patch.object(_impl_reference, "load_checkpoint", _cached),
+        patch("flashdreams.recipes.taehv.impl.load_checkpoint", _cached),
+    ):
         legacy = TAEHVLegacy(checkpoint_path=checkpoint_path).to(
             device=device, dtype=dtype
         )

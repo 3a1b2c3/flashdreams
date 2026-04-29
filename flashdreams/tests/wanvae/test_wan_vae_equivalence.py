@@ -1,8 +1,10 @@
 """Numerical equivalence between reference and slim Wan VAE.
 
-Requires GPU. Do not run automatically; the user runs this manually after
-each refactor step. Compares the upstream reference :class:`WanVAE` in
-:mod:`impl_reference` (sibling module in this folder) against the
+Requires GPU. Marked ``@pytest.mark.manual`` -- opt in via
+``pytest -m manual ...``; the default ``tests/run_tests_local.sh`` runs
+with ``-m "not manual"`` and skips it. Intended to be re-run manually
+after each refactor step. Compares the upstream reference
+:class:`WanVAE` in the sibling :mod:`.impl_reference` module against the
 rewrite in :mod:`flashdreams.recipes.wan.autoencoder.vae` on a streaming
 causal encode + decode.
 """
@@ -11,8 +13,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-# Sibling module; `conftest.py` adds this directory to `sys.path`.
-import impl_reference as _impl_reference  # noqa: E402
 import pytest
 import torch
 
@@ -24,6 +24,8 @@ from flashdreams.recipes.wan.autoencoder.vae import (
 from flashdreams.recipes.wan.autoencoder.vae import (
     WanVAE as WanVAENew,
 )
+
+from . import impl_reference as _impl_reference
 
 WanVAELegacy = _impl_reference.WanVAE
 
@@ -79,6 +81,7 @@ _MODES: list[tuple[str, torch.dtype, bool, bool, float, float]] = [
 ]
 
 
+@pytest.mark.manual
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="Wan VAE equivalence test requires GPU"
 )
