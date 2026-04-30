@@ -21,29 +21,20 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
 
       # The doc build only needs `flashdreams` to be importable. The heavy
       # GPU stack (transformer-engine, pynvml, cv2, mediapy, boto3/botocore)
       # is mocked via `autodoc_mock_imports` in `docs/source/conf.py`, so we
-      # install a minimal CPU-only set of deps and the package with --no-deps.
+      # install only the Sphinx toolchain + a minimal CPU-only dep set.
       - name: Install dependencies
+        env:
+          # Pull torch/torchvision from PyTorch's CPU-only index.
+          UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+          UV_INDEX_STRATEGY: unsafe-best-match
         run: |
-          python -m pip install --upgrade pip
-          pip install -r docs/requirements.txt
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install \
-            loguru \
-            einops \
-            numpy \
-            ftfy \
-            huggingface-hub \
-            safetensors \
-            tqdm \
-            "transformers==4.57.6"
-          pip install --no-deps ./flashdreams
+          uv sync --only-group docs --only-group docs-ci --python 3.12
+          uv pip install --no-deps ./flashdreams
 
       # Read version from `flashdreams/pyproject.toml` so we can deploy
       # under `versions/<version>/` on releases (mirrors gsplat's layout).
@@ -64,7 +55,7 @@ jobs:
 
       - name: Sphinx build
         run: |
-          sphinx-build -b html docs/source _build
+          uv run --no-sync sphinx-build -b html docs/source _build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
