@@ -242,6 +242,11 @@ def main() -> None:
         image=first_frames_t,  # ty:ignore[unknown-argument]
         view_names=camera_names,  # ty:ignore[unknown-argument]
     )
+    # This demo runs a single rollout, so drop the one-shot text and
+    # first-frame image encoders before the AR loop to free VRAM
+    # (Cosmos-Reason1-7B alone is ~14 GB in bf16). The gRPC server keeps
+    # them around since it reuses the pipeline across sessions.
+    pipeline.release_oneshot_encoders()
 
     torch.cuda.synchronize()
     if torch.distributed.is_initialized():

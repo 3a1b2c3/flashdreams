@@ -209,6 +209,25 @@ class AlpadreamsPipeline(
             },
         )
 
+    def release_oneshot_encoders(self) -> None:
+        """Free the per-rollout text and first-frame image encoders.
+
+        Both encoders are only needed inside :meth:`initialize_cache`; the
+        AR loop reads their outputs from ``cache.transformer_context``.
+        Cosmos-Reason1-7B alone is ~14 GB in bf16, so dropping it after
+        ``initialize_cache`` reclaims significant VRAM for the AR rollout.
+
+        Idempotent. After calling this, :meth:`initialize_cache` will
+        fail; only call it from contexts that run a single rollout per
+        pipeline instance (e.g. one-shot demos). Long-lived hosts that
+        reuse the pipeline across sessions (e.g. the gRPC server) must
+        not call it.
+        """
+        for name in ("text_encoder", "image_encoder"):
+            if hasattr(self, name):
+                delattr(self, name)
+        torch.cuda.empty_cache()
+
     @torch.no_grad()
     def generate(  # type: ignore[override]
         self,
