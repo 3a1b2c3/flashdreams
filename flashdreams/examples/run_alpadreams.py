@@ -58,14 +58,14 @@ Run::
         --total_blocks 60 \\
         --embeddings_path outputs/alpadreams_sv_embeddings.pt
 
-    # Same idea but in-process: compute embeddings, free the encoders,
-    # then load the AR pipeline. No on-disk artifact, lower peak VRAM
-    # than the default path:
+    # Same idea but in-process: load the encoders, compute embeddings,
+    # free the encoders, then load the AR pipeline. No on-disk artifact,
+    # lower peak VRAM than the default path:
     torchrun --nproc_per_node=N \\
         examples/run_alpadreams.py \\
         --n_cameras 1 \\
         --total_blocks 60 \\
-        --online_precompute_embeddings
+        --offload_text_encoder
 """
 
 from __future__ import annotations
@@ -168,15 +168,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--online_precompute_embeddings",
+        "--offload_text_encoder",
         action="store_true",
         help=(
-            "Compute text + first-frame embeddings in-process, then "
-            "free the encoders BEFORE building the AR pipeline. Lowers "
-            "peak VRAM compared to the default path (which holds the "
-            "encoders and the DiT in memory simultaneously) without "
-            "requiring a separate precompute step / saved file. "
-            "Mutually exclusive with --embeddings_path."
+            "Load only the one-shot encoders first, compute text + "
+            "first-frame embeddings, free the encoders, and only then "
+            "build the AR pipeline. Lowers peak VRAM compared to the "
+            "default path (which holds the encoders and the DiT in "
+            "memory simultaneously) without requiring a separate "
+            "precompute step / saved file. Mutually exclusive with "
+            "--embeddings_path and --save_embeddings_path."
         ),
     )
     parser.add_argument(
@@ -188,9 +189,9 @@ def parse_args() -> argparse.Namespace:
             "encoders (Cosmos-Reason1 text encoder + Wan VAE first-frame "
             "image encoder), dump their outputs to this .pt path, then "
             "exit. Skips distributed init, the AR pipeline, and the "
-            "rollout. Pair with --embeddings_path on a subsequent run. "
-            "Mutually exclusive with --embeddings_path and "
-            "--online_precompute_embeddings."
+            "rollout. Pair with --embeddings_path on a subsequent "
+            "run. Mutually exclusive with --embeddings_path and "
+            "--offload_text_encoder."
         ),
     )
     return parser.parse_args()
@@ -304,13 +305,14 @@ def main() -> None:
         bool(x)
         for x in (
             args.embeddings_path,
-            args.online_precompute_embeddings,
+            args.offload_text_encoder,
             args.save_embeddings_path,
         )
     )
     assert n_modes <= 1, (
-        "--embeddings_path, --online_precompute_embeddings, and "
-        "--save_embeddings_path are mutually exclusive: pick at most one."
+        "--embeddings_path, --offload_text_encoder, and "
+        "--save_embeddings_path are mutually exclusive: pick at most "
+        "one."
     )
 
     # Offline-precompute path: dump embeddings and exit before any
@@ -373,12 +375,12 @@ def main() -> None:
         seed=42 + rank,
     )
 
-    # Online-precompute path: stand up ONLY the one-shot encoders here,
-    # compute the embeddings, free the encoders, then null the configs
-    # so pipeline.setup() below skips them entirely. Peak VRAM is now
-    # max(encoders, AR pipeline) instead of their sum.
+    # Offload-text-encoder path: stand up ONLY the one-shot encoders
+    # here, compute the embeddings, free the encoders, then null the
+    # configs so pipeline.setup() below skips them entirely. Peak VRAM
+    # is now max(encoders, AR pipeline) instead of their sum.
     precomputed_embeddings: dict[str, torch.Tensor] | None = None
-    if args.online_precompute_embeddings:
+    if args.offload_text_encoder:
         assert (
             pipeline_config.text_encoder is not None
             and pipeline_config.image_encoder is not None
@@ -403,7 +405,7 @@ def main() -> None:
         pre_prompts_2d = [pre_prompts]
 
         if rank == 0:
-            print("[online precompute] loading encoders and computing embeddings")
+            print("[offload text encoder] loading encoders and computing embeddings")
         text_encoder = pipeline_config.text_encoder.setup().to(device=device)
         image_encoder = pipeline_config.image_encoder.setup().to(device=device)
         with torch.no_grad():
@@ -421,7 +423,7 @@ def main() -> None:
         torch.cuda.empty_cache()
         if rank == 0:
             print(
-                f"[online precompute] done; freed encoders. "
+                f"[offload text encoder] done; freed encoders. "
                 f"text {tuple(text_embeddings.shape)} {text_embeddings.dtype}, "
                 f"image {tuple(image_embeddings.shape)} {image_embeddings.dtype}"
             )
@@ -449,9 +451,9 @@ def main() -> None:
     prompts: list[str] = []
     # First frames are only needed when the image encoder will run
     # below; in both precomputed paths it has already been consumed
-    # (online: above; from-disk: never, since embeddings are loaded).
+    # (offload: above; from-disk: never, since embeddings are loaded).
     needs_first_frames = (
-        args.embeddings_path is None and not args.online_precompute_embeddings
+        args.embeddings_path is None and not args.offload_text_encoder
     )
     for entry in data:
         if needs_first_frames:
