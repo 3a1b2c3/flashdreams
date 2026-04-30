@@ -38,6 +38,7 @@ encoder slot.
 
 from __future__ import annotations
 
+import gc
 from dataclasses import dataclass, field
 from typing import TypeAlias
 
@@ -218,14 +219,21 @@ class AlpadreamsPipeline(
         ``initialize_cache`` reclaims significant VRAM for the AR rollout.
 
         Idempotent. After calling this, :meth:`initialize_cache` will
-        fail; only call it from contexts that run a single rollout per
-        pipeline instance (e.g. one-shot demos). Long-lived hosts that
-        reuse the pipeline across sessions (e.g. the gRPC server) must
-        not call it.
+        raise a clear assertion (the encoders are now ``None``); only
+        call it from contexts that run a single rollout per pipeline
+        instance (e.g. one-shot demos). Long-lived hosts that reuse the
+        pipeline across sessions (e.g. the gRPC server) must not call it.
         """
-        for name in ("text_encoder", "image_encoder"):
-            if hasattr(self, name):
-                delattr(self, name)
+        # Set to None (not delattr) so that ``initialize_cache``'s
+        # existing ``is not None`` guard fires with a useful message
+        # instead of an AttributeError.
+        self.text_encoder = None
+        self.image_encoder = None
+        # nn.Module instances commonly form reference cycles (parent <->
+        # child, hooks, etc.) that the refcount path alone won't break,
+        # so force a GC pass before asking the allocator to release the
+        # freed CUDA blocks.
+        gc.collect()
         torch.cuda.empty_cache()
 
     @torch.no_grad()
