@@ -22,3 +22,29 @@ extraPaths = ["flashdreams", "integrations/alpadreams"]
 
 [dependency-groups]
 lint = ["pre-commit>=4.3.0"]
+
+# Sphinx toolchain for building docs locally (`uv run --group docs sphinx-build ...`).
+docs = [
+    "furo",
+    "sphinx",
+    "sphinx-copybutton",
+    "sphinx-design",
+]
+
+# CPU-only runtime deps needed by autodoc to import flashdreams on CI.
+# Heavy GPU packages (transformer-engine, pynvml, boto3, mediapy, cv2) are
+# mocked via `autodoc_mock_imports` in docs/source/conf.py.
+# CI installs: `uv sync --only-group docs --only-group docs-ci`
+# then `uv pip install --no-deps ./flashdreams` to make the package importable.
+docs-ci = [
+    "einops>=0.7",
+    "ftfy>=6.0",
+    "huggingface-hub>=0.33",
+    "loguru>=0.7",
+    "numpy>=1.24",
+    "safetensors>=0.4",
+    "torch>=2.11",
+    "torchvision>=0.22",
+    "tqdm>=4.60",
+    "transformers==4.57.6",
+]

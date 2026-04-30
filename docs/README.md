@@ -1,20 +1,18 @@
 # FlashDreams documentation
 
 This directory hosts the Sphinx sources for the FlashDreams API
-reference site. The layout follows the
-[`gsplat`](https://github.com/nerfstudio-project/gsplat/tree/main/docs)
-project.
+reference site.
 
 ## Build locally
 
-The doc build only needs the packages listed in `requirements.txt`, but
-`autodoc` imports `flashdreams` itself, so the build environment must
-have the project installed (the workspace `uv sync` already does this).
+Doc dependencies are declared in the workspace-root `pyproject.toml`
+under `[dependency-groups] docs`. The workspace `uv sync` already
+installs `flashdreams` (needed by autodoc), so building is a single
+command:
 
 ```bash
 # from the repo root
-uv pip install -r docs/requirements.txt
-uv run --package flashdreams make -C docs html
+uv run --group docs sphinx-build -b html docs/source docs/_build/html
 ```
 
 The rendered site lands in `docs/_build/html/index.html`. Open it with
@@ -24,8 +22,6 @@ any browser, e.g. `xdg-open docs/_build/html/index.html`.
 
 ```
 docs/
-├── Makefile                # standard Sphinx build dispatch
-├── requirements.txt        # doc-only Python deps
 └── source/
     ├── conf.py             # Sphinx configuration (theme + extensions)
     ├── index.rst           # landing page + top-level toctree
@@ -66,6 +62,15 @@ One-time GitHub setup after the first run:
 3. Each release also appends its version to
    `gh-pages:/versions/index.txt`, useful for a future version-picker
    widget on the site.
+
+### CI doc build (CPU-only)
+
+The CI workflow uses `uv sync --only-group docs` to install Sphinx
+tooling, then manually installs CPU-only PyTorch and the lightweight
+subset of flashdreams runtime deps. The heavy GPU packages
+(`transformer-engine`, `pynvml`, `boto3`, `mediapy`, `cv2`) are mocked
+via `autodoc_mock_imports` in `docs/source/conf.py` so they never need
+to be present.
 
 ## Adding new content
 
