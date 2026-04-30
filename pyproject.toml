@@ -25,13 +25,10 @@ python-version = "3.12"
 extra-paths = ["flashdreams", "integrations/alpadreams"]
 
 [tool.ty.src]
-# Auto-generated protobuf .pyi stubs trigger `conflicting-metaclass` errors due to
-# protobuf's EnumTypeWrapper pattern (known ty limitation). The stubs are still used
-# for import resolution — this only skips checking the files themselves.
-# Pre-existing shim with dynamic patterns that confuse type checkers.
+# Auto-generated protobuf stubs trigger `conflicting-metaclass` errors due to
+# protobuf's EnumTypeWrapper pattern (known ty limitation).
 exclude = [
-    "**/protos/",
-    "docker/model_specific/cfg_parallel_state.py",
+    "**/protos/*pb2*",
 ]
 
 [tool.ty.rules]
@@ -42,9 +39,6 @@ invalid-method-override = "ignore"
 [tool.ty.analysis]
 # These packages have no type stubs or are unavailable in CI; treat imports as Any
 replace-imports-with-any = ["transformer_engine.**", "ludus_renderer.**"]
-
-# Test profiling scripts use sys.path manipulation for sibling imports
-allowed-unresolved-imports = ["impl_reference"]
 
 [dependency-groups]
 lint = ["pre-commit>=4.3.0", "ty>=0.0.33"]

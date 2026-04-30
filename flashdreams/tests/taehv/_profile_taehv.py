@@ -60,7 +60,7 @@ from flashdreams.recipes.taehv.impl import TAEHV as TAEHVNew  # noqa: E402
 # relative import used by `test_taehv_equivalence.py` doesn't apply here
 # because `__name__ == "__main__"` and there is no parent package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import impl_reference as _impl_reference  # noqa: E402
+import impl_reference as _impl_reference  # noqa: E402  # ty:ignore[unresolved-import]
 
 TAEHVLegacy = _impl_reference.TAEHV
 
