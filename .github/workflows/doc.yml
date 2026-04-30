@@ -54,8 +54,11 @@ jobs:
           echo "DOCS_SUBDIR=main" >> $GITHUB_ENV
 
       - name: Sphinx build
+        # --no-project: the "Override version" step above rewrites the version
+        # field to "main" which is not PEP 440 compliant. Without --no-project
+        # uv would try to parse the workspace pyproject.toml and fail.
         run: |
-          uv run --no-sync sphinx-build -b html docs/source _build
+          uv run --no-project sphinx-build -b html docs/source _build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
