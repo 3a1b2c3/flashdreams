@@ -24,11 +24,14 @@ Picks one of :data:`ALPADREAMS_CONFIG_BUILDERS` based on
   ``sv_2steps_chunk2_loc6_lightvae_lighttae``.
 - ``--n_cameras 4`` — four surrounding cameras, defaults to
   ``mv_2steps_chunk4_loc8_pshuffle_lighttae``.
+- ``--overwrite_config_name`` can select other registered configs, including
+  the single-block bidirectional Alpadreams recipe. For configs that expose
+  ``num_chunks``, ``--num_chunks`` forwards a user-chosen latent length.
 
-Each AR step consumes a per-chunk HDMap pixel tensor (pre-extracted
-from the example MP4s) and, at step 0 only, the first-frame pixel
-tensor that seeds the I2V mask injection inside
-:class:`CosmosTransformer`.
+Autoregressive configs consume one per-chunk HDMap pixel tensor (pre-extracted
+from the example MP4s) at each AR step. Single-block bidirectional configs consume 
+one full-block HDMap tensor. At step/block 0, the first-frame pixel tensor seeds 
+the I2V mask injection inside :class:`CosmosTransformer`.
 
 Run::
 
@@ -86,14 +89,42 @@ from flashdreams.core.io.s3_sync import sync_s3_dir_to_local
 from flashdreams.recipes.alpadreams.config import (
     ALPADREAMS_CONFIG_BUILDERS,
 )
-from flashdreams.recipes.alpadreams.pipeline import AlpadreamsPipeline
-from flashdreams.recipes.alpadreams.transformer import CosmosTransformerConfig
+from flashdreams.recipes.alpadreams.constants import NEGATIVE_PROMPT
+from flashdreams.recipes.alpadreams.pipeline import (
+    AlpadreamsPipeline,
+    AlpadreamsPipelineConfig,
+)
+from flashdreams.recipes.alpadreams.transformer import (
+    CosmosTransformerConfig,
+)
 from flashdreams.recipes.taehv import TeahvVAEDecoder, TeahvVAEDecoderConfig
 from flashdreams.recipes.wan.autoencoder.vae import WanVAEDecoder, WanVAEDecoderConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_DATA_DIR_S3 = "s3://flashdreams/assets/example_data/alpadreams"
 EXAMPLE_DATA_DIR_LOCAL = str(REPO_ROOT / "assets/example_data/alpadreams")
+
+
+def _needs_negative_text(pipeline_config: AlpadreamsPipelineConfig) -> bool:
+    transformer_config = pipeline_config.diffusion_model.transformer
+    assert isinstance(transformer_config, CosmosTransformerConfig)
+    return transformer_config.requires_negative_text_embeddings
+
+
+def _config_uses_num_chunks(config_name: str) -> bool:
+    return config_name in [
+        "sv_35steps_chunk48_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m"
+    ]
+
+
+def _num_chunks_args(
+    config_name: str, requested_num_chunks: int | None
+) -> dict[str, int]:
+    if requested_num_chunks is None:
+        return {}
+    if not _config_uses_num_chunks(config_name):
+        raise ValueError("--num_chunks is only supported by the bidirectional config.")
+    return {"num_chunks": requested_num_chunks}
 
 
 def _build_data(n_cameras: int) -> tuple[list[str], list[dict]]:
@@ -146,6 +177,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--total_blocks", type=int, default=60, help="Total blocks to generate."
+    )
+    parser.add_argument(
+        "--num_chunks",
+        type=int,
+        default=None,
+        help=(
+            "Optional latent chunk override for configs that expose num_chunks, "
+            "currently only the bidirectional recipe."
+        ),
     )
     parser.add_argument(
         "--overwrite_config_name",
@@ -243,7 +283,14 @@ def _save_embeddings_and_exit(args: argparse.Namespace) -> None:
     assert os.getenv("HF_TOKEN") is not None, "HF_TOKEN is not set"
 
     builder = ALPADREAMS_CONFIG_BUILDERS[config_name]
-    pipeline_config = builder(cp_size=1, compile_network=False, seed=0)
+    # Build config metadata only; the DiT/decoder are not instantiated in this path.
+    num_chunks_args = _num_chunks_args(config_name, args.num_chunks)
+    pipeline_config = builder(
+        cp_size=1,
+        compile_network=False,
+        seed=0,
+        **num_chunks_args,
+    )
 
     assert (
         pipeline_config.text_encoder is not None
@@ -253,6 +300,7 @@ def _save_embeddings_and_exit(args: argparse.Namespace) -> None:
         "set to None. Use a config that keeps both encoders configured."
     )
 
+    needs_negative_text = _needs_negative_text(pipeline_config)
     transformer_cfg = pipeline_config.diffusion_model.transformer
     assert isinstance(transformer_cfg, CosmosTransformerConfig)
     assert isinstance(
@@ -276,9 +324,8 @@ def _save_embeddings_and_exit(args: argparse.Namespace) -> None:
         first_frames.append(rearrange(first_frame_t, "h w c -> 1 c h w"))
         prompts.append(entry["prompt"])
 
-    first_frames_t = torch.stack(first_frames, dim=0).unsqueeze(
-        0
-    )  # [B=1, V, 1, C, H, W]
+    # [B=1, V, 1, C, H, W]
+    first_frames_t = torch.stack(first_frames, dim=0).unsqueeze(0)
     prompts_2d: list[list[str]] = [prompts]  # [B=1, V]
 
     with torch.no_grad():
@@ -299,6 +346,17 @@ def _save_embeddings_and_exit(args: argparse.Namespace) -> None:
             "pixel_w": pixel_w,
         },
     }
+    if needs_negative_text:
+        with torch.no_grad():
+            negative_text_embeddings = torch.stack(
+                [
+                    text_encoder([NEGATIVE_PROMPT for _ in prompt_row])
+                    for prompt_row in prompts_2d
+                ],
+                dim=0,
+            )
+        payload["negative_text_embeddings"] = negative_text_embeddings.cpu()
+        payload["metadata"]["negative_prompt"] = NEGATIVE_PROMPT
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(payload, output_path)
     print(
@@ -379,11 +437,19 @@ def main() -> None:
         print("HF_TOKEN detected; using env-var auth for huggingface_hub")
 
     builder = ALPADREAMS_CONFIG_BUILDERS[config_name]
+    num_chunks_args = _num_chunks_args(config_name, args.num_chunks)
+    if num_chunks_args and rank == 0:
+        print(
+            "Using bidirectional num_chunks="
+            f"{num_chunks_args['num_chunks']} for this runtime."
+        )
     pipeline_config = builder(
         cp_size=world_size,
         compile_network=not args.no_compile,
         seed=42 + rank,
+        **num_chunks_args,
     )
+    needs_negative_text = _needs_negative_text(pipeline_config)
 
     # Offload-text-encoder path: stand up ONLY the one-shot encoders
     # here, compute the embeddings, free the encoders, then null the
@@ -431,6 +497,15 @@ def main() -> None:
             "text_embeddings": text_embeddings,
             "image_embeddings": image_embeddings,
         }
+        if needs_negative_text:
+            with torch.no_grad():
+                precomputed_embeddings["negative_text_embeddings"] = torch.stack(
+                    [
+                        text_encoder([NEGATIVE_PROMPT for _ in prompt_row])
+                        for prompt_row in pre_prompts_2d
+                    ],
+                    dim=0,
+                ).cpu()
 
         del text_encoder, image_encoder, pre_first_frames, pre_first_frames_t
         torch.cuda.synchronize()
@@ -480,7 +555,7 @@ def main() -> None:
             )
             first_frames.append(rearrange(first_frame_t, "h w c -> 1 c h w"))
 
-        hdmap_video_np = media.read_video(entry["hdmap_video_path"])
+        hdmap_video_np = media.read_video(entry["hdmap_video_path"])[..., :3]
         if hdmap_video_np.shape[1:3] != (pixel_h, pixel_w):
             hdmap_video_np = np.stack(
                 [cv2.resize(f, (pixel_w, pixel_h)) for f in hdmap_video_np], axis=0
@@ -513,12 +588,20 @@ def main() -> None:
         cache = pipeline.initialize_cache_from_embeddings(
             text_embeddings=payload["text_embeddings"],
             image_embeddings=payload["image_embeddings"],
+            negative_text_embeddings=(
+                payload["negative_text_embeddings"] if needs_negative_text else None
+            ),
             view_names=saved_view_names,
         )
     elif precomputed_embeddings is not None:
         cache = pipeline.initialize_cache_from_embeddings(
             text_embeddings=precomputed_embeddings["text_embeddings"],
             image_embeddings=precomputed_embeddings["image_embeddings"],
+            negative_text_embeddings=(
+                precomputed_embeddings["negative_text_embeddings"]
+                if needs_negative_text
+                else None
+            ),
             view_names=camera_names,
         )
     else:
@@ -544,14 +627,12 @@ def main() -> None:
     generated_video: list[torch.Tensor] = []
     stats_history: list[dict[str, float]] = []
     start = 0
+    print(f"total_blocks: {args.total_blocks}")
     for i in range(args.total_blocks):
         num_frames = pipeline.get_num_frames(i)
         end = start + num_frames
         if end > hdmap_num_frames:
             break
-        print(
-            f"autoregressive_index: {i}, num_frames: {num_frames}, start: {start}, end: {end}"
-        )
         video_chunk = pipeline.generate(
             autoregressive_index=i,
             cache=cache,
@@ -575,15 +656,19 @@ def main() -> None:
         )
         canvas = (canvas.float().numpy() + 1.0) / 2.0
         canvas = (canvas * 255).clip(0, 255).astype(np.uint8)
-        save_path = f"{REPO_ROOT}/outputs/alpadreams_{config_name}_{world_size}gpus.mp4"
+        output_prefix = (
+            config_name
+            if config_name.startswith("alpadreams_")
+            else f"alpadreams_{config_name}"
+        )
+        save_path = f"{REPO_ROOT}/outputs/{output_prefix}_{world_size}gpus.mp4"
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         media.write_video(save_path, canvas, fps=30)
         print(f"saved generated video to {save_path}")
 
         if stats_history:
             stats_path = (
-                f"{REPO_ROOT}/outputs/"
-                f"stats_alpadreams_{config_name}_{world_size}gpus.json"
+                f"{REPO_ROOT}/outputs/stats_{output_prefix}_{world_size}gpus.json"
             )
             with open(stats_path, "w") as f:
                 json.dump(stats_history, f, indent=2)
