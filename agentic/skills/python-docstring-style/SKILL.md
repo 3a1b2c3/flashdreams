@@ -1,6 +1,6 @@
 ---
 name: python-docstring-style
-description: Write Python docstrings matching the flashdreams house style — SPDX header, one-line module docstring, Google-style function docstrings (Args/Returns/Raises), PEP 257 attribute docstrings on dataclass/class fields, double-backticks for code references, imperative first sentences. Use when authoring or editing any .py file under flashdreams/, when adding a new module/class/function/field, or when the user asks about docstring style.
+description: Write Python docstrings and inline comments matching the flashdreams house style — SPDX header, one-line module docstring, Google-style function docstrings (Args/Returns/Raises), PEP 257 attribute docstrings on dataclass/class fields *and on module-level constants*, double-backticks for code references, imperative first sentences, and signpost-style inline block comments (kept, not stripped, on a tightening pass). Use when authoring or editing any .py file under flashdreams/, when adding a new module/class/function/field/constant, when polishing comments, or when the user asks about docstring or comment style.
 ---
 
 # Python docstring style (flashdreams)
@@ -40,28 +40,35 @@ Every `.py` file starts with the SPDX + Apache-2.0 block, then a blank line, the
 
 If one line genuinely doesn't fit, use a one-line summary + blank line + wrapped prose, but prefer tightening the summary.
 
-## No stale inventories in headers (applies to every docstring)
+## Inventories in headers — short, concrete, kept current
 
-**Headers — module / class / function summaries — describe the *role*, not the current set of internals or supported variants.** Comma-separated or parenthetical inventories of sub-modules, sub-classes, supported backends, supported model versions, supported keyword arguments, etc. become wrong the moment something is added or removed and rarely get updated. Detail belongs in the body / `Args:` / attribute docstrings where autodoc surfaces it from the actual source.
+A small inventory in a module / class header (the kind of "what's in here" line you'd want when you `cd` into the file for the first time) is *helpful*, not harmful, as long as it stays accurate. Agents are good at keeping these in sync, so the old "rarely get updated, drop them" rule is too strict for an agent-edited codebase.
 
-Module docstring:
+Keep an inventory when it's:
 
-- Good: `"""Text encoders for diffusion conditioning."""`
-- Good: `"""Core building blocks shared across recipes."""`
-- Bad: `"""Text encoders (Cosmos Qwen, UMT5)."""` (lies when a third encoder is added)
-- Bad: `"""Core building blocks shared by all recipes (attention, checkpointing, distributed, I/O)."""`
+- **Short and concrete** — one parenthetical or one comma-separated tail, not a paragraph.
+- **About a stable, named surface** — sub-modules, public helpers in this file, supported model versions, supported backends. Things that the next reader gains real orientation from.
+- **Easy to verify against the file** — if a reader can scan the file and check the line, it'll get fixed when something is added or removed.
 
-Class docstring:
+Examples that should stay:
 
+- `"""Camera-pose math: SE(3) helpers, relative poses, and Plücker rays."""`
+- `"""Unified Wan inference pipeline (Wan 2.1 / Wan 2.2, T2V and I2V)."""`
+- `"""Text encoders (Cosmos Qwen, UMT5)."""` — when this file genuinely defines exactly those two and adding a third is the kind of edit that touches this docstring anyway.
+
+Still avoid:
+
+- **Inventories of every kwarg / every option / every internal class.** Those belong in `Args:` / attribute docstrings / autodoc — the `Literal[...]` in the signature *is* the source of truth, so don't echo it in prose.
+- **Loose, sprawling inventories** that try to enumerate everything the module / class touches: `"""Core building blocks shared by all recipes (attention, checkpointing, distributed, I/O, configs, …)."""` — at this point the inventory is no longer load-bearing, just decoration.
+
+Class / function summary anti-examples:
+
+- Bad: `"""Native attention (math / efficient / cudnn / flash) with bhsd|bshd layout."""` — duplicates the `Literal[...]`.
 - Good: `"""Native attention module with configurable QKV layout and SDPA backend."""`
-- Bad: `"""Native attention (math / efficient / cudnn / flash) with bhsd|bshd layout."""` (the `Literal[...]` choices in the signature are the source of truth)
-
-Function docstring summary:
-
-- Good: `"""Configure attention format and backend."""`
 - Bad: `"""Configure attention format (bshd|bhsd) and backend (math, efficient, cudnn, flash)."""`
+- Good: `"""Configure attention format and backend."""`
 
-Exception: a deliberate *feature-scope* line that names a fixed, externally-versioned surface (e.g. `"""Unified Wan inference pipeline (Wan 2.1 / Wan 2.2, T2V and I2V)."""`) is fine — those names are stable contracts, not the package's own evolving internals.
+When in doubt: a one-line inventory that names *files / public symbols / model versions* is fine; an inline inventory of *every parameter value* belongs in the signature.
 
 ## Function / method docstring
 
@@ -91,6 +98,15 @@ Rules:
 - First sentence imperative (`"Slice …"`, `"Capture …"`, `"Return …"`), one line, ends with a period.
 - Don't repeat the type annotation in `Args:` — only the semantic meaning and any non-obvious constraints.
 - Describe `None` / default behavior inline: `"cp_group: CP process group; ``None`` returns ``x`` unchanged."`.
+- When a parameter is typed `T | None` for *signature reasons* (e.g. matching a base class) but is **required at runtime**, explain *why* the type is optional. A bare `"required (raises if None)"` is not enough — the next reader will ask "then why is it Optional?". Example:
+
+  ```text
+  cache: Per-rollout encoder cache. Typed ``Optional`` only to match
+      the :class:`Encoder` base signature (some encoders are stateless);
+      this encoder advances per-AR-step state in ``cache`` and asserts
+      when it is ``None``.
+  ```
+
 - `Returns:` describes shape / semantics, not the type (type is in the signature).
 - Omit `Raises:` for purely internal asserts that callers shouldn't reason about; include it when a caller might want to catch / pattern-match.
 - Skip docstrings entirely for trivial private helpers (`_prefix`) whose body is self-explanatory. When in doubt, write one.
@@ -158,11 +174,52 @@ Rules:
 - Include the default value's meaning when it's non-obvious (`"Defaults to 0."`, `"-1 when empty."`).
 - Document private (`_prefix`) fields too when their invariants matter.
 
+## Module-level constants
+
+Use the same PEP 257 attribute-docstring convention for module-level constants whenever the constant has a non-obvious value, a tuning rationale, or a cross-file invariant. This way the rationale shows up as a hover tooltip in editors and is reachable by autodoc — not just in a `#` comment that no tool can find.
+
+Good (rationale + tooltip-discoverable):
+
+```python
+_DEFAULT_MODEL_CHANNELS = 128
+"""``head_dim = model_channels // num_heads`` must be a size cuDNN's
+flash-attention supports; 64 is safe, 16/8 silently NaN."""
+
+_DEFAULT_DTYPE: torch.dtype = torch.bfloat16
+"""Encoder / decoder dtype — kept in lock-step with
+``TemplateTransformerConfig.dtype`` so ``input_proj`` doesn't see
+mismatched control + latent dtypes."""
+```
+
+Avoid the pure `#` form when there's a real reason for the value:
+
+```python
+# ``head_dim = model_channels // num_heads`` must be a size cuDNN's
+# flash-attention supports; 64 is safe, 16/8 silently NaN.
+_DEFAULT_MODEL_CHANNELS = 128
+```
+
+Skip the docstring entirely for self-evident constants — `_DEFAULT_NUM_HEADS = 2` doesn't need one.
+
+When converting `#`-comments-above-constant into PEP 257 docstrings, leave one blank line before the next constant so each name's docstring is unambiguously attached.
+
 ## Inline comments
 
-Comments explain *why* or a non-obvious invariant the code can't convey. Never narrate *what* the code does.
+Comments earn their place when they make the next read of this code faster. Three legitimate roles:
 
-Good:
+1. **Why / invariant** — non-obvious motivation or a constraint the code can't express.
+2. **Signpost a multi-line block** — a one-line lead-in that lets the reader skim past the next 3–10 lines instead of parsing them. This is *not* "narration"; it is structural orientation.
+3. **Local landmark on a tricky one-liner** — a few words next to a line whose intent isn't obvious from the names alone.
+
+When you're trimming or auditing a file, **be conservative about deleting existing comments**. The goal is "what helps the next reader", not "minimum comment count". A comment that would have helped you a moment ago when reading the block almost certainly helps the next person too — keep it.
+
+Good — signpost on a block:
+
+```python
+# Normalize seq_dim to a non-negative index so downstream
+# indexing math doesn't have to special-case negatives.
+self.seq_dim = self.seq_dim if self.seq_dim >= 0 else self.seq_dim + tensor_dim
+```
 
 ```python
 # Hoist per-block KV pre-update out of the (graph-captured) network
@@ -171,21 +228,38 @@ self.autoregressive_index = autoregressive_index
 self.network_cache.before_update(autoregressive_index)
 ```
 
+Good — local landmark:
+
 ```python
 seq_dim = x.ndim + seq_dim  # bring it to positive dimension
 ```
 
-Bad (obvious narration — omit):
+Bad — pure restatement of the very next line:
 
 ```python
 # Increment counter
 self._n_cached += self.chunk_size
 
-# Initialize k and v
+# Initialize k
 self._k = torch.empty(self.k_shape, device=self.device, dtype=self.dtype)
 ```
 
+Bad — restating an assertion's own message string immediately above / below it:
+
+```python
+# k and v must have the same shape except for the last dimension
+assert self.k_shape[:-1] == self.v_shape[:-1], (
+    "k and v must have the same shape except for the last dimension"
+)
+```
+
 (The flashdreams code has occasional "initialize k and v" style comments — treat those as drift, not the standard; don't reproduce them in new code.)
+
+Rule of thumb when deciding whether to keep an inline comment:
+
+- Does it summarize the next *block* (≥ 2–3 lines)? → keep.
+- Does it restate the line directly under it? → drop, or rename a variable instead.
+- Does it duplicate an `assert` message word-for-word? → drop, the message is the comment.
 
 Other conventions:
 
@@ -299,11 +373,14 @@ this rollout.
 
 When asked to tighten an existing file:
 
-1. Strip meta-narration and decision logs.
+1. Strip meta-narration and decision logs (commit-log voice, "previously…", "now reads…").
 2. Collapse any paragraph that restates adjacent field docstrings.
 3. Promote shape annotations out of prose into ``[B, L, C]`` tokens.
 4. Convert `"This method returns…"` → `"Return …"`; `"Will raise…"` → `"Raises…"`.
 5. Cut any `Args:` entry that only repeats the parameter name and type.
+6. Promote useful `#`-comment-on-a-constant lines into PEP 257 attribute docstrings on the constant.
+
+**Do not** sweep through and delete every inline comment in the name of "no narration". Inline comments that signpost a multi-line block (see [Inline comments](#inline-comments)) are part of the house style — a tightening pass should keep them, only deleting the ones that genuinely restate the next line or duplicate an `assert` message.
 
 ## Anti-patterns — don't adopt
 

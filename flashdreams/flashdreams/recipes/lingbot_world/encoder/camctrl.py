@@ -142,7 +142,10 @@ class I2VCamCtrlEncoder(Encoder[I2VCamCtrlEncoderCache]):
         Args:
             input: Image chunk plus camera intrinsics/poses for this AR step.
             autoregressive_index: AR step index forwarded to both branches.
-            cache: Per-rollout encoder cache; required (raises if ``None``).
+            cache: Per-rollout encoder cache. Typed ``Optional`` only to
+                match the :class:`Encoder` base signature (some encoders
+                are stateless); this encoder advances per-AR-step state
+                in ``cache`` and asserts when it is ``None``.
 
         Returns:
             Composite I2V latent + Plücker embedding for the transformer to cross-attend to.

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Camera-pose math helpers for the Lingbot World camera-control encoder."""
+"""Camera-pose math: SE(3) helpers, relative poses, and Plücker rays."""
 
 import torch
 from torch import Tensor

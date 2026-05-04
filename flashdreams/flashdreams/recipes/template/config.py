@@ -34,14 +34,18 @@ from flashdreams.recipes.template.transformer.network import TemplateDiTConfig
 _DEFAULT_IN_CHANNELS = 4
 _DEFAULT_CONTROL_CHANNELS = 8
 _DEFAULT_OUT_CHANNELS = 3
-# ``head_dim = model_channels // num_heads`` must be a size cuDNN's
-# flash-attention supports; 64 is safe, 16/8 silently NaN.
+
 _DEFAULT_MODEL_CHANNELS = 128
+"""``head_dim = model_channels // num_heads`` must be a size cuDNN's
+flash-attention supports; 64 is safe, 16/8 silently NaN."""
+
 _DEFAULT_NUM_HEADS = 2
-# Keep the encoder / decoder dtypes in lock-step with
-# ``TemplateTransformerConfig.dtype`` so ``input_proj`` doesn't see
-# mismatched control + latent dtypes.
+
 _DEFAULT_DTYPE: torch.dtype = torch.bfloat16
+"""Encoder / decoder dtype — kept in lock-step with
+``TemplateTransformerConfig.dtype`` so ``input_proj`` doesn't see
+mismatched control + latent dtypes."""
+
 _DEFAULT_LEN_T_BIDIRECTIONAL = 8
 _DEFAULT_LEN_T_STREAMING = 2
 _DEFAULT_WINDOW_SIZE_T_STREAMING = 2 * _DEFAULT_LEN_T_STREAMING
