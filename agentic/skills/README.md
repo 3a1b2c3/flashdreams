@@ -1,6 +1,6 @@
 # Agentic skills
 
-Project-authored [Agent Skills](https://docs.cursor.com/agent/skills) for this repository. These are **opt-in**: neither Cursor nor Claude Code loads skills from `agentic/skills/` automatically, so they won't collide with anything a developer already has under `~/.cursor/skills/` or `~/.claude/skills/`.
+Project-authored [Agent Skills](https://docs.cursor.com/agent/skills). These are **opt-in**: neither agent (claude, cursor, ... ) loads skills from `agentic/skills/` automatically, so they won't collide with anything a developer already has under, e.g., `~/.cursor/skills/` or `~/.claude/skills/`.
 
 Opt in by symlinking this directory into whichever tool you use. From the repo root:
 
@@ -10,12 +10,15 @@ mkdir -p .cursor && ln -s ../agentic/skills .cursor/skills
 
 # Claude Code
 mkdir -p .claude && ln -s ../agentic/skills .claude/skills
+
+# Other / general agents
+mkdir -p .agents && ln -s ../agentic/skills .agents/skills
 ```
 
-`.cursor/` and `.claude/` are already gitignored (add entries if they aren't), so the symlinks stay local. If you want to be selective, symlink individual skill directories instead of the whole folder:
+`.cursor/` / `.claude/` / `.agents/` are already gitignored (add entries if they aren't), so the symlinks stay local. If you want to be selective, symlink individual skill directories instead of the whole folder:
 
 ```bash
-ln -s ../../agentic/skills/<skill-name> .cursor/skills/<skill-name>
+ln -s ../../agentic/skills/<skill-name> <.cursor|.claude|.agents>/skills/<skill-name>
 ```
 
 ## Layout
@@ -31,7 +34,7 @@ agentic/skills/
     └── scripts/          # optional: executable helpers
 ```
 
-The `SKILL.md` format is the same for Cursor and Claude Code: YAML frontmatter with `name` (lowercase-hyphenated, ≤64 chars) and `description` (specific, third person, includes both *what* and *when*), followed by markdown instructions. Keep the body under ~500 lines and push long-form reference into sibling files.
+The `SKILL.md` format follows the vendor-neutral specification [agentskills.io](https://agentskills.io/specification) and is compatible with claude, cursor, and other agents: YAML frontmatter with `name` (lowercase-hyphenated, ≤64 chars) and `description` (specific, third person, includes both *what* and *when*), followed by markdown instructions. Keep the body under ~500 lines and push long-form reference into sibling files.
 
 ## Authoring
 
