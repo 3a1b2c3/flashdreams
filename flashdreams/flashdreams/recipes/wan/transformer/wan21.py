@@ -27,11 +27,11 @@ from torch import Tensor
 from flashdreams.core.attention.rope import RotaryPositionEmbedding3D
 from flashdreams.core.checkpoint.load import load_checkpoint
 from flashdreams.infra.compile import compile_module
-from flashdreams.infra.config import InstantiateConfig
 from flashdreams.infra.cuda_graph import CUDAGraphWrapper
 from flashdreams.infra.diffusion.transformer import (
     Transformer,
     TransformerAutoregressiveCache,
+    TransformerConfig,
 )
 from flashdreams.recipes.wan.autoencoder.i2v import I2VCtrl
 from flashdreams.recipes.wan.transformer.impl.network import (
@@ -95,7 +95,7 @@ class Wan21TransformerCache(TransformerAutoregressiveCache):
 
 
 @dataclass(kw_only=True)
-class Wan21TransformerConfig(InstantiateConfig["Wan21Transformer"]):
+class Wan21TransformerConfig(TransformerConfig):
     """Config for the Wan 2.1 transformer.
 
     Bakes in the temporal layout (``len_t``, ``window_size_t``,
@@ -113,7 +113,8 @@ class Wan21TransformerConfig(InstantiateConfig["Wan21Transformer"]):
     - ``stamp_image_latent``: overwrite the noisy latent with the clean
       image latent at masked positions every denoising step, and re-stamp
       the predicted ``x0`` the same way. ``network.in_dim`` unchanged.
-      (flashdreams mask-inject recipe; used by causal_wan21.)
+      (flashdreams mask-inject recipe; used by the out-of-tree
+      ``causal_forcing`` plugin.)
     - ``concat_image_mask_to_latent``: append the 4-channel mask and
       16-channel image latent along the channel dim. Builders that set
       this flag must also set ``network.in_dim = 16 + 4 + 16`` to match

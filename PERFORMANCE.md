@@ -6,11 +6,8 @@ Baselines:
 ### With flashdreams env:
 
 ```bash
-uv run --package flashdreams --extra examples \
-  python -m torch.distributed.run --standalone --nnodes=1 --nproc_per_node=1 \
-    flashdreams/examples/run_causal_wan21.py \
-    --config_name self_forcing_lighttae \
-    --total_blocks 7
+uv run flashdreams-run \
+    self-forcing-wan2.1-t2v-1.3b-flash --total-blocks 7
 ```
 
 On A100
@@ -45,10 +42,9 @@ On H100
 ```bash
 conda activate self_forcing
 pip install mediapy pynvml loguru boto3 transformer-engine[pytorch,core-cu12]
-PYTHONPATH=./flashdreams python -m torch.distributed.run --standalone --nnodes=1 --nproc_per_node=1 \
-  flashdreams/examples/run_causal_wan21.py \
-  --config_name self_forcing_lighttae \
-  --total_blocks 7
+pip install -e integrations/self_forcing
+PYTHONPATH=./flashdreams python -m flashdreams.scripts.cli \
+  self-forcing-wan2.1-t2v-1.3b-flash --total-blocks 7
 ```
 
 On A100

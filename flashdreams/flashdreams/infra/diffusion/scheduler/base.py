@@ -18,7 +18,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Protocol
+from dataclasses import dataclass, field
+from typing import Protocol
 
 import torch
 import torch.nn as nn
@@ -47,9 +48,9 @@ class Scheduler(nn.Module, ABC):
     Owns the entire denoising loop. Callers see only ``noise → clean``;
     the loop shape (renoise / multistep / plain ODE) is private.
 
-    Concrete configs inherit ``InstantiateConfig[<SchedulerSubclass>]`` and
-    declare their own ``num_inference_steps`` / ``shift`` fields (the base
-    holds no shared dataclass fields).
+    Concrete configs inherit ``SchedulerConfig`` and declare their own
+    ``num_inference_steps`` / ``shift`` fields (the base holds no
+    shared dataclass fields).
 
     Examples:
 
@@ -58,7 +59,7 @@ class Scheduler(nn.Module, ABC):
         noisy = scheduler.add_noise(clean_input=clean, timestep=t)
     """
 
-    def __init__(self, config: InstantiateConfig[Any]) -> None:
+    def __init__(self, config: SchedulerConfig) -> None:
         super().__init__()
         self.config = config
 
@@ -101,3 +102,10 @@ class Scheduler(nn.Module, ABC):
         the nearest entry of its 1000-step training table; FlowUniPC
         requires exact membership in its inference schedule.
         """
+
+
+@dataclass(kw_only=True)
+class SchedulerConfig(InstantiateConfig):
+    """Category base for every denoising-scheduler config."""
+
+    _target: type = field(default_factory=lambda: Scheduler)

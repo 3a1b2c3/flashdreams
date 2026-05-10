@@ -13,12 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pipeline-config builders for Alpadreams."""
+"""User-facing configs for Alpadreams.
+
+Hosts both the pre-built :class:`AlpadreamsPipelineConfig` literals
+and the per-slug :class:`AlpadreamsRunnerConfig` literals that drive
+``flashdreams-run``. Per-variant runner literals are projected from
+``ALPADREAMS_CONFIGS`` by :func:`_build_alpadreams_runners` so adding
+a new pipeline only requires registering a CLI description below. The
+runner-config literals self-register with
+:mod:`flashdreams.configs.registry` at import time.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import cast
 
+from flashdreams.configs.registry import register_runner
+from flashdreams.infra.config import derive_config
 from flashdreams.infra.diffusion.model import DiffusionModelConfig
 from flashdreams.infra.diffusion.scheduler.fm import (
     FlowMatchSchedulerConfig,
@@ -29,12 +40,14 @@ from flashdreams.infra.diffusion.scheduler.fm_unipc import (
 from flashdreams.infra.encoder.text.cosmos_reason1 import (
     CosmosReason1TextEncoderConfig,
 )
+from flashdreams.infra.runner import RunnerConfig
 from flashdreams.recipes.alpadreams.encoder.pixel_shuffle import (
     PixelShuffleVAEEncoderConfig,
 )
 from flashdreams.recipes.alpadreams.pipeline import (
     AlpadreamsPipelineConfig,
 )
+from flashdreams.recipes.alpadreams.runner import AlpadreamsRunnerConfig
 from flashdreams.recipes.alpadreams.transformer import CosmosTransformerConfig
 from flashdreams.recipes.alpadreams.transformer.impl.network import (
     CosmosDiTNetworkConfig,
@@ -59,511 +72,419 @@ AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS: dict[str, str] = {
     "1view-bidirectional-chunk48": "s3://flashdreams/assets/checkpoints/alpadreams/32N@teacher_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m_189frames_1080p@20260309090017_000005000.pt",
 }
 
-
-# ---------------------------------------------------------------------------
-# Canonical alpadreams 720p defaults (60 latent rows / 80 latent cols at 720p
-# after the 8x VAE spatial compression).
-# ---------------------------------------------------------------------------
-
-_DEFAULT_BATCH_SHAPE: tuple[int, ...] = (1,)
-# Canonical pixel-space defaults; callers pass the matching latent
-# (height, width) into :meth:`AlpadreamsPipeline.initialize_cache`.
-DEFAULT_VIDEO_HEIGHT = 704
-DEFAULT_VIDEO_WIDTH = 1280
-WAN_VAE_SPATIAL_COMPRESSION = 8
-_DEFAULT_DENOISING_TIMESTEPS = [1000, 450]
-_DEFAULT_NUM_TRAIN_TIMESTEPS = 1000
-
-
-def _wan_vae_decoder_config(
-    *, use_compile: bool = False, use_cuda_graph: bool = True
-) -> WanVAEDecoderConfig:
-    return WanVAEDecoderConfig(
-        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
-        use_compile=use_compile,
-        use_cuda_graph=use_cuda_graph,
-    )
-
-
-def _teahv_vae_decoder_config(
-    *, use_compile: bool = False, use_cuda_graph: bool = True
-) -> TeahvVAEDecoderConfig:
-    return TeahvVAEDecoderConfig(
+SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE = AlpadreamsPipelineConfig(
+    recipe_name="alpadreams-sv-2steps-chunk2-loc6-lightvae-lighttae",
+    text_encoder=CosmosReason1TextEncoderConfig(),
+    image_encoder=WanVAEEncoderConfig(
+        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["lightvae"],
+    ),
+    enable_sync_and_profile=True,
+    encoder=WanVAEEncoderConfig(
+        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["lightvae"],
+    ),
+    decoder=TeahvVAEDecoderConfig(
         checkpoint_path=AVAILABLE_TAEHV_CHECKPOINT_PATHS["lighttae"],
-        use_compile=use_compile,
-        use_cuda_graph=use_cuda_graph,
-    )
-
-
-def _scheduler_config(
-    denoising_timesteps: list[int] = _DEFAULT_DENOISING_TIMESTEPS,
-) -> FlowMatchSchedulerConfig:
-    """Alpadreams 2-step Self-Forcing flow-match scheduler defaults."""
-    return FlowMatchSchedulerConfig(
-        num_inference_steps=len(denoising_timesteps),
-        denoising_timesteps=denoising_timesteps,
-        warp_denoising_step=True,
-        shift=5.0,
-        sigma_min=0.0,
-        extra_one_step=True,
-        num_train_timesteps=_DEFAULT_NUM_TRAIN_TIMESTEPS,
-    )
-
-
-def _transformer_config(
-    *,
-    checkpoint_path: str,
-    num_views: int,
-    len_t_latent: int,
-    window_size_t: int,
-    encode_with_pixel_shuffle: bool,
-    guidance_scale: float = 1.0,
-    skip_finalize_kv_cache: bool = False,
-    compile_network: bool = True,
-    use_cuda_graph: bool = True,
-) -> CosmosTransformerConfig:
-    return CosmosTransformerConfig(
-        network=CosmosDiTNetworkConfig(
-            # HDMap conditioning channel count: 192 for the pixel-shuffle
-            # HDMap branch, 16 for the Wan-VAE HDMap branch. (0 disables
-            # HDMap conditioning entirely; no shipped builder uses that.)
-            additional_concat_ch=192 if encode_with_pixel_shuffle else 16,
-            enable_cross_view_attn=num_views > 1,
-        ),
-        checkpoint_path=checkpoint_path,
-        batch_shape=_DEFAULT_BATCH_SHAPE,
-        num_views=num_views,
-        len_t=len_t_latent,
-        h_extrapolation_ratio=3.0,
-        w_extrapolation_ratio=3.0,
-        window_size_t=window_size_t,
-        sink_size_t=0,
-        compile_network=compile_network,
-        use_cuda_graph=use_cuda_graph,
-        skip_finalize_kv_cache=skip_finalize_kv_cache,
-        guidance_scale=guidance_scale,
-    )
-
-
-def _wan_vae_encoder(
-    *,
-    checkpoint_name: str = "vae",
-    use_compile: bool = False,
-    use_cuda_graph: bool = True,
-) -> WanVAEEncoderConfig:
-    return WanVAEEncoderConfig(
-        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS[checkpoint_name],
-        use_compile=use_compile,
-        use_cuda_graph=use_cuda_graph,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Builders
-# ---------------------------------------------------------------------------
-
-
-def build_sv_2steps_chunk2_loc6_lightvae_lighttae(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, chunk2, light Wan VAE HDMap encoder + LightTAE decoder."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(checkpoint_name="lightvae"),
-        enable_sync_and_profile=True,
-        encoder=_wan_vae_encoder(checkpoint_name="lightvae"),
-        decoder=_teahv_vae_decoder_config(),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
-                checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
-                    "1view-vae-chunk2"
-                ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=2,
-                window_size_t=6,
-                encode_with_pixel_shuffle=False,
+    ),
+    diffusion_model=DiffusionModelConfig(
+        seed=42,
+        context_noise=128,
+        transformer=CosmosTransformerConfig(
+            network=CosmosDiTNetworkConfig(
+                # 16 channels: Wan-VAE HDMap branch.
+                additional_concat_ch=16,
+                enable_cross_view_attn=False,
             ),
-            scheduler=_scheduler_config(),
+            checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS["1view-vae-chunk2"],
+            batch_shape=(1,),
+            num_views=1,
+            len_t=2,
+            h_extrapolation_ratio=3.0,
+            w_extrapolation_ratio=3.0,
+            window_size_t=6,
+            sink_size_t=0,
+            compile_network=True,
+            use_cuda_graph=True,
+            skip_finalize_kv_cache=False,
+            guidance_scale=1.0,
         ),
-    )
-
-
-# Performance optimized version of the above config
-def build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-    skip_finalize_kv_cache: bool = False,
-    denoising_timesteps: list[int] = _DEFAULT_DENOISING_TIMESTEPS,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, chunk2, light Wan VAE HDMap encoder + LightTAE decoder."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(
-            checkpoint_name="lightvae", use_compile=True, use_cuda_graph=True
+        scheduler=FlowMatchSchedulerConfig(
+            num_inference_steps=2,
+            denoising_timesteps=[1000, 450],
+            warp_denoising_step=True,
+            shift=5.0,
+            sigma_min=0.0,
+            extra_one_step=True,
+            num_train_timesteps=1000,
         ),
-        enable_sync_and_profile=True,
-        encoder=_wan_vae_encoder(
-            checkpoint_name="lightvae", use_compile=True, use_cuda_graph=True
+    ),
+)
+"""Base: single-view, chunk2, light Wan VAE HDMap encoder + LightTAE decoder.
+
+The reference Self-Forcing distilled chassis: 2-step flow-match
+scheduler, ``len_t=2``, ``window_size_t=6``, CFG off, no
+``skip_finalize_kv_cache``. Every chunk2 variant derives from this
+one and flips a small set of fields.
+"""
+
+SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE_PERF = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE,
+        recipe_name="alpadreams-sv-2steps-chunk2-loc6-lightvae-lighttae-perf",
+        image_encoder=dict(use_compile=True, use_cuda_graph=True),
+        encoder=dict(use_compile=True, use_cuda_graph=True),
+        decoder=dict(use_compile=True, use_cuda_graph=True),
+    ),
+)
+"""Performance-tuned variant: enable ``use_compile`` / ``use_cuda_graph``
+on the image encoder, the per-AR-step encoder, and the decoder."""
+
+SV_2STEPS_CHUNK2_LOC6_VAE_VAE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE,
+        recipe_name="alpadreams-sv-2steps-chunk2-loc6-vae-vae",
+        image_encoder=dict(checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"]),
+        encoder=dict(checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"]),
+        decoder=WanVAEDecoderConfig(
+            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
+            use_compile=False,
+            use_cuda_graph=True,
         ),
-        decoder=_teahv_vae_decoder_config(use_compile=True, use_cuda_graph=True),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
-                checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
-                    "1view-vae-chunk2"
-                ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=2,
-                window_size_t=6,
-                encode_with_pixel_shuffle=False,
-                skip_finalize_kv_cache=skip_finalize_kv_cache,
-            ),
-            scheduler=_scheduler_config(denoising_timesteps=denoising_timesteps),
-        ),
-    )
+    ),
+)
+"""Single-view, chunk2, full Wan VAE for both HDMap encoding and decoding."""
 
-
-def build_sv_2steps_chunk2_loc6_vae_vae(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, chunk2, full Wan VAE for both HDMap encoding and decoding."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(),
-        enable_sync_and_profile=True,
-        encoder=_wan_vae_encoder(),
-        decoder=_wan_vae_decoder_config(),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
-                checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
-                    "1view-vae-chunk2"
-                ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=2,
-                window_size_t=6,
-                encode_with_pixel_shuffle=False,
-            ),
-            scheduler=_scheduler_config(),
-        ),
-    )
-
-
-def build_sv_2steps_chunk3_loc6_vae_vae(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, chunk3, full Wan VAE for both HDMap encoding and decoding."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(),
-        enable_sync_and_profile=True,
-        encoder=_wan_vae_encoder(),
-        decoder=_wan_vae_decoder_config(),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
+SV_2STEPS_CHUNK3_LOC6_VAE_VAE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_VAE_VAE,
+        recipe_name="alpadreams-sv-2steps-chunk3-loc6-vae-vae",
+        diffusion_model=dict(
+            transformer=dict(
                 checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
                     "1view-vae-chunk3"
                 ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=3,
-                window_size_t=6,
-                encode_with_pixel_shuffle=False,
+                len_t=3,
             ),
-            scheduler=_scheduler_config(),
         ),
-    )
+    ),
+)
+"""Single-view, chunk3, full Wan VAE for both HDMap encoding and decoding.
 
+Same chassis as ``SV_2STEPS_CHUNK2_LOC6_VAE_VAE`` but with ``len_t=3``
+and the matching chunk3 checkpoint.
+"""
 
-def build_sv_2steps_chunk4_loc8_pshuffle_lighttae(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, chunk4, PixelShuffle HDMap encoder + LightTAE decoder."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(),
-        enable_sync_and_profile=True,
+SV_2STEPS_CHUNK4_LOC8_PSHUFFLE_LIGHTTAE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE,
+        recipe_name="alpadreams-sv-2steps-chunk4-loc8-pshuffle-lighttae",
+        image_encoder=dict(checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"]),
         encoder=PixelShuffleVAEEncoderConfig(),
-        decoder=_teahv_vae_decoder_config(),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
+        diffusion_model=dict(
+            transformer=dict(
+                network=dict(additional_concat_ch=192),
                 checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
                     "1view-pshuffle-chunk4"
                 ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=4,
+                len_t=4,
                 window_size_t=8,
-                encode_with_pixel_shuffle=True,
             ),
-            scheduler=_scheduler_config(),
         ),
-    )
+    ),
+)
+"""Single-view, chunk4, PixelShuffle HDMap encoder + LightTAE decoder.
 
+Diverges from the chunk2 base on (a) ``additional_concat_ch=192`` for
+the PixelShuffle branch, (b) ``len_t=4``, (c) ``window_size_t=8``,
+(d) the chunk4 checkpoint, and (e) the per-AR-step encoder is the
+:class:`PixelShuffleVAEEncoderConfig` instead of a Wan VAE encoder.
+``image_encoder`` reverts to the standard "vae" checkpoint.
+"""
 
-def build_mv_2steps_chunk4_loc8_pshuffle_lighttae(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    """4-view, chunk4, PixelShuffle HDMap encoder + LightTAE decoder."""
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=_wan_vae_encoder(),
-        enable_sync_and_profile=True,
-        encoder=PixelShuffleVAEEncoderConfig(),
-        decoder=_teahv_vae_decoder_config(),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
+MV_2STEPS_CHUNK4_LOC8_PSHUFFLE_LIGHTTAE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK4_LOC8_PSHUFFLE_LIGHTTAE,
+        recipe_name="alpadreams-mv-2steps-chunk4-loc8-pshuffle-lighttae",
+        diffusion_model=dict(
+            transformer=dict(
+                network=dict(enable_cross_view_attn=True),
                 checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
                     "4view-pshuffle-chunk4"
                 ],
-                compile_network=compile_network,
                 num_views=4,
-                len_t_latent=4,
-                window_size_t=8,
-                encode_with_pixel_shuffle=True,
-            ),
-            scheduler=_scheduler_config(),
-        ),
-    )
-
-
-# experiments1
-def experiment1_baseline(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 450]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=False,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-def experiment1_skip_finalize_kv_cache(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 450]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=True,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-def experiment1_skip_finalize_kv_cache_noise350(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 350]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=True,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-def experiment1_skip_finalize_kv_cache_noise250(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 250]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=True,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-def experiment1_skip_finalize_kv_cache_noise150(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 150]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=True,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-def experiment1_skip_finalize_kv_cache_noise100(
-    *,
-    compile_network: bool = True,
-    seed: int = 42,
-) -> AlpadreamsPipelineConfig:
-    denoising_timesteps = [1000, 100]
-    return build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf(
-        compile_network=compile_network,
-        seed=seed,
-        skip_finalize_kv_cache=True,
-        denoising_timesteps=denoising_timesteps,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Alpadreams diffusion forcing (causal AR 2B / 720p / chunk2 UniPC)
-# ---------------------------------------------------------------------------
-
-
-def build_sv_35steps_chunk2_loc24_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m(
-    *,
-    compile_network: bool = True,
-    use_cuda_graph: bool = True,
-    seed: int = 1,
-) -> AlpadreamsPipelineConfig:
-    """Build the alpadreams diffusion-forcing causal AR pipeline.
-
-    The I4 config uses ``state_t=24``: 12 chunk2 latent blocks, or 93 decoded
-    frames with the Wan decoder.
-    """
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=WanVAEEncoderConfig(
-            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
-        ),
-        enable_sync_and_profile=True,
-        encoder=WanVAEEncoderConfig(
-            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
-        ),
-        decoder=WanVAEDecoderConfig(
-            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
-        ),
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            context_noise=128,
-            transformer=_transformer_config(
-                checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
-                    "1view-diffusion-forcing-chunk2"
-                ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=2,
-                window_size_t=24,
-                encode_with_pixel_shuffle=False,
-                skip_finalize_kv_cache=False,
-                use_cuda_graph=use_cuda_graph,
-                guidance_scale=3.0,
-            ),
-            scheduler=FlowMatchUniPCSchedulerConfig(
-                num_inference_steps=35,
-                shift=5.0,
             ),
         ),
-    )
+    ),
+)
+"""4-view, chunk4, PixelShuffle HDMap encoder + LightTAE decoder."""
 
 
-# ---------------------------------------------------------------------------
-# Alpadreams bidirectional (single-view / 2B / 720p / chunk48 / UniPC)
-# ---------------------------------------------------------------------------
-
-
-def build_sv_35steps_chunk48_loc48_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m(
-    *,
-    compile_network: bool = True,
-    use_cuda_graph: bool = True,
-    seed: int = 1,
-    num_chunks: int = 48,
-) -> AlpadreamsPipelineConfig:
-    """Single-view, bidirectional Cosmos2 2B / 720p / chunk48 pipeline.
-
-    ``num_chunks`` is the transformer's latent temporal length
-    (``len_t``) for the single generated block. The public pixel-space
-    frame count is derived later by the pipeline's decoder-aware
-    ``get_num_frames`` helper. The underlying checkpoint was trained for
-    48 chunks; entrypoints may choose a smaller value for their runtime
-    memory budget.
-
-    The transformer checkpoint path is baked into the recipe; override
-    in this builder if you need a different one.
-    """
-    decoder_config = WanVAEDecoderConfig(
+SV_35STEPS_CHUNK2_LOC24_COSMOS2_2B_RES720P_30FPS_HDMAP_VAE_MADS1M = AlpadreamsPipelineConfig(
+    recipe_name="alpadreams-sv-35steps-chunk2-loc24-cosmos2-2b-res720p-30fps-hdmap-vae-mads1m",
+    text_encoder=CosmosReason1TextEncoderConfig(),
+    image_encoder=WanVAEEncoderConfig(
         checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
-    )
-    assert num_chunks >= 1, f"num_chunks must be positive, got {num_chunks}."
-    return AlpadreamsPipelineConfig(
-        text_encoder=CosmosReason1TextEncoderConfig(),
-        image_encoder=WanVAEEncoderConfig(
-            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
+    ),
+    enable_sync_and_profile=True,
+    encoder=WanVAEEncoderConfig(
+        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
+    ),
+    decoder=WanVAEDecoderConfig(
+        checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
+    ),
+    diffusion_model=DiffusionModelConfig(
+        seed=1,
+        context_noise=128,
+        transformer=CosmosTransformerConfig(
+            network=CosmosDiTNetworkConfig(
+                additional_concat_ch=16,
+                enable_cross_view_attn=False,
+            ),
+            checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
+                "1view-diffusion-forcing-chunk2"
+            ],
+            batch_shape=(1,),
+            num_views=1,
+            len_t=2,
+            h_extrapolation_ratio=3.0,
+            w_extrapolation_ratio=3.0,
+            window_size_t=24,
+            sink_size_t=0,
+            compile_network=True,
+            use_cuda_graph=True,
+            skip_finalize_kv_cache=False,
+            guidance_scale=3.0,
         ),
-        enable_sync_and_profile=True,
-        encoder=WanVAEEncoderConfig(
-            checkpoint_path=AVAILABLE_WAN_VAE_CHECKPOINT_PATHS["vae"],
+        scheduler=FlowMatchUniPCSchedulerConfig(
+            num_inference_steps=35,
+            shift=5.0,
         ),
-        decoder=decoder_config,
-        diffusion_model=DiffusionModelConfig(
-            seed=seed,
-            transformer=_transformer_config(
+    ),
+)
+"""Teacher: alpadreams diffusion-forcing causal AR (2B / 720p / chunk2 UniPC).
+
+``state_t=24``: 12 chunk2 latent blocks, or 93 decoded frames with
+the Wan decoder. CFG on (``guidance_scale=3.0``); 35-step UniPC
+scheduler (``shift=5.0``).
+"""
+
+SV_35STEPS_CHUNK48_LOC48_COSMOS2_2B_RES720P_30FPS_HDMAP_VAE_MADS1M = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_35STEPS_CHUNK2_LOC24_COSMOS2_2B_RES720P_30FPS_HDMAP_VAE_MADS1M,
+        recipe_name="alpadreams-sv-35steps-chunk48-loc48-cosmos2-2b-res720p-30fps-hdmap-vae-mads1m",
+        diffusion_model=dict(
+            seed=1,
+            context_noise=0,
+            transformer=dict(
                 checkpoint_path=AVAILABLE_ALPADREAMS_CHECKPOINT_PATHS[
                     "1view-bidirectional-chunk48"
                 ],
-                compile_network=compile_network,
-                num_views=1,
-                len_t_latent=num_chunks,
-                window_size_t=num_chunks,
-                encode_with_pixel_shuffle=False,
+                len_t=48,
+                window_size_t=48,
                 skip_finalize_kv_cache=True,
-                use_cuda_graph=use_cuda_graph,
-                guidance_scale=3.0,
-            ),
-            scheduler=FlowMatchUniPCSchedulerConfig(
-                num_inference_steps=35,
-                shift=5.0,
             ),
         ),
+    ),
+)
+"""Teacher: alpadreams bidirectional (single-view / 2B / 720p / chunk48 UniPC).
+
+``len_t == window_size_t == 48`` -> single-AR-step rollout for the
+whole 48-chunk video. ``skip_finalize_kv_cache=True`` because the
+bidirectional teacher doesn't need to advance the KV cache after the
+one rollout it ever does.
+"""
+
+
+## Experiments: ablations on top of the chunk2 perf chassis
+#
+# ``experiment1_baseline`` re-publishes the perf config under a stable
+# experiment slug (same fields). The ``noise*`` variants vary the
+# terminal denoising timestep (``[1000, T2]``) to study the
+# skip-KV-cache-finalize ablation; the field name reflects the second
+# timestep (``noise350`` -> ``[1000, 350]``).
+
+EXPERIMENT1_BASELINE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE_PERF,
+        recipe_name="alpadreams-experiment1-baseline",
+    ),
+)
+
+EXPERIMENT1_SKIP_FINALIZE_KV_CACHE = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE_PERF,
+        recipe_name="alpadreams-experiment1-skip-finalize-kv-cache",
+        diffusion_model=dict(
+            transformer=dict(skip_finalize_kv_cache=True),
+        ),
+    ),
+)
+
+EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE350 = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE,
+        recipe_name="alpadreams-experiment1-skip-finalize-kv-cache-noise350",
+        diffusion_model=dict(
+            scheduler=dict(denoising_timesteps=[1000, 350]),
+        ),
+    ),
+)
+
+EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE250 = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE,
+        recipe_name="alpadreams-experiment1-skip-finalize-kv-cache-noise250",
+        diffusion_model=dict(
+            scheduler=dict(denoising_timesteps=[1000, 250]),
+        ),
+    ),
+)
+
+EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE150 = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE,
+        recipe_name="alpadreams-experiment1-skip-finalize-kv-cache-noise150",
+        diffusion_model=dict(
+            scheduler=dict(denoising_timesteps=[1000, 150]),
+        ),
+    ),
+)
+
+EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE100 = cast(
+    AlpadreamsPipelineConfig,
+    derive_config(
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE,
+        recipe_name="alpadreams-experiment1-skip-finalize-kv-cache-noise100",
+        diffusion_model=dict(
+            scheduler=dict(denoising_timesteps=[1000, 100]),
+        ),
+    ),
+)
+
+
+ALPADREAMS_CONFIGS: dict[str, AlpadreamsPipelineConfig] = {
+    cfg.recipe_name: cfg
+    for cfg in (
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE,
+        SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE_PERF,
+        SV_2STEPS_CHUNK2_LOC6_VAE_VAE,
+        SV_2STEPS_CHUNK3_LOC6_VAE_VAE,
+        SV_2STEPS_CHUNK4_LOC8_PSHUFFLE_LIGHTTAE,
+        MV_2STEPS_CHUNK4_LOC8_PSHUFFLE_LIGHTTAE,
+        SV_35STEPS_CHUNK2_LOC24_COSMOS2_2B_RES720P_30FPS_HDMAP_VAE_MADS1M,
+        SV_35STEPS_CHUNK48_LOC48_COSMOS2_2B_RES720P_30FPS_HDMAP_VAE_MADS1M,
+        EXPERIMENT1_BASELINE,
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE,
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE350,
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE250,
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE150,
+        EXPERIMENT1_SKIP_FINALIZE_KV_CACHE_NOISE100,
     )
-
-
-ALPADREAMS_CONFIG_BUILDERS: dict[str, Callable[..., AlpadreamsPipelineConfig]] = {
-    "sv_2steps_chunk2_loc6_lightvae_lighttae": build_sv_2steps_chunk2_loc6_lightvae_lighttae,
-    "sv_2steps_chunk2_loc6_lightvae_lighttae_perf": build_sv_2steps_chunk2_loc6_lightvae_lighttae_perf,
-    "sv_2steps_chunk2_loc6_vae_vae": build_sv_2steps_chunk2_loc6_vae_vae,
-    "sv_2steps_chunk3_loc6_vae_vae": build_sv_2steps_chunk3_loc6_vae_vae,
-    "sv_2steps_chunk4_loc8_pshuffle_lighttae": build_sv_2steps_chunk4_loc8_pshuffle_lighttae,
-    "mv_2steps_chunk4_loc8_pshuffle_lighttae": build_mv_2steps_chunk4_loc8_pshuffle_lighttae,
-    # teachers
-    "sv_35steps_chunk2_loc24_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m": build_sv_35steps_chunk2_loc24_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m,
-    "sv_35steps_chunk48_loc48_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m": build_sv_35steps_chunk48_loc48_cosmos2_2B_res720p_30fps_hdmap_vae_mads1m,
-    # experiments
-    "experiment1_baseline": experiment1_baseline,
-    "experiment1_skip_finalize_kv_cache": experiment1_skip_finalize_kv_cache,
-    "experiment1_skip_finalize_kv_cache_noise350": experiment1_skip_finalize_kv_cache_noise350,
-    "experiment1_skip_finalize_kv_cache_noise250": experiment1_skip_finalize_kv_cache_noise250,
-    "experiment1_skip_finalize_kv_cache_noise150": experiment1_skip_finalize_kv_cache_noise150,  # rec
-    "experiment1_skip_finalize_kv_cache_noise100": experiment1_skip_finalize_kv_cache_noise100,  # rec
 }
+"""All shipped Alpadreams variants, keyed by ``recipe_name``."""
+
+
+## Per-variant runner-config literals (slug == ``recipe_name``).
+
+_DEFAULT_PROMPT_1V = (
+    "Driving scene from a front-facing car camera. Urban environment with roads, "
+    "vehicles, pedestrians, traffic signs, and buildings. Clear visibility, "
+    "realistic lighting, photorealistic quality. High resolution dashcam footage "
+    "of city driving."
+)
+_DEFAULT_PROMPT_4V = (
+    "Wide-angle urban street scene from a low, dashboard-level viewpoint. "
+    "A straight two-lane road with a faded center line and curbside parking on "
+    "both sides. Parked sedans and SUVs in neutral colors line the curbs. On the "
+    "right, a white stucco mid-rise building with blue fabric awnings, rectangular "
+    "windows, and small storefronts at street level. On the left, a low commercial "
+    "strip with dark trim, glass fronts, signage, and shaded sidewalks. Mature green "
+    "trees punctuate both sides. Clear blue sky with sparse soft clouds. Bright midday "
+    "sunlight, natural colors, realistic materials, crisp shadows, clean asphalt texture."
+)
+
+_ALPADREAMS_DESCRIPTIONS: dict[str, str] = {
+    "alpadreams-sv-2steps-chunk2-loc6-lightvae-lighttae": (
+        "Single-view 2-step distilled chunk2 (LightVAE + LightTAE)."
+    ),
+    "alpadreams-sv-2steps-chunk2-loc6-lightvae-lighttae-perf": (
+        "Single-view chunk2 perf preset (compile + CUDA graphs across all stages)."
+    ),
+    "alpadreams-sv-2steps-chunk2-loc6-vae-vae": (
+        "Single-view chunk2 with the full Wan VAE on encoder + decoder."
+    ),
+    "alpadreams-sv-2steps-chunk3-loc6-vae-vae": (
+        "Single-view chunk3 (len_t=3) with the full Wan VAE."
+    ),
+    "alpadreams-sv-2steps-chunk4-loc8-pshuffle-lighttae": (
+        "Single-view chunk4 with the PixelShuffle HDMap encoder + LightTAE."
+    ),
+    "alpadreams-mv-2steps-chunk4-loc8-pshuffle-lighttae": (
+        "4-camera multi-view chunk4 (PixelShuffle HDMap + LightTAE)."
+    ),
+    "alpadreams-sv-35steps-chunk2-loc24-cosmos2-2b-res720p-30fps-hdmap-vae-mads1m": (
+        "Teacher: single-view 35-step UniPC chunk2 (Cosmos2 2B, 720p, CFG=3.0)."
+    ),
+    "alpadreams-sv-35steps-chunk48-loc48-cosmos2-2b-res720p-30fps-hdmap-vae-mads1m": (
+        "Teacher: single-view 35-step bidirectional chunk48 (one rollout, 720p)."
+    ),
+    "alpadreams-experiment1-baseline": (
+        "Experiment-1 baseline (re-publishes the chunk2 perf chassis)."
+    ),
+    "alpadreams-experiment1-skip-finalize-kv-cache": (
+        "Experiment-1: skip-finalize-kv-cache ablation."
+    ),
+    "alpadreams-experiment1-skip-finalize-kv-cache-noise350": (
+        "Experiment-1: skip-finalize + denoising_timesteps=[1000, 350]."
+    ),
+    "alpadreams-experiment1-skip-finalize-kv-cache-noise250": (
+        "Experiment-1: skip-finalize + denoising_timesteps=[1000, 250]."
+    ),
+    "alpadreams-experiment1-skip-finalize-kv-cache-noise150": (
+        "Experiment-1: skip-finalize + denoising_timesteps=[1000, 150]."
+    ),
+    "alpadreams-experiment1-skip-finalize-kv-cache-noise100": (
+        "Experiment-1: skip-finalize + denoising_timesteps=[1000, 100]."
+    ),
+}
+"""Per-variant CLI descriptions, keyed by ``recipe_name``."""
+
+
+def _build_alpadreams_runners() -> dict[str, RunnerConfig]:
+    """Project ``ALPADREAMS_CONFIGS`` into per-variant runner literals."""
+    runners: dict[str, RunnerConfig] = {}
+    for name, pipeline_cfg in ALPADREAMS_CONFIGS.items():
+        transformer_cfg = pipeline_cfg.diffusion_model.transformer
+        assert isinstance(transformer_cfg, CosmosTransformerConfig)
+        prompt = (
+            _DEFAULT_PROMPT_4V if transformer_cfg.num_views == 4 else _DEFAULT_PROMPT_1V
+        )
+        assert name in _ALPADREAMS_DESCRIPTIONS, (
+            f"missing CLI description for alpadreams slug {name!r}; "
+            "add an entry to ``_ALPADREAMS_DESCRIPTIONS``."
+        )
+        runners[name] = AlpadreamsRunnerConfig(
+            runner_name=name,
+            description=_ALPADREAMS_DESCRIPTIONS[name],
+            pipeline=pipeline_cfg,
+            prompt=prompt,
+        )
+    return runners
+
+
+ALPADREAMS_RUNNERS: dict[str, RunnerConfig] = _build_alpadreams_runners()
+"""All shipped Alpadreams runners (single- and multi-view variants),
+keyed by ``runner_name``."""
+
+for _name, _cfg in ALPADREAMS_RUNNERS.items():
+    register_runner(_name, _cfg, source="builtin")

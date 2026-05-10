@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Generic, cast
+from typing import Any, Generic
 
 import torch
 import torch.nn as nn
@@ -27,6 +27,7 @@ from torch import Tensor
 
 from flashdreams.infra.config import InstantiateConfig
 from flashdreams.infra.decoder import (
+    DecoderConfig,
     StreamingDecoder,
     StreamingDecoderCacheT,
 )
@@ -38,6 +39,7 @@ from flashdreams.infra.diffusion.transformer import (
     TransformerCacheT,
 )
 from flashdreams.infra.encoder import (
+    EncoderConfig,
     StreamingEncoder,
     StreamingEncoderCacheT,
 )
@@ -45,7 +47,7 @@ from flashdreams.infra.profiler import EventProfiler
 
 
 @dataclass(kw_only=True)
-class StreamInferencePipelineConfig(InstantiateConfig["StreamInferencePipeline"]):
+class StreamInferencePipelineConfig(InstantiateConfig):
     """Config for the streaming inference pipeline.
 
     Set ``encoder=None`` when the pipeline has no per-AR-step control input
@@ -53,19 +55,22 @@ class StreamInferencePipelineConfig(InstantiateConfig["StreamInferencePipeline"]
     (training, latent-space evaluation, or pipelines that own decoding).
     """
 
-    _target: type["StreamInferencePipeline"] = field(
-        default_factory=lambda: StreamInferencePipeline
-    )
+    _target: type = field(default_factory=lambda: StreamInferencePipeline)
+
+    recipe_name: str
+    """Stable slug for this pipeline variant; the primary key of
+    ``<NAME>_CONFIGS``. Runners mirror it as ``runner_name`` so
+    ``flashdreams-run <slug>`` resolves to this pipeline."""
 
     diffusion_model: DiffusionModelConfig
     """Transformer + scheduler config."""
 
-    decoder: InstantiateConfig[Any] | None = None
+    decoder: DecoderConfig | None = None
     """Optional output :class:`StreamingDecoder` with a per-rollout cache,
     called as ``decoder(input, autoregressive_index, cache)``. Use
     ``None`` to return the clean latent unchanged."""
 
-    encoder: InstantiateConfig[Any] | None = None
+    encoder: EncoderConfig | None = None
     """Optional per-AR-step input encoder. Must be a
     :class:`StreamingEncoder`; one-shot encoders go on
     ``transformer.context_encoder`` instead."""
@@ -134,10 +139,7 @@ class StreamInferencePipeline(
         self.config = config
         self.encoder = config.encoder.setup() if config.encoder is not None else None
         self.decoder = config.decoder.setup() if config.decoder is not None else None
-        self.diffusion_model = cast(
-            "DiffusionModel[TransformerCacheT]",
-            config.diffusion_model.setup(),
-        )
+        self.diffusion_model = config.diffusion_model.setup()
 
     @property
     def device(self) -> torch.device:

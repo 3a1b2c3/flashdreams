@@ -23,8 +23,7 @@ from dataclasses import dataclass, field
 import torch
 from torch import Tensor
 
-from flashdreams.infra.config import InstantiateConfig
-from flashdreams.infra.decoder import StreamingVideoDecoder
+from flashdreams.infra.decoder import DecoderConfig, StreamingVideoDecoder
 from flashdreams.recipes.taehv.impl import TAEHV, TAEHVCache
 
 AVAILABLE_TAEHV_CHECKPOINT_PATHS = {
@@ -33,10 +32,10 @@ AVAILABLE_TAEHV_CHECKPOINT_PATHS = {
 
 
 @dataclass(kw_only=True)
-class TeahvVAEDecoderConfig(InstantiateConfig["TeahvVAEDecoder"]):
+class TeahvVAEDecoderConfig(DecoderConfig):
     """Config for the TAEHV decoder."""
 
-    _target: type["TeahvVAEDecoder"] = field(default_factory=lambda: TeahvVAEDecoder)
+    _target: type = field(default_factory=lambda: TeahvVAEDecoder)
 
     checkpoint_path: str = AVAILABLE_TAEHV_CHECKPOINT_PATHS["lighttae"]
     """Path to a pretrained TAEHV checkpoint. Defaults to the ``lighttae`` weights."""

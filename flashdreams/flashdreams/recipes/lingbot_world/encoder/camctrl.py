@@ -24,8 +24,8 @@ import torch
 from einops import rearrange
 from torch import Tensor
 
-from flashdreams.infra.config import InstantiateConfig
 from flashdreams.infra.encoder import (
+    EncoderConfig,
     StreamingEncoderCache,
     StreamingVideoEncoder,
 )
@@ -85,12 +85,10 @@ class I2VCamCtrlEmbeddings:
 
 
 @dataclass(kw_only=True)
-class I2VCamCtrlEncoderConfig(InstantiateConfig["I2VCamCtrlEncoder"]):
+class I2VCamCtrlEncoderConfig(EncoderConfig):
     """Config for the composite I2V + Plücker encoder."""
 
-    _target: type["I2VCamCtrlEncoder"] = field(
-        default_factory=lambda: I2VCamCtrlEncoder
-    )
+    _target: type = field(default_factory=lambda: I2VCamCtrlEncoder)
 
     i2v: I2VCtrlEncoderConfig = field(default_factory=I2VCtrlEncoderConfig)
     """Config for the Wan-VAE I2V encoder branch."""

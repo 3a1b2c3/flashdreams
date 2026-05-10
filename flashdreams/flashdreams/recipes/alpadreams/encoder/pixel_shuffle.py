@@ -27,8 +27,8 @@ from typing import Literal
 from einops import rearrange
 from torch import Tensor
 
-from flashdreams.infra.config import InstantiateConfig
 from flashdreams.infra.encoder import (
+    EncoderConfig,
     StreamingEncoderCache,
     StreamingVideoEncoder,
 )
@@ -43,12 +43,10 @@ class PixelShuffleVAEEncoderCache(StreamingEncoderCache):
 
 
 @dataclass(kw_only=True)
-class PixelShuffleVAEEncoderConfig(InstantiateConfig["PixelShuffleVAEEncoder"]):
+class PixelShuffleVAEEncoderConfig(EncoderConfig):
     """Config for the pixel-shuffle pseudo-VAE encoder."""
 
-    _target: type["PixelShuffleVAEEncoder"] = field(
-        default_factory=lambda: PixelShuffleVAEEncoder
-    )
+    _target: type = field(default_factory=lambda: PixelShuffleVAEEncoder)
 
     frame_selection_mode: Literal["first_frame", "last_frame"] = "last_frame"
     """Which frame in each 4-frame window to keep."""

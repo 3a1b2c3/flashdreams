@@ -45,9 +45,8 @@ from flashdreams.infra.pipeline import (
     StreamInferencePipelineConfig,
 )
 from flashdreams.recipes.template.config import (
-    build_cfg_autoregressive,
-    build_cfg_offline,
-    with_compile_and_cuda_graph,
+    TEMPLATE_AUTOREGRESSIVE,
+    TEMPLATE_OFFLINE,
 )
 from flashdreams.recipes.template.transformer import (
     TemplateTransformer,
@@ -75,6 +74,28 @@ invocations don't share ``/tmp``."""
 
 
 ## Shared helpers
+
+
+def _offline(*, seed: int = 42) -> StreamInferencePipelineConfig:
+    """Return the offline template literal with ``seed`` patched in."""
+    return derive_config(TEMPLATE_OFFLINE, diffusion_model=dict(seed=seed))
+
+
+def _autoregressive(*, seed: int = 42) -> StreamInferencePipelineConfig:
+    """Return the autoregressive template literal with ``seed`` patched in."""
+    return derive_config(TEMPLATE_AUTOREGRESSIVE, diffusion_model=dict(seed=seed))
+
+
+def _with_compile_and_cuda_graph(
+    base: StreamInferencePipelineConfig,
+) -> StreamInferencePipelineConfig:
+    """Patch ``compile_network`` + ``use_cuda_graph`` onto ``base``."""
+    return derive_config(
+        base,
+        diffusion_model=dict(
+            transformer=dict(compile_network=True, use_cuda_graph=True),
+        ),
+    )
 
 
 def _make_inputs(
@@ -183,8 +204,8 @@ _CUDA_REQUIRED = pytest.mark.skipif(
 @_CUDA_REQUIRED
 @pytest.mark.parametrize("seed", [0, 42])
 def test_template_bidirectional(seed: int) -> None:
-    """``build_cfg_offline`` runs a single AR step end-to-end."""
-    config = build_cfg_offline(seed=seed)
+    """``TEMPLATE_OFFLINE`` runs a single AR step end-to-end."""
+    config = _offline(seed=seed)
     pipeline = config.setup()
     assert isinstance(pipeline, StreamInferencePipeline)
     transformer = pipeline.diffusion_model.transformer
@@ -231,10 +252,8 @@ def test_template_no_control() -> None:
     and asserts the no-control output disagrees with the matching
     control-on rollout.
     """
-    from typing import cast
-
-    base = build_cfg_offline(seed=0)
-    config = cast(StreamInferencePipelineConfig, derive_config(base, encoder=None))
+    base = _offline(seed=0)
+    config = derive_config(base, encoder=None)
     # Seed before each ``setup()`` so the no-control and with-control
     # pipelines initialise identical weights — the assertion below only
     # isolates the control branch when the underlying networks match
@@ -279,7 +298,7 @@ def test_template_no_control() -> None:
     # A matching control-on rollout (same seed, same inputs) must
     # differ — otherwise the control bias is silently dropped.
     torch.manual_seed(0)
-    with_ctrl_pipeline = build_cfg_offline(seed=0).setup().to(device).eval()
+    with_ctrl_pipeline = _offline(seed=0).setup().to(device).eval()
     outputs_with_ctrl = _run_rollout(
         pipeline=with_ctrl_pipeline,
         num_ar_steps=1,
@@ -296,8 +315,8 @@ def test_template_no_control() -> None:
 
 @_CUDA_REQUIRED
 def test_template_streaming_cfg() -> None:
-    """``build_cfg_autoregressive`` runs multi-step AR with CFG on."""
-    config = _with_cfg(build_cfg_autoregressive(seed=0), guidance_scale=2.0)
+    """``TEMPLATE_AUTOREGRESSIVE`` runs multi-step AR with CFG on."""
+    config = _with_cfg(_autoregressive(seed=0), guidance_scale=2.0)
     pipeline = config.setup()
     transformer = pipeline.diffusion_model.transformer
     assert isinstance(transformer, TemplateTransformer)
@@ -339,7 +358,7 @@ def test_template_streaming_cfg() -> None:
 @_CUDA_REQUIRED
 def test_template_cfg_rejects_missing_negative_context() -> None:
     """CFG on without negative context must fail at cache build time."""
-    config = _with_cfg(build_cfg_autoregressive(seed=0), guidance_scale=2.0)
+    config = _with_cfg(_autoregressive(seed=0), guidance_scale=2.0)
     pipeline = config.setup()
     pipeline.to("cuda").eval()
     transformer = pipeline.diffusion_model.transformer
@@ -367,7 +386,7 @@ def test_template_latent_shape_respects_cp_size() -> None:
     reading it earlier asserts.
     """
     device = torch.device("cuda")
-    pipeline = build_cfg_offline().setup().to(device).eval()
+    pipeline = _offline().setup().to(device).eval()
     transformer = pipeline.diffusion_model.transformer
     assert isinstance(transformer, TemplateTransformer)
     cfg = transformer.config
@@ -396,15 +415,10 @@ def _with_cfg(
     base: StreamInferencePipelineConfig, *, guidance_scale: float
 ) -> StreamInferencePipelineConfig:
     """Return ``base`` with ``guidance_scale`` patched onto the transformer."""
-    from typing import cast
-
-    return cast(
-        StreamInferencePipelineConfig,
-        derive_config(
-            base,
-            diffusion_model=dict(
-                transformer=dict(guidance_scale=guidance_scale),
-            ),
+    return derive_config(
+        base,
+        diffusion_model=dict(
+            transformer=dict(guidance_scale=guidance_scale),
         ),
     )
 
@@ -422,8 +436,8 @@ def test_template_compile_and_cudagraph_equivalence() -> None:
     device = torch.device("cuda")
     seed = 0
 
-    base = _with_cfg(build_cfg_autoregressive(seed=seed), guidance_scale=2.0)
-    fast = with_compile_and_cuda_graph(base)
+    base = _with_cfg(_autoregressive(seed=seed), guidance_scale=2.0)
+    fast = _with_compile_and_cuda_graph(base)
 
     torch.manual_seed(seed)
     eager_pipeline = base.setup().to(device).eval()
@@ -529,7 +543,7 @@ def _cp_one_predict_flow(
     """
     from flashdreams.core.distributed.context_parallel import split_inputs_cp
 
-    base = _with_cfg(build_cfg_autoregressive(seed=seed), guidance_scale=2.0)
+    base = _with_cfg(_autoregressive(seed=seed), guidance_scale=2.0)
     torch.manual_seed(seed)
     pipeline = base.setup().to(device).eval()
     transformer = pipeline.diffusion_model.transformer

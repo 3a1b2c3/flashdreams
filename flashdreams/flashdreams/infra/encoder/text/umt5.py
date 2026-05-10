@@ -28,8 +28,7 @@ from torch import Tensor
 from transformers import AutoTokenizer, UMT5EncoderModel
 
 from flashdreams.core.io.hf import should_use_local_files_only
-from flashdreams.infra.config import InstantiateConfig
-from flashdreams.infra.encoder import Encoder
+from flashdreams.infra.encoder import Encoder, EncoderConfig
 
 
 def prompt_clean(text: str) -> str:
@@ -41,10 +40,10 @@ def prompt_clean(text: str) -> str:
 
 
 @dataclass(kw_only=True)
-class UMT5TextEncoderConfig(InstantiateConfig["UMT5TextEncoder"]):
+class UMT5TextEncoderConfig(EncoderConfig):
     """Config for the Wan 2.x UMT5 text encoder."""
 
-    _target: type["UMT5TextEncoder"] = field(default_factory=lambda: UMT5TextEncoder)
+    _target: type = field(default_factory=lambda: UMT5TextEncoder)
 
     model_id_or_local_path: Literal[
         "Wan-AI/Wan2.1-T2V-14B-Diffusers",

@@ -22,10 +22,10 @@ from dataclasses import dataclass, field
 import torch
 from torch import Tensor
 
-from flashdreams.infra.config import InstantiateConfig
 from flashdreams.infra.diffusion.scheduler import (
     FlowPredictor,
     Scheduler,
+    SchedulerConfig,
 )
 
 
@@ -35,7 +35,7 @@ def _warp(sigmas: Tensor, shift: float) -> Tensor:
 
 
 @dataclass(kw_only=True)
-class FlowMatchSchedulerConfig(InstantiateConfig["FlowMatchScheduler"]):
+class FlowMatchSchedulerConfig(SchedulerConfig):
     """Config for the flow-matching scheduler."""
 
     _target: type["FlowMatchScheduler"] = field(
@@ -60,10 +60,12 @@ class FlowMatchSchedulerConfig(InstantiateConfig["FlowMatchScheduler"]):
     """Length of the training sigma table."""
 
     sigma_min: float = 0.0
-    """Reserved for upstream parity; only ``0.0`` is supported."""
+    """Floor of the warped sigma schedule. Only ``0.0`` is supported here;
+    asserted at construction."""
 
     extra_one_step: bool = True
-    """Reserved for upstream parity; only ``True`` is supported."""
+    """Append the ``sigma=0`` step to the schedule. Only ``True`` is
+    supported here; asserted at construction."""
 
 
 class FlowMatchScheduler(Scheduler):

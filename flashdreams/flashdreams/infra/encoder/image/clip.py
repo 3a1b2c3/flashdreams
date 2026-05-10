@@ -27,15 +27,14 @@ from transformers import BatchFeature, CLIPImageProcessor, CLIPVisionModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from flashdreams.core.io.hf import should_use_local_files_only
-from flashdreams.infra.config import InstantiateConfig
-from flashdreams.infra.encoder import Encoder
+from flashdreams.infra.encoder import Encoder, EncoderConfig
 
 
 @dataclass(kw_only=True)
-class CLIPImageEncoderConfig(InstantiateConfig["CLIPImageEncoder"]):
+class CLIPImageEncoderConfig(EncoderConfig):
     """Config for the Wan I2V CLIP image encoder."""
 
-    _target: type["CLIPImageEncoder"] = field(default_factory=lambda: CLIPImageEncoder)
+    _target: type = field(default_factory=lambda: CLIPImageEncoder)
 
     model_id_or_local_path: Literal[
         "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",

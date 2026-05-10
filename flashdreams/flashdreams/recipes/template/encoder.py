@@ -24,12 +24,15 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from flashdreams.infra.config import InstantiateConfig
-from flashdreams.infra.encoder import StreamingEncoder, StreamingEncoderCache
+from flashdreams.infra.encoder import (
+    EncoderConfig,
+    StreamingEncoder,
+    StreamingEncoderCache,
+)
 
 
 @dataclass(kw_only=True)
-class TemplateControlEncoderConfig(InstantiateConfig["TemplateControlEncoder"]):
+class TemplateControlEncoderConfig(EncoderConfig):
     """Config for the template control encoder.
 
     Point-wise ``Conv3d`` projecting a dummy control channel stack to
@@ -37,9 +40,7 @@ class TemplateControlEncoderConfig(InstantiateConfig["TemplateControlEncoder"]):
     HDMap / camera-control / depth encoder here.
     """
 
-    _target: type["TemplateControlEncoder"] = field(
-        default_factory=lambda: TemplateControlEncoder
-    )
+    _target: type = field(default_factory=lambda: TemplateControlEncoder)
 
     control_channels: int = 8
     """Channels of the raw control tensor passed to :meth:`TemplateControlEncoder.forward`."""
