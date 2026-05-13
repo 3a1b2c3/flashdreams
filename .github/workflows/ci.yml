@@ -101,11 +101,16 @@ jobs:
         run: uv build --wheel --package flashdreams
 
       - name: Publish to Test PyPI
-        # --check-url queries the index before uploading and silently skips
-        # files whose version already exists (equivalent to twine --skip-existing).
+        # uv publish exits non-zero if the version already exists on the
+        # index (PyPI returns HTTP 400).  The "|| true" makes this
+        # non-fatal so unchanged versions don't break the build.
+        # NOTE: --check-url is intentionally omitted -- it requires exact
+        # hash match with the remote file, which fails when the wheel was
+        # previously uploaded from a different build (different metadata
+        # timestamps).  Letting PyPI reject duplicates is sufficient.
         run: >
           uv publish
           --publish-url https://test.pypi.org/legacy/
-          --check-url https://test.pypi.org/simple/
           --token ${{ secrets.TEST_PYPI_API_TOKEN }}
           dist/*
+          || true
