@@ -32,12 +32,13 @@ dependencies = [
 
 [tool.uv.sources]
 flashdreams = { workspace = true }
-block-sparse-attn = { index = "nvidia-block-sparse-attn" }
-
-[[tool.uv.index]]
-name = "nvidia-block-sparse-attn"
-url = "https://gitlab-master.nvidia.com/api/v4/projects/221447/packages/pypi/simple"
-explicit = true
+# Upstream Block-Sparse-Attention is not on PyPI. Install from the public
+# GitHub repo at v0.0.2.post1 -- the latest tag of the ``__version__ = "0.0.2"``
+# series (``.post1`` is a small ``__init__.py`` cleanup), so the ``==0.0.2``
+# pin above still resolves. Its ``setup.py`` ``import torch`` at build time, so
+# this dep is also listed in ``no-build-isolation-package`` in the
+# workspace-root ``pyproject.toml``.
+block-sparse-attn = { git = "https://github.com/mit-han-lab/Block-Sparse-Attention", tag = "v0.0.2.post1" }
 
 [project.optional-dependencies]
 dev = [
@@ -55,3 +56,17 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["flashvsr*"]
 exclude = ["tests"]
+
+# Pytest's ``configfile`` resolution picks the nearest ``pyproject.toml`` to
+# the test files, so when running ``pytest integrations/flashvsr/tests``
+# this file shadows the root ``flashdreams`` config -- mirror its marker
+# registrations here to avoid PytestUnknownMarkWarning on ``@pytest.mark.slow``
+# (used by ``test_color_corrector_benchmark.py`` /
+# ``test_projector_benchmark.py``). The ``manual`` marker comes from the
+# ``pytest-manual-marker`` plugin and doesn't need re-registering.
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+markers = [
+    "manual: requires GPU and/or network access (opt-in only)",
+    "slow: long-running test",
+]
