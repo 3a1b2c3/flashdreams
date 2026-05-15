@@ -35,9 +35,9 @@ from flashdreams.core.distributed.rank_orchestration import (
     distributed_op,
 )
 from flashdreams.infra.config import derive_config
-from flashdreams.recipes.lingbot_world.config import LINGBOT_WORLD_CONFIGS
-from flashdreams.recipes.lingbot_world.encoder.camctrl import CamCtrlInput
-from flashdreams.recipes.lingbot_world.encoder.utils import (
+from lingbot.config import PIPELINE_CONFIGS
+from lingbot.encoder.camctrl import CamCtrlInput
+from lingbot.encoder.utils import (
     get_Ks_transformed,
     preprocess_example_poses,
 )
@@ -271,8 +271,8 @@ class LingbotInferenceRuntime:
                 "Missing Lingbot example assets: " + ", ".join(missing_paths)
             )
 
-        if self.config.config_name not in LINGBOT_WORLD_CONFIGS:
-            supported = ", ".join(sorted(LINGBOT_WORLD_CONFIGS))
+        if self.config.config_name not in PIPELINE_CONFIGS:
+            supported = ", ".join(sorted(PIPELINE_CONFIGS))
             raise ValueError(
                 f"Unknown config_name={self.config.config_name!r}. Supported: {supported}"
             )
@@ -298,8 +298,11 @@ class LingbotInferenceRuntime:
             / 127.5
             - 1.0
         )
-        first_frame_t = first_frame_t.permute(2, 0, 1).unsqueeze(0)
-        first_frames_t = first_frame_t.unsqueeze(0).unsqueeze(0)  # [1, 1, 1, C, H, W]
+        # Lingbot's shipped configs pin ``batch_shape=()`` (single-rollout
+        # layout), so the pipeline expects the first frame in shape
+        # ``[T=1, C, H, W]``; the leading ``unsqueeze(0)`` lifts ``[C, H, W]``
+        # to that ``T=1`` axis the I2V encoder pads/slices against.
+        first_frames_t = first_frame_t.permute(2, 0, 1).unsqueeze(0)
 
         intrinsics_np = np.load(intrinsics_path)
         if intrinsics_np.ndim == 1:
@@ -349,7 +352,7 @@ class LingbotInferenceRuntime:
             else self.config.seed
         )
         pipeline_config = derive_config(
-            base_config=LINGBOT_WORLD_CONFIGS[self.config.config_name],
+            base_config=PIPELINE_CONFIGS[self.config.config_name],
             enable_sync_and_profile=True,
             diffusion_model=dict(
                 seed=rollout_seed,
@@ -463,10 +466,8 @@ class LingbotInferenceRuntime:
             np.array2string(last_pose, precision=4, suppress_small=True),
         )
         poses_t = torch.from_numpy(poses).to(device=self._device, dtype=torch.float32)
-        poses_t = poses_t.view(1, 1, num_frames, 4, 4)
-        intrinsics_t = self._base_intrinsics.view(1, 1, 1, 4).repeat(
-            1, 1, num_frames, 1
-        )
+        poses_t = poses_t.view(num_frames, 4, 4)
+        intrinsics_t = self._base_intrinsics.view(1, 4).repeat(num_frames, 1)
 
         camctrl_input = CamCtrlInput(
             intrinsics=intrinsics_t,

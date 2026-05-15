@@ -28,14 +28,20 @@ from loguru import logger
 
 from flashdreams.core.io.s3_sync import sync_s3_dir_to_local
 from flashdreams.infra.runner import Runner, RunnerConfig
-from flashdreams.recipes.lingbot_world.encoder.camctrl import CamCtrlInput
-from flashdreams.recipes.lingbot_world.encoder.utils import (
+from lingbot.encoder.camctrl import CamCtrlInput
+from lingbot.encoder.utils import (
     get_Ks_transformed,
     preprocess_example_poses,
 )
-from flashdreams.recipes.lingbot_world.pipeline import (
+from lingbot.pipeline import (
     LingbotWorldInferencePipeline,
 )
+
+__all__ = [
+    "LingbotWorldRunnerConfig",
+    "LingbotWorldRunner",
+]
+
 
 _INTRINSICS_REFERENCE_HEIGHT = 480
 """Capture-resolution height the bundled intrinsics ``.npy`` files are
@@ -45,7 +51,10 @@ land on the right pixel centers at the runner's actual frame size."""
 _INTRINSICS_REFERENCE_WIDTH = 832
 """Capture-resolution width matching :data:`_INTRINSICS_REFERENCE_HEIGHT`."""
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# ``lingbot/runner.py`` -> ``lingbot/`` -> ``integrations/lingbot/`` ->
+# ``integrations/`` -> repo root. Keep this in sync with the file's nesting
+# depth (``parents[3]``).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE_DATA_DIR_S3 = "s3://flashdreams/assets/example_data/lingbot_world"
 """S3 prefix the bundled prompt + first-frame + camera arrays are pulled from."""
 
@@ -174,22 +183,21 @@ class LingbotWorldRunner(
         prompt = self._resolve_prompt()
         device = torch.device(f"cuda:{self.local_rank}")
 
-        first_frame = _load_first_frame(
+        # Pipeline / encoder accept ``[*batch_shape, ...]`` shapes; the
+        # shipped configs pin ``batch_shape=()`` so a single-rollout layout
+        # is just ``[T, C, H, W]`` (image) / ``[T, 4, 4]`` (poses) /
+        # ``[T, 4]`` (intrinsics).
+        first_frames_t = _load_first_frame(
             cfg.image_path,
             pixel_height=cfg.pixel_height,
             pixel_width=cfg.pixel_width,
             device=device,
         )
-        # Lingbot's ``batch_shape`` is ``(1, 1)``: prepend ``[B=1, V=1]`` so
-        # the first frame is ``[B=1, V=1, T=1, C, H, W]`` and the camera
-        # stream is ``[B=1, V=1, T, ...]``. ``_preprocess_i2v_input`` expects
-        # ``[*batch_shape, T, C, H, W]`` and pads along T from there.
-        first_frames_t = first_frame.unsqueeze(0).unsqueeze(0)
 
         Ks = np.load(cfg.intrinsic_path)
         Ks_t = torch.from_numpy(Ks).to(device=device, dtype=torch.float32)
         # Rescale capture-resolution intrinsics to the runner's frame size.
-        Ks_t = get_Ks_transformed(
+        camera_intrinsics_t = get_Ks_transformed(
             Ks_t,
             height_org=_INTRINSICS_REFERENCE_HEIGHT,
             width_org=_INTRINSICS_REFERENCE_WIDTH,
@@ -201,10 +209,8 @@ class LingbotWorldRunner(
 
         c2ws = np.load(cfg.pose_path)
         c2ws, trans_normalizer = preprocess_example_poses(c2ws)
-        c2ws_t = torch.from_numpy(c2ws).to(device=device, dtype=torch.float32)
-        camera_intrinsics_t = Ks_t.unsqueeze(0).unsqueeze(0)  # [B=1, V=1, T, 4]
-        camera_poses_t = c2ws_t.unsqueeze(0).unsqueeze(0)  # [B=1, V=1, T, 4, 4]
-        total_camera_frames = camera_poses_t.shape[2]
+        camera_poses_t = torch.from_numpy(c2ws).to(device=device, dtype=torch.float32)
+        total_camera_frames = camera_poses_t.shape[0]
 
         if self.is_rank_zero:
             logger.info(
@@ -233,8 +239,8 @@ class LingbotWorldRunner(
                     f"num_frames={num_frames}, frames=[{start}, {end})"
                 )
             camctrl_input = CamCtrlInput(
-                intrinsics=camera_intrinsics_t[:, :, start:end],
-                poses=camera_poses_t[:, :, start:end],
+                intrinsics=camera_intrinsics_t[start:end],
+                poses=camera_poses_t[start:end],
                 world_scale=float(trans_normalizer),
             )
             video_chunk = self.pipeline.generate(
@@ -248,13 +254,12 @@ class LingbotWorldRunner(
             chunks.append(video_chunk.cpu())
             start = end
 
-        video = torch.cat(chunks, dim=2)  # [B, V, T, C, H, W]
+        video = torch.cat(chunks, dim=0)  # [T, C, H, W]
         if not self.is_rank_zero:
             return
 
         cfg.output_dir.mkdir(parents=True, exist_ok=True)
-        # Drop B + V (both 1) and lay views out side-by-side: ``[T, H, V*W, C]``.
-        canvas = rearrange(video, "1 v t c h w -> t h (v w) c")
+        canvas = rearrange(video, "t c h w -> t h w c")
         video_path = cfg.output_dir / f"{cfg.runner_name}.mp4"
         _write_video(canvas, video_path, fps=cfg.fps)
         logger.info(
@@ -270,13 +275,9 @@ class LingbotWorldRunner(
             )
 
 
-__all__ = [
-    "LingbotWorldRunner",
-    "LingbotWorldRunnerConfig",
-]
-
-
-## I/O helpers (``cv2`` / ``mediapy`` lazy-imported; live under the ``runners`` extras).
+## I/O helpers (``cv2`` / ``mediapy`` are listed under ``flashdreams-lingbot``'s
+## runtime dependencies, so the import-time guards mostly catch the bare
+## ``pip install flashdreams`` case where the plugin extras were skipped).
 
 
 def _load_first_frame(
@@ -289,7 +290,7 @@ def _load_first_frame(
     except ImportError as exc:  # pragma: no cover - import-time gate
         raise ImportError(
             "Loading the first-frame image needs mediapy + opencv. "
-            "Install the runner extras: pip install 'flashdreams[runners]'."
+            "Install the lingbot plugin: pip install flashdreams-lingbot."
         ) from exc
 
     arr = media.read_image(str(path))[..., :3]
@@ -309,8 +310,8 @@ def _write_video(canvas: torch.Tensor, path: Path, *, fps: int) -> None:
         import mediapy as media  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover - import-time gate
         raise ImportError(
-            "Writing the output video needs mediapy. Install the runner "
-            "extras: pip install 'flashdreams[runners]'."
+            "Writing the output video needs mediapy. "
+            "Install the lingbot plugin: pip install flashdreams-lingbot."
         ) from exc
 
     arr = (canvas.float().numpy() + 1.0) / 2.0
