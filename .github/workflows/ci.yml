@@ -37,6 +37,9 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-suffix: "cpu"
 
       - name: Install lint dependencies
         run: |
@@ -107,6 +110,9 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-suffix: "gpu"
 
       - name: Install dependencies
         run: |
@@ -139,6 +145,8 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Sync versions
         run: uv run .github/scripts/sync_version.py || true
