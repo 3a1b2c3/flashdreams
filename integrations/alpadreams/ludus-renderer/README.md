@@ -130,6 +130,16 @@ GPU-side spatial culling ensures that rendering cost stays constant regardless o
 ctx.set_cull_radius(scale=1.5)  # 0 disables culling
 ```
 
+### Benchmarking
+
+```bash
+# Single scene benchmark
+uv run python examples/benchmark_renderer.py --scene example_data/test_hdmap --iters 10
+
+# Multi-camera benchmark (8 cameras per timestamp)
+uv run python examples/benchmark_renderer.py --scene example_data/test_hdmap --multicam
+```
+
 # Contributing
 
 Contributions are welcome, thank you. This project only accepts contributions under the
