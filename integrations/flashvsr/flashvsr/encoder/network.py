@@ -151,6 +151,8 @@ class Causal_LQ4x_Proj(nn.Module):
         layer_num: int = 30,
         use_cuda_graph: bool = False,
         use_compile: bool = False,
+        compile_mode: str = "max-autotune-no-cudagraphs",
+        compile_dynamic: bool | None = None,
         warmup_iters: int = 1,
     ):
         super().__init__()
@@ -190,9 +192,12 @@ class Causal_LQ4x_Proj(nn.Module):
         # ``torch.compile`` rebind happens *before* wrapper construction so the
         # wrapper captures the compiled callable. ``CUDAGraphWrapper.drain``
         # then covers Inductor's lazy autotune on the first wrapper call (see
-        # ``flashdreams/infra/cuda_graph.py:174``). Mode is
+        # ``flashdreams/infra/cuda_graph.py:174``). Default mode is
         # ``max-autotune-no-cudagraphs`` to avoid double-stacking CUDA graphs
-        # against the wrapper's own capture.
+        # against the wrapper's own capture; ``compile_mode`` /
+        # ``compile_dynamic`` exist so tests can opt into cheaper Inductor
+        # settings (e.g. ``mode="default"`` to skip the multi-second autotune)
+        # without bypassing the production constructor path.
         #
         # The compiled callable lives on a separate ``_stream_forward``
         # attribute -- rebinding ``self.stream_forward_efficient`` directly
@@ -204,7 +209,8 @@ class Causal_LQ4x_Proj(nn.Module):
         ] = (
             torch.compile(
                 self.stream_forward_efficient,
-                mode="max-autotune-no-cudagraphs",
+                mode=compile_mode,
+                dynamic=compile_dynamic,
             )
             if use_compile
             else self.stream_forward_efficient
