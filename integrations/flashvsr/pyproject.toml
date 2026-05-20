@@ -59,14 +59,12 @@ exclude = ["tests"]
 
 # Pytest's ``configfile`` resolution picks the nearest ``pyproject.toml`` to
 # the test files, so when running ``pytest integrations/flashvsr/tests``
-# this file shadows the root ``flashdreams`` config -- mirror its marker
-# registrations here to avoid PytestUnknownMarkWarning on ``@pytest.mark.slow``
-# (used by ``test_color_corrector_benchmark.py`` /
-# ``test_projector_benchmark.py``). The ``manual`` marker comes from the
-# ``pytest-manual-marker`` plugin and doesn't need re-registering.
+# this file shadows the root ``flashdreams`` config -- mirror its addopts
+# (import mode + marker enforcement plugin) and marker registrations here.
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -p flashdreams._pytest_plugins.marker_enforcement"
 markers = [
-    "manual: requires GPU and/or network access (opt-in only)",
-    "slow: long-running test",
+    "ci_cpu: CPU-safe test, runs on the CPU CI runner",
+    "ci_gpu: requires GPU or libGL (cv2), runs on the GPU CI runner",
+    "manual: heavy or environment-specific test, opt-in only",
 ]

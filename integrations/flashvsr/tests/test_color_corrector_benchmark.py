@@ -79,7 +79,6 @@ _BENCH_CASES = [
 ]
 
 
-@pytest.mark.slow
 @pytest.mark.skipif(not torch.cuda.is_available(), reason=_GPU_REASON)
 @pytest.mark.parametrize(
     ("dtype", "frames", "height", "width", "max_abs_tol"), _BENCH_CASES

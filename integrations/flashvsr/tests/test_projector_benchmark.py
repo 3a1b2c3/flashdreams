@@ -117,7 +117,6 @@ def _instrument(pipeline: FlashVSRPipeline) -> dict[str, _StageTimer]:
     return timers
 
 
-@pytest.mark.slow
 @pytest.mark.skipif(not torch.cuda.is_available(), reason=_GPU_REASON)
 @pytest.mark.parametrize("chunk_size", [16])
 def test_flashvsr_per_stage_breakdown(chunk_size: int) -> None:
