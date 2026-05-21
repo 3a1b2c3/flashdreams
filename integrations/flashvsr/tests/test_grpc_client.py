@@ -18,8 +18,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from flashvsr.grpc import uplift_server as grpc_server
-from flashvsr.grpc.uplift_client import build_chunk_request, build_chunks
 from flashvsr.grpc.protos import flashvsr_pb2 as pb2
+from flashvsr.grpc.uplift_client import build_chunk_request, build_chunks
 
 pytestmark = pytest.mark.ci_cpu
 

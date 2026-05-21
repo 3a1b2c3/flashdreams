@@ -49,6 +49,7 @@ from typing import Literal
 import grpc
 import numpy as np
 import torch
+
 from flashvsr.config import build_flashvsr_v1_1
 from flashvsr.grpc.protos import flashvsr_pb2 as pb2
 from flashvsr.grpc.protos import flashvsr_pb2_grpc as pb2_grpc

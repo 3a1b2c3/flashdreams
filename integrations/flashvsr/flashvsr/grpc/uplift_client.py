@@ -43,6 +43,7 @@ from collections.abc import Iterator
 import grpc
 import mediapy as media
 import numpy as np
+
 from flashvsr.grpc.protos import flashvsr_pb2 as pb2
 from flashvsr.grpc.protos import flashvsr_pb2_grpc as pb2_grpc
 
