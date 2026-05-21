@@ -79,6 +79,7 @@ DEFAULT_VIEWER_METADATA_QUEUE_DEPTH = 64
 _INBOUND_END = object()
 _OUTBOUND_END = object()
 AttentionMode = Literal["sparse", "full"]
+Scale = Literal[2, 4]
 
 
 def _default_model_cache_path() -> str:
@@ -127,6 +128,14 @@ def _resolve_attention_mode(requested: str) -> AttentionMode:
         "the sparse path explicitly."
     )
     return "full"
+
+
+def _resolve_scale(scale: int) -> Scale:
+    if scale == 2:
+        return 2
+    if scale == 4:
+        return 4
+    raise ValueError(f"FlashVSR scale must be 2 or 4, got {scale}")
 
 
 @dataclass
@@ -268,7 +277,8 @@ class UltraFlashVSRServicer(pb2_grpc.UltraFlashVSRServiceServicer):
     def _get_upsampler(
         self, H: int, W: int, scale: int, sparse_ratio: float
     ) -> FlashVSRPipeline:
-        key = (H, W, scale, float(sparse_ratio), self._attention_mode)
+        resolved_scale = _resolve_scale(scale)
+        key = (H, W, resolved_scale, float(sparse_ratio), self._attention_mode)
         with self._pool_lock:
             if key not in self._upsampler_pool:
                 log.info(
@@ -276,7 +286,7 @@ class UltraFlashVSRServicer(pb2_grpc.UltraFlashVSRServiceServicer):
                     "attention_mode=%s compile=%s cuda_graph=%s ...",
                     H,
                     W,
-                    scale,
+                    resolved_scale,
                     sparse_ratio,
                     self._attention_mode,
                     self._compile_network,
@@ -290,7 +300,7 @@ class UltraFlashVSRServicer(pb2_grpc.UltraFlashVSRServiceServicer):
                 config = build_flashvsr_v1_1(
                     input_H=H,
                     input_W=W,
-                    scale=scale,
+                    scale=resolved_scale,
                     sparse_ratio=sparse_ratio,
                     compile_network=self._compile_network,
                     use_cuda_graph=self._use_cuda_graph,
@@ -1105,20 +1115,14 @@ class UltraFlashVSRServicer(pb2_grpc.UltraFlashVSRServiceServicer):
                 log.exception("UpscaleVideo: GPU worker crashed")
                 try:
                     put_outbound(
-                        pb2.UpscaleChunkResponse(
-                            error="internal GPU worker error"
-                        )
+                        pb2.UpscaleChunkResponse(error="internal GPU worker error")
                     )
                     put_outbound(_OUTBOUND_END)
                 except Exception:
                     pass
 
-        rx = threading.Thread(
-            target=reader_fn, name="UpscaleVideoRx", daemon=True
-        )
-        gx = threading.Thread(
-            target=gpu_fn, name="UpscaleVideoGPU", daemon=True
-        )
+        rx = threading.Thread(target=reader_fn, name="UpscaleVideoRx", daemon=True)
+        gx = threading.Thread(target=gpu_fn, name="UpscaleVideoGPU", daemon=True)
         rx.start()
         gx.start()
         try:
@@ -1196,8 +1200,7 @@ def main():
         "--cuda_graph",
         action="store_true",
         help=(
-            "Capture the steady-state DiT call into a CUDA graph. Implies "
-            "--compile."
+            "Capture the steady-state DiT call into a CUDA graph. Implies --compile."
         ),
     )
     parser.add_argument(

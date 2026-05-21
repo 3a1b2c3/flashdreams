@@ -38,13 +38,16 @@ from collections.abc import Iterator
 import grpc
 import mediapy as media
 import numpy as np
-from flashvsr.grpc.client import build_chunk_request
+from flashvsr.grpc.client import build_chunk_request, grpc_error_details, video_fps
 from flashvsr.grpc.protos import ultraflashvsr_pb2 as pb2
 from flashvsr.grpc.protos import ultraflashvsr_pb2_grpc as pb2_grpc
 
 DEFAULT_SERVER = "localhost:50051"
 DEFAULT_MAX_MESSAGE_MB = 512
 CHUNK_FRAMES = 8
+
+ANSI_GREEN = "\033[32m"
+ANSI_RESET = "\033[0m"
 
 
 def _read_video(path: str) -> np.ndarray:
@@ -68,10 +71,7 @@ def _circular_chunk(frames: np.ndarray, start: int, size: int) -> np.ndarray:
 
 
 def _video_fps(path: str) -> float:
-    try:
-        return float(media.VideoMetadata.from_path(path).fps)
-    except Exception:
-        return 30.0
+    return video_fps(path)
 
 
 def main() -> None:
@@ -150,8 +150,7 @@ def main() -> None:
         type=int,
         default=16,
         help=(
-            "Number of recent sent chunks used for observed ingress FPS "
-            "(default: 16)."
+            "Number of recent sent chunks used for observed ingress FPS (default: 16)."
         ),
     )
     args = parser.parse_args()
@@ -193,7 +192,7 @@ def main() -> None:
     try:
         status = stub.GetStatus(pb2.StatusRequest(), timeout=10)
     except grpc.RpcError as exc:
-        print(f"Cannot reach server: {exc.details()}", file=sys.stderr)
+        print(f"Cannot reach server: {grpc_error_details(exc)}", file=sys.stderr)
         sys.exit(1)
     if not status.ready:
         print("Server is not ready.", file=sys.stderr)
@@ -240,7 +239,7 @@ def main() -> None:
                 ingress_fps = (len(send_times) - 1) * CHUNK_FRAMES / elapsed
                 print(
                     f"sent_chunks={state['sent']} sent_frames={state['sent'] * CHUNK_FRAMES} "
-                    f"observed_ingress={ingress_fps:.2f} fps "
+                    f"{ANSI_GREEN}observed_ingress={ingress_fps:.2f} fps{ANSI_RESET} "
                     f"window_chunks={len(send_times)}"
                 )
             yield req
@@ -260,9 +259,7 @@ def main() -> None:
             receive_times.append(time.perf_counter())
             if state["received"] % args.report_every == 0:
                 elapsed = max(receive_times[-1] - receive_times[0], 1e-6)
-                receive_fps = (
-                    (len(receive_times) - 1) * CHUNK_FRAMES / elapsed
-                )
+                receive_fps = (len(receive_times) - 1) * CHUNK_FRAMES / elapsed
                 print(
                     f"received_chunks={state['received']} "
                     f"last_chunk={response.chunk_index} "

@@ -51,6 +51,24 @@ CHUNK_MODES: dict[int, tuple[int, int]] = {
 }
 
 
+def grpc_error_details(exc: grpc.RpcError) -> str:
+    details = getattr(exc, "details", None)
+    if callable(details):
+        try:
+            return str(details())
+        except Exception:
+            pass
+    return str(exc)
+
+
+def video_fps(path: str) -> float:
+    try:
+        get_video_metadata = getattr(media, "_get_video_metadata")
+        return float(get_video_metadata(path).fps)
+    except Exception:
+        return 30.0
+
+
 def build_chunks(
     total_frames: int, first_chunk: int, chunk_size: int
 ) -> list[tuple[int, int]]:
@@ -377,7 +395,7 @@ def main():
     try:
         status = stub.GetStatus(pb2.StatusRequest(), timeout=10)
     except grpc.RpcError as exc:
-        print(f"Cannot reach server: {exc.details()}", file=sys.stderr)
+        print(f"Cannot reach server: {grpc_error_details(exc)}", file=sys.stderr)
         sys.exit(1)
     print(f"  ready={status.ready}  device={status.device}  model={status.model_name}")
     if not status.ready:
@@ -392,10 +410,7 @@ def main():
 
     fps = args.fps
     if fps is None:
-        try:
-            fps = media.VideoMetadata.from_path(args.input).fps
-        except Exception:
-            fps = 30.0
+        fps = video_fps(args.input)
     print(f"  fps: {fps}")
 
     first_chunk, chunk_size = CHUNK_MODES[args.chunk_size]
