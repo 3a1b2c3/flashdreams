@@ -32,7 +32,6 @@ Usage (from repo root):
 """
 
 import argparse
-import importlib
 import logging
 import os
 import queue
@@ -93,43 +92,6 @@ def _default_model_cache_path() -> str:
 def _synchronize_device(device: str) -> None:
     if str(device).startswith("cuda") and torch.cuda.is_available():
         torch.cuda.synchronize()
-
-
-def _block_sparse_attn_available() -> bool:
-    try:
-        importlib.import_module("block_sparse_attn.block_sparse_attn_interface")
-    except ImportError:
-        return False
-    return True
-
-
-def _resolve_attention_mode(requested: str) -> AttentionMode:
-    if requested == "full":
-        return "full"
-
-    sparse_available = _block_sparse_attn_available()
-    if requested == "sparse":
-        if not sparse_available:
-            raise RuntimeError(
-                "FlashVSR gRPC server was started with --attention_mode sparse, "
-                "but block_sparse_attn is not importable. Install the "
-                "block_sparse_attn CUDA extension or restart with "
-                "--attention_mode full."
-            )
-        return "sparse"
-
-    if requested != "auto":
-        raise ValueError(f"unknown attention mode: {requested}")
-
-    if sparse_available:
-        return "sparse"
-
-    log.warning(
-        "block_sparse_attn is not importable; using attention_mode='full'. "
-        "Install block_sparse_attn or pass --attention_mode sparse to require "
-        "the sparse path explicitly."
-    )
-    return "full"
 
 
 def _resolve_scale(scale: int) -> Scale:
@@ -1191,12 +1153,14 @@ def main():
     )
     parser.add_argument(
         "--attention_mode",
-        choices=["auto", "sparse", "full"],
-        default="auto",
+        choices=["sparse", "full"],
+        default="sparse",
         help=(
-            "Attention backend for the FlashVSR DiT. auto uses sparse when "
-            "block_sparse_attn imports successfully and otherwise falls back "
-            "to full attention (default: %(default)s)."
+            "Attention backend for the FlashVSR DiT. sparse requires the "
+            "block_sparse_attn CUDA extension (a hard dependency of the "
+            "FlashVSR integration); if it cannot be imported the server "
+            "will fail loudly at warmup. Pass --attention_mode full to opt "
+            "into dense attention instead (default: %(default)s)."
         ),
     )
     parser.add_argument(
@@ -1317,10 +1281,7 @@ def main():
         parser.error("--viewer_jpeg_quality must be between 1 and 100")
     if args.viewer_frame_stride < 1:
         parser.error("--viewer_frame_stride must be at least 1")
-    try:
-        attention_mode = _resolve_attention_mode(args.attention_mode)
-    except (RuntimeError, ValueError) as exc:
-        parser.error(str(exc))
+    attention_mode: AttentionMode = args.attention_mode
 
     compile_network = bool(args.compile or args.cuda_graph)
     if args.cuda_graph and not args.compile:
