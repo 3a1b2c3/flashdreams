@@ -159,6 +159,13 @@ def _resolved_cuda_arch_list() -> str | None:
     return os.environ.get(_NATIVE_CUDA_ARCH_LIST_ENV, _DEFAULT_CUDA_ARCH_LIST)
 
 
+def _effective_cuda_arch_list() -> str:
+    return os.environ.get(
+        _PYTORCH_CUDA_ARCH_LIST_ENV,
+        os.environ.get(_NATIVE_CUDA_ARCH_LIST_ENV, _DEFAULT_CUDA_ARCH_LIST),
+    )
+
+
 @contextlib.contextmanager
 def _scoped_torch_max_jobs(max_jobs: int | str | None) -> Iterator[None]:
     resolved = _resolved_max_jobs(max_jobs)
@@ -254,6 +261,8 @@ def load_extension(
                         f"\\\"{thirdparty_info['SageAttention']['commit']}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA="
                         f"\\\"{thirdparty_info['SpargeAttn']['commit']}\\\"",
+                        "-DOMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST="
+                        f"\\\"{_effective_cuda_arch_list()}\\\"",
                     ],
                     extra_cuda_cflags=[
                         "-O3",

@@ -55,6 +55,10 @@
 #define OMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA "unknown"
 #endif
 
+#ifndef OMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST
+#define OMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST "unknown"
+#endif
+
 namespace {
 
 bool is_available() {
@@ -72,6 +76,7 @@ pybind11::dict build_info() {
   info["native_primitives_cuda_source_sha256"] = OMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA;
   info["sage_attention_sha"] = OMNIDREAMS_SINGLEVIEW_SAGE_ATTENTION_SHA;
   info["sparge_attn_sha"] = OMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA;
+  info["cuda_arch_list"] = OMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST;
   info["with_cuda"] = true;
   return info;
 }

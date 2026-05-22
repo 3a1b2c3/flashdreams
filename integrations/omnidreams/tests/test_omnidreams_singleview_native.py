@@ -184,6 +184,10 @@ def test_load_extension_uses_build_root_for_torch_cache(
         "-DOMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA=\\\"sparge-test-sha\\\""
         in captured["extra_cflags"]
     )
+    assert (
+        "-DOMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST=\\\"12.0a\\\""
+        in captured["extra_cflags"]
+    )
     assert captured["extra_cuda_cflags"] == [
         "-O3",
         "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA",
@@ -504,7 +508,7 @@ def test_native_workspace_requests_allocate_named_workspaces() -> None:
         allocate_native_workspaces([requests[0], requests[0]])
 
 
-@pytest.mark.manual
+@pytest.mark.ci_cpu
 @pytest.mark.skipif(
     os.environ.get("OMNIDREAMS_SINGLEVIEW_RUN_THIRDPARTY_VERIFY") != "1",
     reason="Set OMNIDREAMS_SINGLEVIEW_RUN_THIRDPARTY_VERIFY=1 to verify downloaded sources.",
@@ -515,7 +519,7 @@ def test_real_thirdparty_sources_verify() -> None:
     assert set(info) == {"cutlass", "SageAttention", "SpargeAttn"}
 
 
-@pytest.mark.manual
+@pytest.mark.ci_gpu
 @pytest.mark.skipif(
     os.environ.get("OMNIDREAMS_SINGLEVIEW_RUN_NATIVE_BUILD_TEST") != "1",
     reason="Set OMNIDREAMS_SINGLEVIEW_RUN_NATIVE_BUILD_TEST=1 to build the native extension.",
@@ -525,7 +529,13 @@ def test_cuda_native_extension_builds(tmp_path: Path) -> None:
 
     assert extension is not None, native.extension_load_error()
     assert extension.is_available()
-    assert extension.build_info()["with_cuda"] is True
+    build_info = extension.build_info()
+    assert build_info["with_cuda"] is True
+    expected_arch = os.environ.get(
+        "TORCH_CUDA_ARCH_LIST",
+        os.environ.get("OMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST", "12.0a"),
+    )
+    assert build_info["cuda_arch_list"] == expected_arch
     assert hasattr(extension, "native_tensor_descriptor")
     assert hasattr(extension, "prepare_contiguous")
     assert hasattr(extension, "zero_workspace_")
