@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -29,6 +30,15 @@ from omnidreams.native.acceleration import (
     NativeAccelerationUnavailable,
     require_extension_symbols,
     select_native_extension,
+)
+from omnidreams.native import (
+    NativePrepError,
+    NativeTensorLayout,
+    NativeTensorSpec,
+    NativeWorkspaceRequest,
+    allocate_native_workspaces,
+    prepare_tensor_for_native,
+    validate_tensor,
 )
 from omnidreams.native import omnidreams_singleview as native
 
@@ -136,10 +146,16 @@ def test_load_extension_uses_build_root_for_torch_cache(
         build_root / "torch_extensions" / str(extension_name)
     )
     assert captured["extra_include_paths"] == [
+        str(native._SOURCE_DIR),
         str(Path(str(thirdparty_info["cutlass"]["path"])) / "include")
     ]
     sources = [Path(str(source)).name for source in captured["sources"]]
-    assert sources == ["omnidreams_singleview_ext.cpp", "omnidreams_singleview_cuda.cu"]
+    assert sources == [
+        "omnidreams_singleview_ext.cpp",
+        "native_primitives.cpp",
+        "native_primitives_cuda.cu",
+    ]
+    assert "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA" in captured["extra_cflags"]
     assert (
         "-DOMNIDREAMS_SINGLEVIEW_CUTLASS_SHA=\\\"cutlass-test-sha\\\""
         in captured["extra_cflags"]
@@ -152,6 +168,14 @@ def test_load_extension_uses_build_root_for_torch_cache(
         flag.startswith("-DOMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA=")
         for flag in captured["extra_cflags"]
     )
+    assert any(
+        flag.startswith("-DOMNIDREAMS_SINGLEVIEW_SOURCE_FINGERPRINT_SHA=")
+        for flag in captured["extra_cflags"]
+    )
+    assert any(
+        flag.startswith("-DOMNIDREAMS_SINGLEVIEW_NATIVE_PRIMITIVES_SOURCE_SHA=")
+        for flag in captured["extra_cflags"]
+    )
     assert (
         "-DOMNIDREAMS_SINGLEVIEW_SAGE_ATTENTION_SHA=\\\"sage-test-sha\\\""
         in captured["extra_cflags"]
@@ -160,7 +184,10 @@ def test_load_extension_uses_build_root_for_torch_cache(
         "-DOMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA=\\\"sparge-test-sha\\\""
         in captured["extra_cflags"]
     )
-    assert captured["extra_cuda_cflags"] == ["-O3"]
+    assert captured["extra_cuda_cflags"] == [
+        "-O3",
+        "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA",
+    ]
     assert captured["with_cuda"] is True
     assert captured["max_jobs_env"] == "1"
     assert captured["cuda_arch_list_env"] == "12.0a"
@@ -270,7 +297,7 @@ def test_native_acceleration_disabled_does_not_load_extension() -> None:
 
 
 @pytest.mark.ci_cpu
-def test_native_acceleration_auto_falls_back_when_extension_is_missing() -> None:
+def test_native_acceleration_auto_reports_missing_extension() -> None:
     error = RuntimeError("compile failed")
 
     selection = select_native_extension(
@@ -340,7 +367,7 @@ def test_native_acceleration_auto_reports_false_availability() -> None:
 
 
 @pytest.mark.ci_cpu
-def test_native_acceleration_auto_falls_back_when_check_raises() -> None:
+def test_native_acceleration_auto_reports_check_errors() -> None:
     extension = SimpleNamespace(is_available=lambda: True)
 
     def failing_check(_: object) -> bool:
@@ -393,6 +420,90 @@ def test_omnidreams_select_backend_forwards_build_options(
     }
 
 
+@pytest.mark.ci_cpu
+def test_native_tensor_layout_parses_and_rejects_duplicates() -> None:
+    layout = NativeTensorLayout.parse("B V T C H W")
+
+    assert layout.axes == ("B", "V", "T", "C", "H", "W")
+    assert layout.axis_index("C") == 3
+
+    with pytest.raises(ValueError, match="unique"):
+        NativeTensorLayout.parse("B T T C")
+
+
+@pytest.mark.ci_cpu
+def test_native_tensor_spec_validates_shape_dtype_and_divisibility() -> None:
+    tensor = torch.empty((1, 2, 8, 16, 9, 10), dtype=torch.float16)
+    spec = NativeTensorSpec(
+        name="video_latent",
+        layout="B V T C H W",
+        shape=(1, 2, None, 16, None, None),
+        dtypes=(torch.float16, torch.bfloat16),
+        device_type="cpu",
+        axis_divisibility=(("T", 4),),
+    )
+
+    descriptor = validate_tensor(tensor, spec)
+
+    assert descriptor.shape == (1, 2, 8, 16, 9, 10)
+    assert descriptor.layout.axes == ("B", "V", "T", "C", "H", "W")
+    assert descriptor.nbytes == tensor.numel() * tensor.element_size()
+
+    with pytest.raises(NativePrepError, match="axis T size 7"):
+        validate_tensor(torch.empty((1, 2, 7, 16, 9, 10), dtype=torch.float16), spec)
+
+    with pytest.raises(NativePrepError, match="expected dtype"):
+        validate_tensor(torch.empty((1, 2, 8, 16, 9, 10), dtype=torch.float32), spec)
+
+
+@pytest.mark.ci_cpu
+def test_prepare_tensor_for_native_makes_contiguous_copy() -> None:
+    tensor = torch.empty((2, 3, 4), dtype=torch.float32).transpose(1, 2)
+    spec = NativeTensorSpec(
+        name="activation",
+        layout="B T C",
+        shape=(2, 4, 3),
+        dtypes=(torch.float32,),
+    )
+
+    prepared = prepare_tensor_for_native(tensor, spec)
+
+    assert prepared.copied is True
+    assert prepared.tensor.is_contiguous()
+    assert prepared.descriptor.stride == tuple(prepared.tensor.stride())
+
+    already_contiguous = prepare_tensor_for_native(prepared.tensor, spec)
+    assert already_contiguous.copied is False
+
+
+@pytest.mark.ci_cpu
+def test_native_workspace_requests_allocate_named_workspaces() -> None:
+    requests = [
+        NativeWorkspaceRequest(
+            name="activation_scratch",
+            shape=(2, 4, 16),
+            dtype=torch.float16,
+            device="cpu",
+        ),
+        NativeWorkspaceRequest(
+            name="descriptor_state",
+            shape=(8,),
+            dtype=torch.int64,
+            device=torch.device("cpu"),
+        ),
+    ]
+
+    workspaces = allocate_native_workspaces(requests)
+
+    assert set(workspaces) == {"activation_scratch", "descriptor_state"}
+    assert workspaces["activation_scratch"].tensor.shape == (2, 4, 16)
+    assert workspaces["activation_scratch"].nbytes == 2 * 4 * 16 * 2
+    assert workspaces["descriptor_state"].tensor.dtype == torch.int64
+
+    with pytest.raises(NativePrepError, match="Duplicate"):
+        allocate_native_workspaces([requests[0], requests[0]])
+
+
 @pytest.mark.manual
 @pytest.mark.skipif(
     os.environ.get("OMNIDREAMS_SINGLEVIEW_RUN_THIRDPARTY_VERIFY") != "1",
@@ -415,3 +526,22 @@ def test_cuda_native_extension_builds(tmp_path: Path) -> None:
     assert extension is not None, native.extension_load_error()
     assert extension.is_available()
     assert extension.build_info()["with_cuda"] is True
+    assert hasattr(extension, "native_tensor_descriptor")
+    assert hasattr(extension, "prepare_contiguous")
+    assert hasattr(extension, "zero_workspace_")
+
+    if not torch.cuda.is_available():
+        return
+
+    workspace = torch.empty((16,), device="cuda", dtype=torch.float16)
+    extension.zero_workspace_(workspace)
+    torch.cuda.synchronize()
+    assert torch.count_nonzero(workspace).item() == 0
+
+    source = torch.arange(24, device="cuda", dtype=torch.float32).reshape(2, 3, 4)
+    transposed = source.transpose(1, 2)
+    prepared = extension.prepare_contiguous(transposed)
+    torch.cuda.synchronize()
+
+    assert prepared.is_contiguous()
+    assert torch.equal(prepared.cpu(), transposed.cpu())

@@ -37,8 +37,10 @@ from omnidreams.native.acceleration import (
 
 _ROOT = Path(__file__).resolve().parents[2] / "omnidreams_singleview"
 _NATIVE_BUILD_PATH = _ROOT / "tools" / "native_build.py"
-_EXTENSION_SOURCE = _ROOT / "src" / "omnidreams_singleview_ext.cpp"
-_CUDA_SOURCE = _ROOT / "src" / "omnidreams_singleview_cuda.cu"
+_SOURCE_DIR = _ROOT / "src"
+_EXTENSION_SOURCE = _SOURCE_DIR / "omnidreams_singleview_ext.cpp"
+_NATIVE_PRIMITIVES_SOURCE = _SOURCE_DIR / "native_primitives.cpp"
+_NATIVE_PRIMITIVES_CUDA_SOURCE = _SOURCE_DIR / "native_primitives_cuda.cu"
 _NATIVE_MAX_JOBS_ENV = "OMNIDREAMS_SINGLEVIEW_NATIVE_MAX_JOBS"
 _PYTORCH_MAX_JOBS_ENV = "MAX_JOBS"
 _DEFAULT_NATIVE_MAX_JOBS = "1"
@@ -106,10 +108,27 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _extension_sources() -> list[Path]:
+    return [
+        _EXTENSION_SOURCE,
+        _NATIVE_PRIMITIVES_SOURCE,
+        _NATIVE_PRIMITIVES_CUDA_SOURCE,
+    ]
+
+
+def _source_fingerprint() -> str:
+    digest = hashlib.sha256()
+    for source in _extension_sources():
+        digest.update(source.relative_to(_ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(_file_sha256(source).encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _extension_name(thirdparty_info: dict[str, Any]) -> str:
     digest = hashlib.sha256()
-    digest.update(_file_sha256(_EXTENSION_SOURCE).encode("ascii"))
-    digest.update(_file_sha256(_CUDA_SOURCE).encode("ascii"))
+    digest.update(_source_fingerprint().encode("ascii"))
     digest.update(json.dumps(thirdparty_info, sort_keys=True).encode("utf-8"))
     return f"omnidreams_singleview_native_{digest.hexdigest()[:12]}"
 
@@ -216,19 +235,24 @@ def load_extension(
             with _scoped_torch_max_jobs(max_jobs), _scoped_cuda_arch_list():
                 _extension = load_torch_extension(
                     name=extension_name,
-                    sources=[str(_EXTENSION_SOURCE), str(_CUDA_SOURCE)],
+                    sources=[str(source) for source in _extension_sources()],
                     build_directory=str(extension_build_dir),
-                    extra_include_paths=[str(cutlass_include)],
+                    extra_include_paths=[str(_SOURCE_DIR), str(cutlass_include)],
                     extra_cflags=[
                         "-O3",
+                        "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA",
                         "-DOMNIDREAMS_SINGLEVIEW_CUTLASS_SHA="
                         f"\\\"{thirdparty_info['cutlass']['commit']}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_CUTLASS_SOURCE_SHA="
                         f"\\\"{thirdparty_info['cutlass']['source_sha256']}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_SOURCE_SHA="
                         f"\\\"{_file_sha256(_EXTENSION_SOURCE)}\\\"",
+                        "-DOMNIDREAMS_SINGLEVIEW_SOURCE_FINGERPRINT_SHA="
+                        f"\\\"{_source_fingerprint()}\\\"",
+                        "-DOMNIDREAMS_SINGLEVIEW_NATIVE_PRIMITIVES_SOURCE_SHA="
+                        f"\\\"{_file_sha256(_NATIVE_PRIMITIVES_SOURCE)}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA="
-                        f"\\\"{_file_sha256(_CUDA_SOURCE)}\\\"",
+                        f"\\\"{_file_sha256(_NATIVE_PRIMITIVES_CUDA_SOURCE)}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_SAGE_ATTENTION_SHA="
                         f"\\\"{thirdparty_info['SageAttention']['commit']}\\\"",
                         "-DOMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA="
@@ -236,6 +260,7 @@ def load_extension(
                     ],
                     extra_cuda_cflags=[
                         "-O3",
+                        "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA",
                     ],
                     with_cuda=True,
                     verbose=verbose,

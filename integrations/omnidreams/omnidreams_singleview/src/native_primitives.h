@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
-namespace {
+#pragma once
 
-__global__ void omnidreams_singleview_native_sentinel_kernel() {}
+#include <torch/extension.h>
 
-}  // namespace
+namespace omnidreams_singleview {
 
-int omnidreams_singleview_cuda_compiled() {
-  return 1;
-}
+pybind11::dict native_tensor_descriptor(const torch::Tensor& tensor);
+torch::Tensor prepare_contiguous(const torch::Tensor& input);
+torch::Tensor zero_workspace_(torch::Tensor workspace);
+void bind_native_primitives(pybind11::module_& module);
+torch::Tensor prepare_contiguous_cuda(const torch::Tensor& input);
+void zero_workspace_cuda(torch::Tensor workspace);
+
+}  // namespace omnidreams_singleview

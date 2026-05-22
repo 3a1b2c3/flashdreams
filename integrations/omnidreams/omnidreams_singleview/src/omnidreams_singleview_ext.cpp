@@ -17,6 +17,12 @@
 
 #include <torch/extension.h>
 
+#include "native_primitives.h"
+
+#ifndef OMNIDREAMS_SINGLEVIEW_WITH_CUDA
+#error "OmniDreams single-view native extension requires CUDA"
+#endif
+
 #ifndef OMNIDREAMS_SINGLEVIEW_CUTLASS_SHA
 #define OMNIDREAMS_SINGLEVIEW_CUTLASS_SHA "unknown"
 #endif
@@ -27,6 +33,14 @@
 
 #ifndef OMNIDREAMS_SINGLEVIEW_SOURCE_SHA
 #define OMNIDREAMS_SINGLEVIEW_SOURCE_SHA "unknown"
+#endif
+
+#ifndef OMNIDREAMS_SINGLEVIEW_SOURCE_FINGERPRINT_SHA
+#define OMNIDREAMS_SINGLEVIEW_SOURCE_FINGERPRINT_SHA "unknown"
+#endif
+
+#ifndef OMNIDREAMS_SINGLEVIEW_NATIVE_PRIMITIVES_SOURCE_SHA
+#define OMNIDREAMS_SINGLEVIEW_NATIVE_PRIMITIVES_SOURCE_SHA "unknown"
 #endif
 
 #ifndef OMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA
@@ -41,12 +55,10 @@
 #define OMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA "unknown"
 #endif
 
-int omnidreams_singleview_cuda_compiled();
-
 namespace {
 
 bool is_available() {
-  return omnidreams_singleview_cuda_compiled() == 1;
+  return true;
 }
 
 pybind11::dict build_info() {
@@ -54,7 +66,10 @@ pybind11::dict build_info() {
   info["cutlass_sha"] = OMNIDREAMS_SINGLEVIEW_CUTLASS_SHA;
   info["cutlass_source_sha256"] = OMNIDREAMS_SINGLEVIEW_CUTLASS_SOURCE_SHA;
   info["extension_source_sha256"] = OMNIDREAMS_SINGLEVIEW_SOURCE_SHA;
-  info["cuda_source_sha256"] = OMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA;
+  info["source_fingerprint_sha256"] = OMNIDREAMS_SINGLEVIEW_SOURCE_FINGERPRINT_SHA;
+  info["native_primitives_source_sha256"] =
+      OMNIDREAMS_SINGLEVIEW_NATIVE_PRIMITIVES_SOURCE_SHA;
+  info["native_primitives_cuda_source_sha256"] = OMNIDREAMS_SINGLEVIEW_CUDA_SOURCE_SHA;
   info["sage_attention_sha"] = OMNIDREAMS_SINGLEVIEW_SAGE_ATTENTION_SHA;
   info["sparge_attn_sha"] = OMNIDREAMS_SINGLEVIEW_SPARGE_ATTN_SHA;
   info["with_cuda"] = true;
@@ -66,4 +81,5 @@ pybind11::dict build_info() {
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
   module.def("is_available", &is_available);
   module.def("build_info", &build_info);
+  omnidreams_singleview::bind_native_primitives(module);
 }
