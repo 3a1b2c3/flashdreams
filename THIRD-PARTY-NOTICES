@@ -68,6 +68,16 @@ were originally authored as part of the NVIDIA Cosmos-Drive-Dreams project
 (https://github.com/nv-tlabs/Cosmos-Drive-Dreams) and are redistributed and
 modified under the same Apache-2.0 license.
 
+OmniDreams single-view native builds use script-managed, pinned source
+downloads under integrations/omnidreams/omnidreams_singleview/3rdparty/.
+Those downloaded trees are ignored by Git and are not source-level
+redistributions in this repository.
+
+SageAttention          Apache-2.0   https://github.com/thu-ml/SageAttention
+    Pinned by integrations/omnidreams/omnidreams_singleview/
+    thirdparty_sources.json at
+    d1a57a546c3d395b1ffcbeecc66d81db76f3b4b5.
+
 ================================================================================
 Optional integration: integrations/lingbot
 ================================================================================

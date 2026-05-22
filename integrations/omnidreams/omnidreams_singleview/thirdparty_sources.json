@@ -1,4 +1,11 @@
 {
   "schema_version": 1,
-  "sources": []
+  "sources": [
+    {
+      "name": "SageAttention",
+      "repo": "https://github.com/thu-ml/SageAttention.git",
+      "commit": "d1a57a546c3d395b1ffcbeecc66d81db76f3b4b5",
+      "directory": "SageAttention"
+    }
+  ]
 }
