@@ -41,6 +41,7 @@ _SOURCE_DIR = _ROOT / "src"
 _EXTENSION_SOURCE = _SOURCE_DIR / "omnidreams_singleview_ext.cpp"
 _NATIVE_PRIMITIVES_SOURCE = _SOURCE_DIR / "native_primitives.cpp"
 _NATIVE_PRIMITIVES_CUDA_SOURCE = _SOURCE_DIR / "native_primitives_cuda.cu"
+_NATIVE_COMMON_HEADER_DIR = _SOURCE_DIR / "native_common"
 _PYTORCH_MAX_JOBS_ENV = "MAX_JOBS"
 _DEFAULT_MAX_JOBS_CAP = 8
 _NATIVE_CUDA_ARCH_LIST_ENV = "OMNIDREAMS_SINGLEVIEW_CUDA_ARCH_LIST"
@@ -115,9 +116,16 @@ def _extension_sources() -> list[Path]:
     ]
 
 
+def _extension_fingerprint_sources() -> list[Path]:
+    return [
+        *_extension_sources(),
+        *sorted(_NATIVE_COMMON_HEADER_DIR.glob("*.h")),
+    ]
+
+
 def _source_fingerprint() -> str:
     digest = hashlib.sha256()
-    for source in _extension_sources():
+    for source in _extension_fingerprint_sources():
         digest.update(source.relative_to(_ROOT).as_posix().encode("utf-8"))
         digest.update(b"\0")
         digest.update(_file_sha256(source).encode("ascii"))

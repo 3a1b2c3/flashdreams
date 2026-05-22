@@ -155,6 +155,17 @@ def test_load_extension_uses_build_root_for_torch_cache(
         "native_primitives.cpp",
         "native_primitives_cuda.cu",
     ]
+    fingerprint_sources = {
+        source.relative_to(native._SOURCE_DIR).as_posix()
+        for source in native._extension_fingerprint_sources()
+    }
+    assert {
+        "native_common/macros.h",
+        "native_common/scalar_types.h",
+        "native_common/tensor_ref.h",
+        "native_common/tensor_ref_torch.h",
+        "native_common/workspace_allocator.h",
+    }.issubset(fingerprint_sources)
     assert "-DOMNIDREAMS_SINGLEVIEW_WITH_CUDA" in captured["extra_cflags"]
     assert (
         "-DOMNIDREAMS_SINGLEVIEW_CUTLASS_SHA=\\\"cutlass-test-sha\\\""
@@ -537,6 +548,8 @@ def test_cuda_native_extension_builds(tmp_path: Path) -> None:
     )
     assert build_info["cuda_arch_list"] == expected_arch
     assert hasattr(extension, "native_tensor_descriptor")
+    assert hasattr(extension, "native_tensor_ref_descriptor")
+    assert hasattr(extension, "workspace_allocation_plan")
     assert hasattr(extension, "prepare_contiguous")
     assert hasattr(extension, "zero_workspace_")
 
@@ -555,3 +568,17 @@ def test_cuda_native_extension_builds(tmp_path: Path) -> None:
 
     assert prepared.is_contiguous()
     assert torch.equal(prepared.cpu(), transposed.cpu())
+
+    descriptor = extension.native_tensor_ref_descriptor(transposed)
+    assert descriptor["rank"] == 3
+    assert tuple(descriptor["shape"]) == tuple(transposed.shape)
+    assert tuple(descriptor["stride"]) == tuple(transposed.stride())
+    assert descriptor["nbytes"] == transposed.numel() * transposed.element_size()
+
+    byte_workspace = torch.empty((128,), device="cuda", dtype=torch.uint8)
+    plan = extension.workspace_allocation_plan(byte_workspace, [13, 16, 32], 16)
+    assert list(plan["offsets"]) == [0, 16, 32]
+    assert list(plan["sizes"]) == [13, 16, 32]
+    assert plan["used_bytes"] == 64
+    assert plan["remaining_bytes"] == 64
+    assert plan["total_bytes"] == 128
