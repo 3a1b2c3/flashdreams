@@ -74,3 +74,95 @@ index 2757553..b073353 100644
      assert resolution in IMAGE_RES_SIZE_INFO.keys(), "The provided resolution cannot be found in IMAGE_RES_SIZE_INFO."
      assert object_store in ["s3", "swiftstack", "gcp"], "We support s3, gcp and swiftstack only."
      assert dataset_resolution_type in [
+diff --git a/cosmos_predict2/_src/predict2/inference/video2world.py b/cosmos_predict2/_src/predict2/inference/video2world.py
+index 4129bc0..8e1fd87 100644
+--- a/cosmos_predict2/_src/predict2/inference/video2world.py
++++ b/cosmos_predict2/_src/predict2/inference/video2world.py
+@@ -305,6 +305,12 @@ class Video2WorldInference:
+         # Load the model and config
+         if experiment_opts is None:
+             experiment_opts = []
++        force_torch_attn = os.getenv("COSMOS_FORCE_TORCH_ATTN", "0") == "1"
++        force_torch_compile = os.getenv("COSMOS_FORCE_TORCH_COMPILE", "0") == "1"
++        if force_torch_attn:
++            # Route all attention through the torch SDPA path so FORCE_CUDNN_ATTN can
++            # enforce cuDNN attention globally in the denoising loop.
++            experiment_opts.append("model.config.net.atten_backend=torch")
+         if not INTERNAL:
+             experiment_opts.append("~data_train")
+ 
+@@ -370,6 +376,16 @@ class Video2WorldInference:
+         if self.context_parallel_size > 1:
+             model.net.enable_context_parallel(self.process_group)
+ 
++        if force_torch_compile:
++            if self.offload_diffusion_model:
++                log.warning("Skipping torch.compile because offload_diffusion_model=True")
++            elif not torch.cuda.is_available():
++                log.warning("Skipping torch.compile because CUDA is unavailable")
++            else:
++                compile_mode = os.getenv("COSMOS_TORCH_COMPILE_MODE", "default")
++                log.info(f"[Perf] Compiling diffusion network with torch.compile(mode={compile_mode})")
++                model.net = torch.compile(model.net, mode=compile_mode)
++
+         self.model = model
+         self.config = config
+         self.batch_size = 1
+diff --git a/cosmos_predict2/_src/predict2/models/text2world_model.py b/cosmos_predict2/_src/predict2/models/text2world_model.py
+index 7855133..c41631c 100644
+--- a/cosmos_predict2/_src/predict2/models/text2world_model.py
++++ b/cosmos_predict2/_src/predict2/models/text2world_model.py
+@@ -18,7 +18,7 @@ from __future__ import annotations
+ import collections
+ import math
+ import os
+-from contextlib import contextmanager
++from contextlib import contextmanager, nullcontext
+ from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+ 
+ import attrs
+@@ -624,7 +624,14 @@ class DiffusionModel(ImaginaireModel):
+ 
+                     # our model supports 0-1 while the t is 0-1000
+                     timestep = torch.stack(timestep) / 1000
+-                    noise_pred = x0_fn(latent_model_input, timestep.unsqueeze(0))
++                    force_cudnn_attn = os.getenv("FORCE_CUDNN_ATTN", "0") == "1"
++                    attn_context = (
++                        torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.CUDNN_ATTENTION)
++                        if force_cudnn_attn and torch.cuda.is_available()
++                        else nullcontext()
++                    )
++                    with attn_context:
++                        noise_pred = x0_fn(latent_model_input, timestep.unsqueeze(0))
+                     temp_x0 = sample_scheduler.step(
+                         noise_pred.unsqueeze(0), t, latents[0].unsqueeze(0), return_dict=False, generator=seed_g
+                     )[0]
+diff --git a/cosmos_predict2/_src/predict2/models/text2world_model_rectified_flow.py b/cosmos_predict2/_src/predict2/models/text2world_model_rectified_flow.py
+index 95d5130..6137a43 100644
+--- a/cosmos_predict2/_src/predict2/models/text2world_model_rectified_flow.py
++++ b/cosmos_predict2/_src/predict2/models/text2world_model_rectified_flow.py
+@@ -17,7 +17,7 @@ from __future__ import annotations
+ 
+ import collections
+ import os
+-from contextlib import contextmanager
++from contextlib import contextmanager, nullcontext
+ from typing import Callable, Dict, Mapping, Optional, Tuple
+ 
+ import attrs
+@@ -578,7 +578,14 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
+ 
+             timestep = torch.stack(timestep)
+ 
+-            velocity_pred = velocity_fn(noise, latent_model_input, timestep.unsqueeze(0))
++            force_cudnn_attn = os.getenv("FORCE_CUDNN_ATTN", "0") == "1"
++            attn_context = (
++                torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.CUDNN_ATTENTION)
++                if force_cudnn_attn and torch.cuda.is_available()
++                else nullcontext()
++            )
++            with attn_context:
++                velocity_pred = velocity_fn(noise, latent_model_input, timestep.unsqueeze(0))
+             temp_x0 = self.sample_scheduler.step(
+                 velocity_pred.unsqueeze(0), t, latents.unsqueeze(0), return_dict=False, generator=seed_g
+             )[0]
