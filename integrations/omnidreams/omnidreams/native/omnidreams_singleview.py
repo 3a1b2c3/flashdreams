@@ -28,6 +28,13 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator
 
+from omnidreams.native.acceleration import (
+    NativeAccelerationConfig,
+    NativeAvailabilityCheck,
+    NativeBackendSelection,
+    select_native_extension,
+)
+
 _ROOT = Path(__file__).resolve().parents[2] / "omnidreams_singleview"
 _NATIVE_BUILD_PATH = _ROOT / "tools" / "native_build.py"
 _EXTENSION_SOURCE = _ROOT / "src" / "omnidreams_singleview_ext.cpp"
@@ -244,3 +251,20 @@ def extension_load_error() -> Exception | None:
 
     with _state_lock:
         return _extension_load_error
+
+
+def select_backend(
+    component: str,
+    config: NativeAccelerationConfig | None = None,
+    *,
+    availability_check: NativeAvailabilityCheck | None = None,
+) -> NativeBackendSelection:
+    """Resolve OmniDreams single-view native use for a pipeline component."""
+
+    return select_native_extension(
+        config or NativeAccelerationConfig(),
+        component=component,
+        extension_loader=load_extension,
+        extension_error=extension_load_error,
+        availability_check=availability_check,
+    )

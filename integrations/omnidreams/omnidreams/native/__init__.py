@@ -15,16 +15,32 @@
 
 """Native acceleration helpers for OmniDreams integrations."""
 
+from .acceleration import (
+    NativeAccelerationConfig,
+    NativeAccelerationMode,
+    NativeAccelerationUnavailable,
+    NativeBackendSelection,
+    require_extension_symbols,
+    select_native_extension,
+)
 from .omnidreams_singleview import (
     build_info,
     load_extension,
+    select_backend,
     sync_thirdparty,
     validate_thirdparty,
 )
 
 __all__ = [
+    "NativeAccelerationConfig",
+    "NativeAccelerationMode",
+    "NativeAccelerationUnavailable",
+    "NativeBackendSelection",
     "build_info",
     "load_extension",
+    "require_extension_symbols",
+    "select_backend",
+    "select_native_extension",
     "sync_thirdparty",
     "validate_thirdparty",
 ]
