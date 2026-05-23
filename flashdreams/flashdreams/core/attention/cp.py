@@ -205,6 +205,8 @@ class ContextParallelAttention(NativeAttention):
             .permute(2, 1, 0, 3, 4)
             .contiguous()
         )
-        out = self._wait_collective(funcol.all_to_all_single(out, None, None, group=group))
+        out = self._wait_collective(
+            funcol.all_to_all_single(out, None, None, group=group)
+        )
         out = out.flatten(0, 1).permute(1, 0, 2, 3).contiguous()
         return out
