@@ -167,12 +167,6 @@ Start Here
    Cosmos-Predict2.5 <models/cosmos_predict2>
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Tutorials
-   :hidden:
-
-
-.. toctree::
    :maxdepth: 2
    :caption: API
    :hidden:

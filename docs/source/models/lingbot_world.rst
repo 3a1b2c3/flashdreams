@@ -45,7 +45,6 @@ To run Lingbot-World, launch one of the registered runner slugs via
    uv run flashdreams-run \
        lingbot-world-fast \
        --example-data True \
-       --prompt "A cinematic drone flythrough over a winding mountain road." \
        --pixel-height 464 --pixel-width 832 \
        --total-blocks 21
 
@@ -57,7 +56,6 @@ For multi-GPU inference, use ``torchrun`` instead of ``uv run flashdreams-run``
    uv run torchrun --nproc_per_node=4 --no-python flashdreams-run \
        lingbot-world-fast \
        --example-data True \
-       --prompt "A cinematic drone flythrough over a winding mountain road." \
        --pixel-height 464 --pixel-width 832 \
        --total-blocks 21
 

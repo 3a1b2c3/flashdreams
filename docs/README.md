@@ -40,7 +40,7 @@ Use Sphinx live-reload to avoid rerunning build + HTTP server commands on every 
 
 ```bash
 # from the repo root
-uv run --group docs sphinx-autobuild docs/source docs/_build/html --port 8000
+uv run --group docs sphinx-autobuild -E docs/source docs/_build/html --port 8000
 ```
 
 Then keep this process running and open:
