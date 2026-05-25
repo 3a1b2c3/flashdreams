@@ -55,7 +55,7 @@ Serving model
    </div>
 
 This is the online path described in
-:doc:`/developer_guides/offline_vs_online`.
+:ref:`online-serving-focus`.
 
 Reference integrations
 ----------------------
