@@ -112,7 +112,7 @@ Some generated samples:
        <!-- <video class="model-video-player" autoplay muted loop playsinline preload="metadata">
          <source src="https://research-staging.nvidia.com/labs/sil/projects/flashdreams/assets/omnidreams/omnidreams-sv-2steps-chunk2-loc6-lightvae-lighttae-24b84744-4156-11ef-b27d-00044bf655de-pip.mp4" type="video/mp4">
          Your browser does not support the video tag.
-       </video> 
+       </video>
        <div class="model-video-overlay">
          example_data_uuid: "24b84744-4156-11ef-b27d-00044bf655de"
        </div> -->
