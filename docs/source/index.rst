@@ -246,10 +246,12 @@ Start Here
    :hidden:
 
    Inference pipeline overview <developer_guides/inference_pipeline_overview>
-   Interactive serving architecture <developer_guides/interactive_serving>
-   Developer workflow patterns <developer_guides/usage_patterns>
+   Config system <developer_guides/config_system>
    Add a new model integration <developer_guides/new_recipes>
-   Configure runs and overrides <developer_guides/configs>
+
+.. Temporarily commented out for internal development:
+..   Interactive serving architecture <developer_guides/interactive_serving>
+..   Developer workflow patterns <developer_guides/usage_patterns>
 
 .. toctree::
    :maxdepth: 2

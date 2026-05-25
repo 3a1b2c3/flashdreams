@@ -112,6 +112,7 @@ A typical :class:`~flashdreams.infra.pipeline.StreamInferencePipelineConfig` is 
    CustomizedTransformerConfig = ...
    CustomizedStreamingDecoderConfig = ...
 
+   # create a pipeline config
    pipeline_config = StreamInferencePipelineConfig(
        recipe_name="customized-method-name",
        encoder=MyStreamingEncoderConfig(),
@@ -122,7 +123,10 @@ A typical :class:`~flashdreams.infra.pipeline.StreamInferencePipelineConfig` is 
        decoder=MyStreamingDecoderConfig(),
    )
 
-More details on the config system can be found in :doc:`/developer_guides/configs`.
+   # then a pipeline can be simply instantiated as follows:
+   pipeline = pipeline_config.setup().to("cuda").eval()
+
+More details on the config system can be found in :doc:`/developer_guides/config_system`.
 
 Examples
 --------

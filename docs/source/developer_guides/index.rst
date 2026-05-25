@@ -26,7 +26,9 @@ Guides
 ------
 
 - :doc:`Inference pipeline overview </developer_guides/inference_pipeline_overview>`
-- :doc:`How to use FlashDreams as a developer </developer_guides/usage_patterns>`
-- :doc:`Configs </developer_guides/configs>`
-- :doc:`Interactive serving </developer_guides/interactive_serving>`
+- :doc:`Config system </developer_guides/config_system>`
 - :doc:`Adding a new model integration </developer_guides/new_recipes>`
+
+.. Temporarily commented out for internal development:
+.. - :doc:`How to use FlashDreams as a developer </developer_guides/usage_patterns>`
+.. - :doc:`Interactive serving </developer_guides/interactive_serving>`
