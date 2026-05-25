@@ -54,19 +54,19 @@ speed across many popular open-source models and GPU architectures.
 .. raw:: html
 
    <div class="fd-highlight-grid fd-kpi-grid">
-     <a class="fd-highlight-link" href="models/self_forcing.html#benchmark-figure">
+     <a class="fd-highlight-link" href="models/self_forcing.html#profiling-benchmark">
        <div class="fd-highlight-card">
          <div class="fd-highlight-title fd-kpi-value">2.12x</div>
          <div class="fd-highlight-body">Self-Forcing speedup</div>
        </div>
      </a>
-     <a class="fd-highlight-link" href="models/lingbot_world.html#benchmark-figure">
+     <a class="fd-highlight-link" href="models/lingbot_world.html#profiling-benchmark">
        <div class="fd-highlight-card">
          <div class="fd-highlight-title fd-kpi-value">3.10x</div>
          <div class="fd-highlight-body">Lingbot-World speedup</div>
        </div>
      </a>
-     <a class="fd-highlight-link" href="models/wan21.html#benchmark-figure">
+     <a class="fd-highlight-link" href="models/wan21.html#profiling-benchmark">
        <div class="fd-highlight-card">
          <div class="fd-highlight-title fd-kpi-value">1.40x</div>
          <div class="fd-highlight-body">Wan2.1 speedup</div>
