@@ -69,5 +69,6 @@ Serving implementation references
 ---------------------------------
 
 - :doc:`/api/serving` for serving API concepts and component mapping.
-- :doc:`/developer_guides/system_overview` for runner/pipeline execution flow.
+- :doc:`/developer_guides/inference_pipeline_overview` for runner/pipeline
+  execution flow.
 - ``integrations/lingbot/lingbot/webrtc`` for the WebRTC serving stack.

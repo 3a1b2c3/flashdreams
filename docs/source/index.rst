@@ -245,10 +245,9 @@ Start Here
    :caption: Developer Guides
    :hidden:
 
-   Runtime system overview <developer_guides/system_overview>
+   Inference pipeline overview <developer_guides/inference_pipeline_overview>
    Interactive serving architecture <developer_guides/interactive_serving>
    Developer workflow patterns <developer_guides/usage_patterns>
-   Developer guides overview <developer_guides/index>
    Add a new model integration <developer_guides/new_recipes>
    Configure runs and overrides <developer_guides/configs>
 

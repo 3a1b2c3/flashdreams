@@ -13,6 +13,8 @@
 .. See the License for the specific language governing permissions and
 .. limitations under the License.
 
+.. orphan:
+
 Developer Guides
 ===================================
 
@@ -23,7 +25,7 @@ model integration.
 Guides
 ------
 
-- :doc:`System overview </developer_guides/system_overview>`
+- :doc:`Inference pipeline overview </developer_guides/inference_pipeline_overview>`
 - :doc:`How to use FlashDreams as a developer </developer_guides/usage_patterns>`
 - :doc:`Configs </developer_guides/configs>`
 - :doc:`Interactive serving </developer_guides/interactive_serving>`

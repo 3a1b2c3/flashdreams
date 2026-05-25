@@ -17,7 +17,7 @@ How to use FlashDreams as a developer
 =====================================
 
 Pick the path that matches your goal. For the full runtime map, see
-:doc:`/developer_guides/system_overview`.
+:doc:`/developer_guides/inference_pipeline_overview`.
 
 .. raw:: html
 

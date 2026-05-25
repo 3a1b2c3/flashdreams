@@ -19,7 +19,7 @@ Adding a new model integration
 FlashDreams is built so new world/video models can plug into the runtime
 without forking the core library. This page is the detailed authoring guide for
 external integrations. For the repo-wide architecture, read
-:doc:`/developer_guides/system_overview` first.
+:doc:`/developer_guides/inference_pipeline_overview` first.
 
 Use this guide when you want to:
 
