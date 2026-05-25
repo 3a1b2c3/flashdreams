@@ -143,9 +143,7 @@ The server may take a few minutes to warm up. When it is ready, it prints
 Here, ``<server-ip>`` is the server IP address you are connecting to
 (can use ``localhost`` when running locally).
 
-Interactive serving and UI showcase
------------------------------------
-
+When successfully connected, the browser-based UI looks like this:
 .. raw:: html
 
   <div class="model-video-card" style="width: 100%; margin: 10px auto 14px;">
