@@ -19,7 +19,7 @@ Launch your first model
 This page provides a minimal path for:
 
 1. offline / batch-like long-rollout model inference with Self-Forcing,
-2. online interactive world-model serving with Lingbot-World.
+2. online interactive world-model serving with LingBot-World.
 
 If you are new to the distinction, read
 :doc:`/developer_guides/offline_vs_online` first.
@@ -56,7 +56,7 @@ Multi GPU (context parallel):
      upstream links, and performance notes.
    </div>
 
-Run model serving (Lingbot-World)
+Run model serving (LingBot-World)
 ---------------------------------
 
 Single GPU:

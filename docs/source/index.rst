@@ -63,7 +63,7 @@ speed across many popular open-source models and GPU architectures.
      <a class="fd-highlight-link" href="models/lingbot_world.html#profiling-benchmark">
        <div class="fd-highlight-card">
          <div class="fd-highlight-title fd-kpi-value">3.10x</div>
-         <div class="fd-highlight-body">Lingbot-World speedup</div>
+         <div class="fd-highlight-body">LingBot-World speedup</div>
        </div>
      </a>
      <a class="fd-highlight-link" href="models/wan21.html#profiling-benchmark">
@@ -100,7 +100,7 @@ streaming input/output. Explore the interactive demos powered by FlashDreams:
    <div class="fd-highlight-grid">
      <a class="fd-highlight-link" href="models/lingbot_world.html">
        <div class="fd-highlight-card">
-         <div class="fd-highlight-title">Lingbot-World</div>
+         <div class="fd-highlight-title">LingBot-World</div>
          <div class="fd-highlight-body">Camera-control world-model exploration.</div>
        </div>
      </a>
@@ -159,7 +159,7 @@ Start Here
 
    Self-Forcing <models/self_forcing>
    OmniDreams <models/omnidreams>
-   Lingbot-World <models/lingbot_world>
+   LingBot-World <models/lingbot_world>
    Causal-Forcing <models/causal_forcing>
    Causal Wan2.2 <models/causal_wan22>
    FlashVSR <models/flashvsr>

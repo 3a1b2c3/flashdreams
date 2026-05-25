@@ -42,7 +42,7 @@ Implemented models
 - :doc:`Self-Forcing </models/self_forcing>`
 - :doc:`Causal-Forcing </models/causal_forcing>`
 - :doc:`Causal Wan2.2 </models/causal_wan22>`
-- :doc:`Lingbot-World </models/lingbot_world>`
+- :doc:`LingBot-World </models/lingbot_world>`
 - :doc:`FlashVSR </models/flashvsr>`
 - :doc:`Cosmos-Predict2.5 </models/cosmos_predict2>`
 - :doc:`Wan2.1 </models/wan21>`
