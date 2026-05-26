@@ -15,9 +15,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# `template` recipe
+# `template` integration
 
-Minimal end-to-end recipe exercising every contract in
+Minimal end-to-end integration exercising every contract in
 `flashdreams.infra`. Use as a reference when scaffolding a new recipe.
 
 ## What's exercised
@@ -43,7 +43,7 @@ Minimal end-to-end recipe exercising every contract in
   text or CLIP image encoder here.
 - **Output decoding** — `TemplateDecoder` (a `StreamingDecoder` that
   ignores its empty cache; swap for a `StreamingVideoDecoder` subclass
-  when the recipe needs spatial / temporal compression contracts).
+  when the integration needs spatial / temporal compression contracts).
 - **Config derivation** — `TEMPLATE_AUTOREGRESSIVE` is a
   `derive_config` patch on top of `TEMPLATE_OFFLINE`, and
   `TEMPLATE_AUTOREGRESSIVE_COMPILED` derives from that.

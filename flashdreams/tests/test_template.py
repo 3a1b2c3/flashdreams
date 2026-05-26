@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""End-to-end smoke tests + manual driver for the ``template`` recipe.
+"""End-to-end smoke tests + manual driver for the ``template`` integration.
 
 ``test_template_cp_equivalence`` is a two-invocation test: the
 single-GPU branch writes a reference tensor to
@@ -197,7 +197,7 @@ def _run_rollout(
 # ``ContextParallelAttention`` dispatches to CUDA-only SDPA backends.
 _CUDA_REQUIRED = pytest.mark.skipif(
     not torch.cuda.is_available(),
-    reason="template recipe uses ContextParallelAttention which requires CUDA.",
+    reason="template integration uses ContextParallelAttention which requires CUDA.",
 )
 
 _CI_GPU = pytest.mark.ci_gpu

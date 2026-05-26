@@ -62,7 +62,7 @@ docs/
     ├── developer_guides/
     │   ├── offline_vs_online.rst
     │   ├── index.rst
-    │   ├── new_recipes.rst
+    │   ├── new_integration.rst
     │   ├── system_overview.rst
     │   ├── usage_patterns.rst
     │   ├── configs.rst
@@ -72,7 +72,7 @@ docs/
     │   ├── cli.rst
     │   ├── core.rst        # flashdreams.core (attention, distributed, …)
     │   ├── infra.rst       # flashdreams.infra (pipeline, diffusion, …)
-    │   ├── recipes.rst     # flashdreams.recipes (wan, cosmos, …)
+    │   ├── integrations.rst     # flashdreams.recipes (wan, cosmos, …)
     │   └── serving.rst     # serving architecture and launch patterns
     └── models/
         ├── index.rst
@@ -132,7 +132,7 @@ to be present.
 
 ## Adding new content
 
-- **A new model recipe** — append a section to `source/apis/recipes.rst`
+- **A new model integration** — append a section to `source/apis/integrations.rst`
   using `.. automodule:: flashdreams.recipes.<name>`, and add a launcher
   walk-through to `source/models/<name>.rst`. Wire the new file into
   the models toctree in `source/models/index.rst`.

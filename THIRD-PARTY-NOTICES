@@ -46,7 +46,7 @@ Reference architectures
 ================================================================================
 
 Wan 2.1 / Wan 2.2      Apache-2.0   https://github.com/Wan-Video/Wan2.1
-    FlashDreams's Wan recipes implement the architectures published by the
+    FlashDreams's Wan integrations implement the architectures published by the
     Wan-Video team. Model weights are downloaded from upstream at runtime
     and are not redistributed in this repository.
 

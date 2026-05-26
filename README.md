@@ -12,7 +12,7 @@ Start with the docs site sections:
   - Launch your first world model
   - Supported models
 - **Developer Guides**
-  - Adding a new method (recipe)
+  - Add a new method (integration)
   - System overview
   - Configs
   - Interactive serving

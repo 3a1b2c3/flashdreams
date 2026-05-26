@@ -3,7 +3,7 @@
 Thanks for your interest in contributing to **FlashDreams**. This project
 is developed openly on GitHub and released under the
 [Apache License 2.0](LICENSE). Outside contributions — bug reports,
-feature requests, performance improvements, new model recipes,
+feature requests, performance improvements, new model integrations,
 documentation fixes — are genuinely welcome, and this guide explains how
 they fit in alongside the project's day-to-day work.
 
@@ -32,13 +32,13 @@ overhead" to "high overhead":
 - **Try FlashDreams and tell us what broke.** A clear bug report — what
   you ran, what you expected, what you saw — is one of the most valuable
   contributions a project of this kind can receive.
-- **Improve documentation.** README clarifications, recipe walkthroughs,
+- **Improve documentation.** README clarifications, integration walkthroughs,
   performance notes, and FAQ entries all land easily and benefit every
   future user.
 - **Fix bugs.** Issues labelled `good first issue` are a friendly
   starting point. Larger fixes are welcome too — please leave a comment
   on the relevant issue first so we can avoid duplicate work.
-- **Add or extend recipes.** New video-generation models, new schedulers,
+- **Add or extend integrations.** New video-generation models, new schedulers,
   new integrations. For non-trivial features, please open a design issue
   before sending the PR (see [Submitting a pull request](#submitting-a-pull-request)).
 - **Performance work.** FlashDreams cares about latency and throughput
@@ -190,7 +190,7 @@ The short version:
    any context a reviewer would need that isn't obvious from the diff,
    and link the issue your PR resolves if there is one.
 
-For larger features (a new recipe, a substantial refactor, a new
+For larger features (a new integration, a substantial refactor, a new
 integration), please open an issue first to discuss the design. This
 saves everyone time and gives you a chance to surface trade-offs before
 investing implementation effort.
