@@ -247,7 +247,7 @@ Start Here
 
    Inference pipeline overview <developer_guides/inference_pipeline_overview>
    Config system <developer_guides/config_system>
-   Add a new model integration <developer_guides/new_recipes>
+   Add a new model integration <developer_guides/new_integration>
 
 .. Temporarily commented out for internal development:
 ..   Interactive serving architecture <developer_guides/interactive_serving>
@@ -261,5 +261,5 @@ Start Here
    CLI reference <api/cli>
    Core <api/core>
    Infra <api/infra>
-   Pipelines and runners <api/recipes>
+   Pipelines and runners <api/integrations>
    Serving <api/serving>

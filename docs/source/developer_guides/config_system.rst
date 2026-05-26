@@ -130,4 +130,4 @@ To run the model with a modified configuration:
        --total-blocks 7
 
 For full details on the available commands, see the :doc:`/api/cli` reference.
-For end-to-end examples of defining custom pipeline configurations, see :doc:`/developer_guides/new_recipes`.
+For end-to-end examples of defining custom pipeline configurations, see :doc:`/developer_guides/new_integration`.

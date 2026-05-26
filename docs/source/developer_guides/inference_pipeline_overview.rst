@@ -143,4 +143,4 @@ Here is how existing models use this structure:
   Treats a bidirectional video model as a single-rollout autoregressive model.
 
 For the detailed API documentation, check out :doc:`/api/infra`. If you are interested in implementing a new model, 
-please refer to :doc:`/developer_guides/new_recipes`.
+please refer to :doc:`/developer_guides/new_integration`.

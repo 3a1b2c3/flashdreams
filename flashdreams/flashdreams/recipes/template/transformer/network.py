@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dummy single-block DiT network used by the template recipe."""
+"""Dummy single-block DiT network used by the template integration."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class TemplateDiTCache:
 
 @dataclass(kw_only=True)
 class TemplateDiTConfig(InstantiateConfig):
-    """Config for the template recipe's dummy DiT."""
+    """Config for the template integration's dummy DiT."""
 
     _target: type = field(default_factory=lambda: TemplateDiT)
 
@@ -89,7 +89,7 @@ class TemplateDiTConfig(InstantiateConfig):
 
 
 class TemplateDiT(nn.Module):
-    """Minimal single-block DiT used as a reference recipe.
+    """Minimal single-block DiT used as a reference integration.
 
     Shape: per-token projection → time / context bias → self-attention
     through a :class:`~flashdreams.core.attention.kvcache.BlockKVCache`
@@ -113,7 +113,7 @@ class TemplateDiT(nn.Module):
 
         self.input_proj = nn.Linear(config.in_channels, D)
         self.context_proj = nn.Linear(config.context_channels, D)
-        # Scalar timestep lifted to ``[1, D]``. Real recipes use a
+        # Scalar timestep lifted to ``[1, D]``. Real integrations use a
         # sinusoidal embedding + MLP.
         self.timestep_encoder = nn.Sequential(
             nn.Linear(1, D),

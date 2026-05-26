@@ -74,7 +74,7 @@ _INTERNAL_OMNIDREAMS_CHECKPOINT_PATHS: dict[str, str] = {
 }
 
 # HF mirrors override the s3 URLs above for slugs that have been mirrored.
-# Unmirrored slugs fall through to s3 so recipe configs still import; mirror
+# Unmirrored slugs fall through to s3 so integration configs still import; mirror
 # new slugs here as they land on HF.
 _PUBLIC_OMNIDREAMS_CHECKPOINT_PATHS: dict[str, str] = {
     "1view-vae-chunk2": omni_dreams_hf_url(
