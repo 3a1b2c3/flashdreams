@@ -226,7 +226,7 @@ def test_hf_webrtc_scene_sync_requires_usdz_first_frame(
         zf.writestr("prompt.txt", "archive prompt")
 
     def _fake_hf_hub_download(repo_id: str, repo_type: str, filename: str) -> str:
-        assert repo_id == session.WEBRTC_SCENES_HF_REPO
+        assert repo_id == session.hf_scenes_repo_id()
         assert repo_type == "dataset"
         assert filename == archive_repo_path
         return str(archive_path)
@@ -268,7 +268,7 @@ def test_hf_webrtc_scene_sync_uses_extracted_first_image(
         zf.writestr("prompt.txt", "archive prompt")
 
     def _fake_hf_hub_download(repo_id: str, repo_type: str, filename: str) -> str:
-        assert repo_id == session.WEBRTC_SCENES_HF_REPO
+        assert repo_id == session.hf_scenes_repo_id()
         assert repo_type == "dataset"
         assert filename == archive_repo_path
         return str(archive_path)
@@ -318,7 +318,7 @@ def test_hf_webrtc_scene_sync_requires_usdz_prompt(
         zf.writestr("first_image.png", "first image")
 
     def _fake_hf_hub_download(repo_id: str, repo_type: str, filename: str) -> str:
-        assert repo_id == session.WEBRTC_SCENES_HF_REPO
+        assert repo_id == session.hf_scenes_repo_id()
         assert repo_type == "dataset"
         assert filename == archive_repo_path
         return str(archive_path)

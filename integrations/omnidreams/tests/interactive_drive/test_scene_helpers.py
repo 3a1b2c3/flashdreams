@@ -21,7 +21,7 @@ class SceneHelperTest(unittest.TestCase):
             # ``nvidia/omni-dreams-scenes`` and the synthetic-scene
             # fixture. The bare ``promptN.txt`` form is no longer
             # accepted (it used to be quietly tolerated by a buggy
-            # parser; see ``scene_loader.variant_from_stem``).
+            # parser; see ``omnidreams.scenes.variant_from_stem``).
             (root / "prompt.txt").write_text("default text", encoding="utf-8")
             (root / "prompt_1.txt").write_text("hello", encoding="utf-8")
             (root / "prompt_2.txt").write_text("snow", encoding="utf-8")

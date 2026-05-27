@@ -3,16 +3,20 @@
 
 """Resolve which Hugging Face organisation hosts the omni-dreams repos.
 
-The interactive demo fetches scene assets from Hugging Face:
+Used by both demo paths in this package:
 
-  * ``<org>/omni-dreams-scenes``   -- interactive-drive USDZ scenes
+  * ``omnidreams.interactive_drive`` (the desktop demo) fetches
+    ``<org>/omni-dreams-scenes`` USDZ scenes via
+    ``interactive-drive-prepare`` / first-launch auto-stage.
+  * ``omnidreams.webrtc.server`` fetches the same dataset for its
+    session-managed scene cache under ``FLASHDREAMS_CACHE_DIR``.
 
 The flashdreams world-model backend owns its own model/checkpoint fetches.
 
 The default org is ``"nvidia"``. Environments that use another authorized
 Hugging Face org can flip every fetch to that org by either:
 
-  * passing ``--hf-org <org>`` on the CLI, **or**
+  * passing ``--hf-org <org>`` on the CLI (interactive-drive only), **or**
   * exporting ``OMNI_DREAMS_HF_ORG=<org>``.
 
 Every entry point that adds the CLI flag pokes the env var in ``main()``
@@ -158,7 +162,8 @@ def hf_access_hint(repo_id: str, url: str | None = None) -> str:
             "  - For direct nvidia access, export HF_TOKEN and request access to",
             "    https://huggingface.co/datasets/nvidia/omni-dreams-scenes first.",
             "",
-            "See samples/interactive-drive/README.md, section "
-            "'Install' -> 'Project setup', for the full flow.",
+            "See integrations/omnidreams/README.md and "
+            "integrations/omnidreams/omnidreams/interactive_drive/README.md "
+            "for the full setup flow.",
         ]
     )

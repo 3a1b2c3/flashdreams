@@ -17,8 +17,8 @@ from omnidreams.interactive_drive.config import (
     RasterConfig,
     WorldModelProfileConfig,
 )
-from omnidreams.interactive_drive.hf_org import DEFAULT_HF_ORG, apply_cli_to_env
-from omnidreams.interactive_drive.hf_org import ENV_VAR as _HF_ORG_ENV_VAR
+from omnidreams.hf_org import DEFAULT_HF_ORG, apply_cli_to_env
+from omnidreams.hf_org import ENV_VAR as _HF_ORG_ENV_VAR
 from omnidreams.interactive_drive.synthetic_scene import build_synthetic_scene_to_temp
 from omnidreams.interactive_drive.world_model.manifest import load_world_model_manifest
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnidreams.interactive_drive import hf_org
+from omnidreams import hf_org
 
 
 @pytest.fixture(autouse=True)

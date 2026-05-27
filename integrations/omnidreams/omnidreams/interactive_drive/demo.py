@@ -22,8 +22,8 @@ import numpy as np
 import yaml
 from PIL import Image
 
+from omnidreams import scenes as _scenes
 from omnidreams.interactive_drive import cli as _cli
-from omnidreams.interactive_drive import scene_loader as _scene_loader
 from omnidreams.interactive_drive.app import InteractiveDriveApp
 from omnidreams.interactive_drive.config import BevConfig, RasterConfig
 
@@ -857,9 +857,9 @@ def _discover_variants(scene_path: Path) -> tuple[str, ...]:
                     continue
                 stem = Path(name).stem
                 if name.startswith("first_image") and name.endswith(".png"):
-                    variant = _scene_loader.variant_from_stem(stem, "first_image")
+                    variant = _scenes.variant_from_stem(stem, "first_image")
                 elif name.startswith("prompt") and name.endswith(".txt"):
-                    variant = _scene_loader.variant_from_stem(stem, "prompt")
+                    variant = _scenes.variant_from_stem(stem, "prompt")
                 else:
                     continue
                 if variant is not None:

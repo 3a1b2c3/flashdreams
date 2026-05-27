@@ -20,20 +20,13 @@ import os
 import shutil
 from pathlib import Path
 
+from omnidreams.hf_org import DEFAULT_HF_ORG, apply_cli_to_env
 from omnidreams.interactive_drive.cli import _PACKAGE_ROOT as _REPO_ROOT
-from omnidreams.interactive_drive.hf_org import (
-    DEFAULT_HF_ORG,
-    apply_cli_to_env,
-    hf_repo,
+from omnidreams.scenes import (
+    hf_hub_download_scene,
+    hf_scenes_repo_id,
+    list_available_scene_uuids,
 )
-
-
-def scenes_repo() -> str:
-    """Resolve the scenes HF dataset repo from the env var (set by
-    ``apply_cli_to_env`` in :func:`main`). Lifted to a function so the
-    value picks up any CLI override applied after this module is imported.
-    """
-    return hf_repo(kind="scenes")
 
 
 def hf_prewarm_urls() -> tuple[str, ...]:
@@ -166,35 +159,6 @@ def prewarm_huggingface_cache(
         info(f"  \u2192 {local}")
 
 
-def list_available_scene_uuids() -> list[str]:
-    """Enumerate every ``scenes/<uuid>.usdz`` file published to the scenes
-    dataset. The exact repo id depends on the resolved HF org; see
-    :func:`scenes_repo`.
-
-    Returns a sorted list of UUID strings (without the ``scenes/`` prefix or
-    ``.usdz`` suffix). Requires ``HF_TOKEN`` to be set because the dataset is
-    private.
-    """
-    try:
-        from huggingface_hub import HfApi
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "Unable to import huggingface_hub.HfApi; run "
-            "`uv sync --package flashdreams-omnidreams` from the "
-            "flashdreams workspace root first."
-        ) from exc
-
-    files = HfApi().list_repo_files(repo_id=scenes_repo(), repo_type="dataset")
-    prefix = "scenes/"
-    suffix = ".usdz"
-    uuids = [
-        path[len(prefix) : -len(suffix)]
-        for path in files
-        if path.startswith(prefix) and path.endswith(suffix)
-    ]
-    return sorted(uuids)
-
-
 def stage_scene(root: Path, uuid: str, *, force: bool) -> Path:
     """Download the scene USDZ from the HF dataset and materialise it at
     ``assets/scenes/<uuid>.usdz`` so the ``interactive_drive --scene ...`` argument
@@ -210,22 +174,8 @@ def stage_scene(root: Path, uuid: str, *, force: bool) -> Path:
         info(f"Scene already staged at {dest} ({human_bytes(dest.stat().st_size)}).")
         return dest
 
-    try:
-        from huggingface_hub import hf_hub_download
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "Unable to import huggingface_hub; run "
-            "`uv sync --package flashdreams-omnidreams` from the "
-            "flashdreams workspace root first."
-        ) from exc
-
-    repo = scenes_repo()
-    info(f"Downloading scene from {repo}: {uuid}.usdz")
-    cached = hf_hub_download(
-        repo_id=repo,
-        repo_type="dataset",
-        filename=f"scenes/{uuid}.usdz",
-    )
+    info(f"Downloading scene from {hf_scenes_repo_id()}: {uuid}.usdz")
+    cached = hf_hub_download_scene(uuid)
     # Copy (not symlink) into assets/scenes/ so the path referenced by the
     # demo command line is a real file robust to the HF cache moving.
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -278,7 +228,7 @@ def main() -> int:
         stage_scene(root, args.scene_uuid, force=args.force)
     else:
         uuids = list_available_scene_uuids()
-        info(f"Staging all {len(uuids)} scene(s) from {scenes_repo()}.")
+        info(f"Staging all {len(uuids)} scene(s) from {hf_scenes_repo_id()}.")
         for i, uuid in enumerate(uuids, start=1):
             info(f"  [{i}/{len(uuids)}] {uuid}")
             stage_scene(root, uuid, force=args.force)

@@ -15,6 +15,8 @@ import pyarrow.parquet as pq
 import yaml
 from PIL import Image
 
+from omnidreams.scenes import variant_from_stem
+
 from omnidreams.interactive_drive.camera import FThetaCameraModel
 from omnidreams.interactive_drive.colors import (
     BBOX_V3_COLORS,
@@ -88,37 +90,6 @@ def _load_prompt(zf: zipfile.ZipFile, variant: str, prompt_override: str | None)
         return prompt_override
     prompts = _discover_prompts(zf)
     return prompts.get(variant, prompts.get("default", ""))
-
-
-def variant_from_stem(stem: str, prefix: str) -> str | None:
-    """Canonical scene-variant name parser.
-
-    Maps a file *stem* (no extension) to the variant slug used by
-    ``--variant`` / the HUD's variant selector. The convention, matching
-    what ``nvidia/omni-dreams-scenes`` ships:
-
-    * ``<prefix>``           -> ``"default"``  (e.g. ``prompt.txt``, ``first_image.png``)
-    * ``<prefix>_<X>``       -> ``<X>``        (e.g. ``prompt_1.txt`` -> ``"1"``)
-    * anything else          -> ``None``       (rejected; caller skips it)
-
-    The trailing-suffix-without-underscore form (``prompt1.txt``,
-    ``first_image1.png``) is **rejected** so the HUD's selector and the
-    scene-loader's prompt dict agree on the variant key. Previously a
-    naive ``stem.replace(prefix, "")`` quietly mapped ``prompt_1`` to
-    ``_1`` while the HUD displayed ``1``, so the selector silently fell
-    back to the default prompt on real scenes.
-
-    All three discovery paths (``_discover_prompts``,
-    ``_discover_first_images`` here, the HUD's ``_discover_variants`` in
-    ``demo.py``, and ``scene_bundle._discover_prompts`` /
-    ``_discover_first_frames`` for unpacked scene directories) share
-    this helper to stay in lock-step.
-    """
-    if stem == prefix:
-        return "default"
-    if stem.startswith(prefix + "_"):
-        return stem[len(prefix) + 1 :]
-    return None
 
 
 def _discover_prompts(zf: zipfile.ZipFile) -> dict[str, str]:

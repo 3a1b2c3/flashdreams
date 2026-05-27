@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlparse
 
 import yaml
 
-from omnidreams.interactive_drive.hf_org import (
+from omnidreams.hf_org import (
     DEFAULT_HF_ORG,
     hf_access_hint,
     resolve_hf_org,
