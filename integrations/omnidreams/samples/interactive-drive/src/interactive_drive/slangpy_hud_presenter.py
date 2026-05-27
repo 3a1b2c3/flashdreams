@@ -683,8 +683,21 @@ class SlangPyHudPresenter:
                 placeholder = "Loading Scene..."
             self._draw_camera_placeholder(canvas, draw, camera_area, placeholder)
 
+        # Poll the wheel / keyboard drive sink *every* tick, before any
+        # conditional panel drawing below. ``_keyboard_drive.update()``
+        # is the side-effect that publishes key state into the
+        # simulation; if it only ran from inside ``_draw_panel`` then a
+        # narrow window (``panel_w == 0``) or a user who resized the
+        # panel away mid-keypress would leave the last published drive
+        # command frozen until the panel came back -- e.g. release the
+        # throttle while the panel is hidden, then the throttle stays
+        # "down" until the next ``_draw_panel`` call. Speed-digit smoothing
+        # also lives downstream of this state, so it would otherwise drift.
+        wheel_state = self._poll_drive_state()
+        self._update_speed(wheel_state)
+
         if panel_w > 0:
-            self._draw_panel(canvas, draw, panel_rect)
+            self._draw_panel(canvas, draw, panel_rect, wheel_state)
 
         if self._scene_dropdown_open:
             self._draw_scene_dropdown(canvas, draw)
@@ -795,18 +808,26 @@ class SlangPyHudPresenter:
 
     # -- Panel chrome ------------------------------------------------
 
+    def _poll_drive_state(self) -> Any:
+        """Read the current drive state (wheel if connected, else keyboard).
+
+        Pulled out of ``_draw_panel`` so the keyboard-drive sink's
+        ``update()`` side-effect (publishing key state into the
+        simulation) and the speed-digit smoothing in
+        :meth:`_update_speed` run on every tick, including ticks where
+        the side panel is not drawn (narrow window / camera-only mode).
+        """
+        if self._wheel is not None and self._wheel.state.connected:
+            return self._wheel.state
+        return self._keyboard_drive.update()
+
     def _draw_panel(
         self,
         canvas: Image.Image,
         draw: ImageDraw.ImageDraw,
         panel_rect: tuple[int, int, int, int],
+        wheel_state: Any,
     ) -> None:
-        if self._wheel is not None and self._wheel.state.connected:
-            wheel_state = self._wheel.state
-        else:
-            wheel_state = self._keyboard_drive.update()
-        self._update_speed(wheel_state)
-
         px, py, pr, pb = panel_rect
         panel_size = (pr - px, pb - py)
         chrome = self._get_panel_chrome(panel_size)
@@ -1437,7 +1458,8 @@ class SlangPyHudPresenter:
         # Drive keys flow through ``_keyboard_drive`` so the smoothed
         # steer / throttle / brake the wheel + speed-digit chrome reads
         # also reflects user input. The ``KeyboardDriveState.update()``
-        # call inside ``_draw_panel`` posts the smoothed values to
+        # call inside ``_poll_drive_state`` (invoked unconditionally once
+        # per tick from ``_render_canvas``) posts the smoothed values to
         # ``KeyboardState`` via ``set_drive``, so the simulation reads
         # the same values the chrome shows. (Bypassing this path and
         # writing to ``KeyboardState.set_key`` directly would be
