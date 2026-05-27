@@ -34,12 +34,31 @@ def hf_prewarm_urls() -> tuple[str, ...]:
     return ()
 
 
-# Full HF repos snapshot-downloaded up front. The Cosmos-Reason1 runtime
-# text encoder is ~14 GB across several safetensors shards; we pre-fetch
-# the whole repo here so the demo's first launch doesn't block on it.
-# Users can skip this pre-warm with ``--skip-text-encoder`` and let flashdreams
-# pull the repo lazily on first use.
-HF_PREWARM_REPOS: tuple[str, ...] = ("nvidia/Cosmos-Reason1-7B",)
+def _cosmos_reason1_prewarm_targets() -> tuple[tuple[str, str], ...]:
+    """``(repo_id, revision)`` tuples for the runtime text encoder.
+
+    Pulled live off :class:`CosmosReason1TextEncoderConfig` so the prewarm
+    pins the same commit the runtime loads. The encoder config's
+    ``revision`` default is a specific Cosmos-Reason1.1 SFT commit
+    (not ``main`` HEAD); without passing it through to
+    ``snapshot_download`` the prewarm fetches HEAD and the runtime then
+    re-downloads the pinned revision on first launch -- ~14 GB of
+    wasted bandwidth. The import is lazy because the cosmos_reason1
+    module pulls in torch + transformers.
+    """
+    try:
+        from flashdreams.infra.encoder.text.cosmos_reason1 import (
+            CosmosReason1TextEncoderConfig,
+        )
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError(
+            "Unable to import CosmosReason1TextEncoderConfig; run "
+            "`uv sync --package flashdreams-omnidreams` from the "
+            "flashdreams workspace root first."
+        ) from exc
+
+    config = CosmosReason1TextEncoderConfig()
+    return ((config.model_name, config.revision),)
 
 
 def parse_args() -> argparse.Namespace:
@@ -119,13 +138,16 @@ def scene_path(root: Path, uuid: str) -> Path:
 
 def prewarm_huggingface_cache(
     urls: tuple[str, ...],
-    repos: tuple[str, ...] = (),
+    repos: tuple[tuple[str, str], ...] = (),
 ) -> None:
     """Pre-download the HF files + full repos referenced by the default manifest.
 
     File URLs go through ``WorldModelManifest``'s parser (same code path used at
-    runtime); full repo IDs are materialised via ``snapshot_download`` so that
-    ``from_pretrained(repo_id)`` calls at runtime don't touch the network.
+    runtime); ``(repo_id, revision)`` pairs are materialised via
+    ``snapshot_download`` so that ``from_pretrained(repo_id, revision=...)``
+    calls at runtime don't touch the network. ``revision`` must match the
+    commit the runtime loads -- a HEAD prewarm with a pinned runtime
+    revision ends up re-downloading at first launch.
     """
     try:
         from omnidreams.interactive_drive.world_model.manifest import download_hf_file
@@ -153,9 +175,9 @@ def prewarm_huggingface_cache(
             "flashdreams workspace root first."
         ) from exc
 
-    for repo_id in repos:
-        info(f"Pre-warming HF repo snapshot: {repo_id}")
-        local = snapshot_download(repo_id=repo_id)
+    for repo_id, revision in repos:
+        info(f"Pre-warming HF repo snapshot: {repo_id}@{revision[:12]}")
+        local = snapshot_download(repo_id=repo_id, revision=revision)
         info(f"  \u2192 {local}")
 
 
@@ -208,11 +230,13 @@ def main() -> int:
             "will fetch assets lazily on first use once HF_TOKEN is set."
         )
     else:
-        repos_to_prewarm = () if args.skip_text_encoder else HF_PREWARM_REPOS
         if args.skip_text_encoder:
             info(
                 "Skipping Cosmos-Reason1 runtime text-encoder pre-warm per --skip-text-encoder."
             )
+            repos_to_prewarm: tuple[tuple[str, str], ...] = ()
+        else:
+            repos_to_prewarm = _cosmos_reason1_prewarm_targets()
         prewarm_huggingface_cache(hf_prewarm_urls(), repos_to_prewarm)
 
     # Scene USDZ -- required at demo launch time, no lazy fallback.
