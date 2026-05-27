@@ -138,8 +138,9 @@ def prewarm_huggingface_cache(
         from interactive_drive.world_model.manifest import download_hf_file
     except Exception as exc:  # pragma: no cover - interactive_drive must be importable
         raise RuntimeError(
-            "Unable to import interactive_drive.world_model.manifest; make sure the "
-            "world-model extras are installed (uv sync --extra world-model)."
+            "Unable to import interactive_drive.world_model.manifest; run "
+            "`uv sync --package omnidreams-interactive-drive` from the "
+            "flashdreams workspace root first."
         ) from exc
 
     for url in urls:
@@ -154,8 +155,9 @@ def prewarm_huggingface_cache(
         from huggingface_hub import snapshot_download
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
-            "Unable to import huggingface_hub.snapshot_download; make sure the "
-            "world-model extras are installed (uv sync --extra world-model)."
+            "Unable to import huggingface_hub.snapshot_download; run "
+            "`uv sync --package omnidreams-interactive-drive` from the "
+            "flashdreams workspace root first."
         ) from exc
 
     for repo_id in repos:
@@ -177,8 +179,9 @@ def list_available_scene_uuids() -> list[str]:
         from huggingface_hub import HfApi
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
-            "Unable to import huggingface_hub.HfApi; make sure the "
-            "world-model extras are installed (uv sync --extra world-model)."
+            "Unable to import huggingface_hub.HfApi; run "
+            "`uv sync --package omnidreams-interactive-drive` from the "
+            "flashdreams workspace root first."
         ) from exc
 
     files = HfApi().list_repo_files(repo_id=scenes_repo(), repo_type="dataset")
@@ -211,8 +214,9 @@ def stage_scene(root: Path, uuid: str, *, force: bool) -> Path:
         from huggingface_hub import hf_hub_download
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
-            "Unable to import huggingface_hub; make sure the world-model "
-            "extras are installed (uv sync --extra world-model)."
+            "Unable to import huggingface_hub; run "
+            "`uv sync --package omnidreams-interactive-drive` from the "
+            "flashdreams workspace root first."
         ) from exc
 
     repo = scenes_repo()

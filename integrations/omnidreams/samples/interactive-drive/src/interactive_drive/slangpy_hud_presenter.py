@@ -259,7 +259,7 @@ class SlangPyHudPresenter:
         except ImportError as exc:
             raise RuntimeError(
                 "SlangPy is required for the interactive-drive HUD;"
-                " install with `uv sync --extra ui`."
+                " install with `uv sync --package omnidreams-interactive-drive`."
             ) from exc
 
         self._spy = spy

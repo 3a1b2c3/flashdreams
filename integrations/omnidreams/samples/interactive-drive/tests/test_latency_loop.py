@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 import numpy as np
 import pytest
-from pipeline_fakes import FakeVideoModelBackend, make_trajectory, minimal_scene
+from interactive_drive._pipeline_fakes import (
+    FakeVideoModelBackend,
+    make_trajectory,
+    minimal_scene,
+)
 
 from interactive_drive.input.backend import SampledInput
 from interactive_drive.runtime.loop import LoopConfig, present_queued_frame, run_main_loop

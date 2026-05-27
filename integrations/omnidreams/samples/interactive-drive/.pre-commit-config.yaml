@@ -60,6 +60,6 @@ repos:
       - id: pyright
         name: pyright
         language: system
-        entry: bash -c 'WS="$PWD"; cd integrations/omnidreams/samples/interactive-drive && uv --project "$WS" run --no-sync --package omnidreams-interactive-drive --extra dev --extra ui --extra world-model pyright'
+        entry: bash -c 'WS="$PWD"; cd integrations/omnidreams/samples/interactive-drive && uv --project "$WS" run --no-sync --package omnidreams-interactive-drive --extra dev pyright'
         types_or: [python, pyi]
         pass_filenames: false

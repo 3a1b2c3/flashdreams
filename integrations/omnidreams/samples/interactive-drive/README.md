@@ -234,11 +234,13 @@ The default `--scene` and `--manifest` resolve to the bundled
 `configs/example_world_model.yaml`. Pass a different `--scene` or
 `--manifest` to override.
 
-`--cuda-visible-devices` defaults to `auto`: on a multi-GPU machine (e.g. the
-RTX6000 + GB300 dev box) the HUD sets `CUDA_VISIBLE_DEVICES=1` for the
-backend so the GB300 hosts CUDA inference; on a single-GPU box it leaves the
-env unset so the lone GPU is visible. Pass `--cuda-visible-devices 0` to pin a
-specific GPU, or `--cuda-visible-devices ""` to forcibly clear the env.
+`--cuda-visible-devices` defaults to `auto`, which leaves whatever
+`CUDA_VISIBLE_DEVICES` you already exported alone (or, on hosts without
+the env var set, lets CUDA see every GPU). The HUD does not auto-pick a
+GPU — on multi-GPU hosts where the default-zero pick is wrong, export
+`CUDA_VISIBLE_DEVICES=<idx>` before launching or pass
+`--cuda-visible-devices <idx>` directly. `--cuda-visible-devices ""`
+force-unsets the env var.
 
 The HUD also subscribes to the backend's `/bev_stream` and shows a top-down
 BEV minimap below the steering and pedal controls; pass `--no-bev` to skip

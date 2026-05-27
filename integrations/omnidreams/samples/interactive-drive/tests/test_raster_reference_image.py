@@ -38,7 +38,7 @@ import flip_evaluator
 import numpy as np
 import numpy.typing as npt
 import pytest
-from conftest import SAMPLE_SCENE
+from interactive_drive._sample_assets import SAMPLE_SCENE
 from PIL import Image
 
 from interactive_drive.backends.raster import RasterRenderBackend

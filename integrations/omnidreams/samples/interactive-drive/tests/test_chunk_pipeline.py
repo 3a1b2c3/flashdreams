@@ -3,7 +3,11 @@
 
 import time
 
-from pipeline_fakes import FakeVideoModelBackend, make_trajectory, minimal_scene
+from interactive_drive._pipeline_fakes import (
+    FakeVideoModelBackend,
+    make_trajectory,
+    minimal_scene,
+)
 
 from interactive_drive.runtime.timing import ChunkPrediction, ChunkTimes
 from interactive_drive.video_model.chunk_pipeline import ChunkPipeline, ChunkRequest

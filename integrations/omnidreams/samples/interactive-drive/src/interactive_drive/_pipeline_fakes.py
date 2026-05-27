@@ -1,6 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
+"""Test-only fake backends and minimal-scene factories.
+
+Lives in the installed package (rather than under ``tests/``) so root
+pytest's ``--import-mode=importlib`` can resolve the import
+unambiguously -- a bare ``from pipeline_fakes import ...`` from inside
+a test module would only work under the legacy ``prepend`` import mode
+that puts each test directory on ``sys.path``. The leading underscore
+signals this module isn't part of the public ``interactive_drive``
+runtime API.
+"""
+
 from pathlib import Path
 
 import numpy as np

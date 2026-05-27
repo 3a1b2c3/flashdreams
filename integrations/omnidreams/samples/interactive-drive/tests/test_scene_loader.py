@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import SAMPLE_SCENE
+from interactive_drive._sample_assets import SAMPLE_SCENE
 
 from interactive_drive.colors import BBOX_V3_COLORS
 from interactive_drive.config import RasterConfig

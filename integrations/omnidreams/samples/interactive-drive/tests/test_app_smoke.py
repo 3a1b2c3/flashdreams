@@ -12,11 +12,11 @@ import time
 from pathlib import Path
 from typing import IO
 
-import conftest
 import pytest
-from conftest import SAMPLE_SCENE
 from pyvirtualdisplay.display import Display
 
+from interactive_drive import _sample_assets
+from interactive_drive._sample_assets import SAMPLE_SCENE
 from interactive_drive.scene_fixture import build_synthetic_scene_usdz
 
 _WARMUP_SENTINEL = "[chunk-pipeline] warmup done"
@@ -34,8 +34,8 @@ def _pump_stream(
         line = raw_line.decode("utf-8", errors="replace")
         with lock:
             sink.append(line)
-        if "[presenter] device=" in line and conftest.captured_presenter_device is None:
-            conftest.captured_presenter_device = line.strip()
+        if "[presenter] device=" in line and _sample_assets.captured_presenter_device is None:
+            _sample_assets.captured_presenter_device = line.strip()
         sys.stderr.write(f"[app-smoke] {line}")
         sys.stderr.flush()
 
