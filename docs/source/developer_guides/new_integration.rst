@@ -101,7 +101,7 @@ Add optional files only when you need to customize the behavior beyond what we c
    )
 
 
-You can use the existing integrations under the `integrations/ <https://github.com/NVIDIA/flashdreams/tree/main/integrations>`_ directory as a minimal guide. These folders are simply examples of what mini standalone repositories that depend on FlashDreams look like. Examples are often the best way to learn; take a look at the `LingBot-World <https://github.com/NVIDIA/flashdreams/tree/main/integrations/lingbot>`_ and `Self-Forcing <https://github.com/NVIDIA/flashdreams/tree/main/integrations/self_forcing>`_ integrations for good references on how to extend and use FlashDreams in your own projects.
+You can use the existing integrations under the `integrations/ <https://github.com/NVIDIA/flashdreams/tree/main/integrations>`_ directory as a minimal guide. These folders are simple examples of what mini standalone repositories that depend on FlashDreams look like. Examples are often the best way to learn; take a look at the `LingBot-World <https://github.com/NVIDIA/flashdreams/tree/main/integrations/lingbot>`_ and `Self-Forcing <https://github.com/NVIDIA/flashdreams/tree/main/integrations/self_forcing>`_ integrations for good references on how to extend and use FlashDreams in your own projects.
 
 Registering your method
 -----------------------

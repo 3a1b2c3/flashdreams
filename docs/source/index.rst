@@ -201,7 +201,7 @@ Start here
      </a>
      <a class="fd-highlight-link" href="models/index.html">
        <div class="fd-highlight-card">
-         <div class="fd-highlight-title">Model Cards</div>
+         <div class="fd-highlight-title">Model cards</div>
          <div class="fd-highlight-body">See supported models, how to launch each one, and their performance analysis.</div>
        </div>
      </a>
@@ -213,7 +213,7 @@ Start here
      </a>
      <a class="fd-highlight-link" href="developer_guides/index.html">
        <div class="fd-highlight-card">
-         <div class="fd-highlight-title">Developer Guides</div>
+         <div class="fd-highlight-title">Developer guides</div>
          <div class="fd-highlight-body">Learn the system design, how to integrate new models, and how to use it in your own projects.</div>
        </div>
      </a>
@@ -229,7 +229,7 @@ Start here
 
 .. toctree::
    :maxdepth: 1
-   :caption: Model Cards
+   :caption: Model cards
    :hidden:
 
    Self-Forcing <models/self_forcing>
@@ -243,7 +243,7 @@ Start here
 
 .. toctree::
    :maxdepth: 1
-   :caption: Developer Guides
+   :caption: Developer guides
    :hidden:
 
    Inference pipeline overview <developer_guides/inference_pipeline_overview>
@@ -256,7 +256,7 @@ Start here
 
 .. toctree::
    :maxdepth: 2
-   :caption: API and CLIs
+   :caption: API and CLI
    :hidden:
 
    CLI reference <api/cli>
