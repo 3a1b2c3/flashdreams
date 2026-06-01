@@ -378,11 +378,9 @@ class InteractiveDriveApp:
                 initial_state=state_from_initial_pose(
                     initial_rig_to_world=self._scene.initial_rig_to_world,
                     initial_yaw_rad=self._scene.initial_yaw_rad,
-                    initial_speed_mps=(
-                        0.0
-                        if self._keyboard.command().manual_control
-                        else self._scene.initial_speed_mps
-                    ),
+                    # Always start at rest so the initial load matches a
+                    # reset, rather than launching at the clip's recorded speed.
+                    initial_speed_mps=0.0,
                 ),
                 vehicle_config=self._config.vehicle,
                 ground_snapper=self._ground_snapper,
