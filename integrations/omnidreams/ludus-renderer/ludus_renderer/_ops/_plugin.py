@@ -71,25 +71,37 @@ def _get_plugin():
 
     # Compiler options.
     common_defines = ["-DNVDR_TORCH", "-DFW_DO_NOT_OVERRIDE_NEW_DELETE"]
-    # ``-Wno-psabi`` mutes the GCC 7.1 -> 10.1 PSABI advisory notes that fire
-    # on every value-returning ``Vec2f`` / ``Vec3f`` / ``Vec4f`` / ``Mat*``
-    # member in ``Math.hpp``. The notes are purely informational about an
-    # ABI change in older GCCs and have no source-level fix.
-    cc_opts = common_defines + ["-Wall", "-Werror", "-Wno-psabi"]
+    cc_opts = common_defines + []
     cuda_opts = common_defines + [
         "-lineinfo",
-        "-Xcompiler", "-Wall,-Werror,-Wno-psabi",
         # Suppress nvcc warning about __device__ functions redeclared without
         # __device__ in out-of-line template definitions (Math.hpp MatrixBase).
         "-diag-suppress", "20037",
     ]
     if os.name == "nt":
+        # MSVC ``cl.exe`` rejects the GCC/Clang ``-W*`` flags below with
+        # "command line error D8021: invalid numeric argument '/Werror'", so
+        # only the MSVC-native warning suppressions apply here.
         cc_opts += ["/wd4067", "/wd4624"]
+    else:
+        # ``-Wno-psabi`` mutes the GCC 7.1 -> 10.1 PSABI advisory notes that
+        # fire on every value-returning ``Vec2f`` / ``Vec3f`` / ``Vec4f`` /
+        # ``Mat*`` member in ``Math.hpp``. The notes are purely informational
+        # about an ABI change in older GCCs and have no source-level fix.
+        cc_opts += ["-Wall", "-Werror", "-Wno-psabi"]
+        cuda_opts += ["-Xcompiler", "-Wall,-Werror,-Wno-psabi"]
 
     # Linker options and source files.
+    # The framework calls the CUDA Driver API (cuMemcpy*, cuMemset*), which
+    # lives in the driver import library, separate from the runtime (cudart).
+    # POSIX links it as ``-lcuda``; MSVC needs ``cuda.lib`` (found on the CUDA
+    # lib path torch already adds to the link line) or the link fails with
+    # LNK2019 unresolved ``cu*`` symbols.
     ldflags: list[str] = []
     if os.name == "posix":
         ldflags = ["-lcuda"]
+    elif os.name == "nt":
+        ldflags = ["cuda.lib"]
     source_files = [
         "../_cpp/common/common.cpp",
         "../_cpp/render/ludus_cuda.cu",

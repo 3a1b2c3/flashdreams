@@ -459,8 +459,11 @@ class _LudusConditionRasterizerImpl:
 
     def cleanup(self) -> None:
         """Cleanup resources."""
-        if self._temp_dir is not None:
-            self._temp_dir.cleanup()
+        # getattr guard: __init__ can raise before _temp_dir is assigned (e.g.
+        # the ludus extension build fails), and __del__ still runs cleanup.
+        temp_dir = getattr(self, "_temp_dir", None)
+        if temp_dir is not None:
+            temp_dir.cleanup()
             self._temp_dir = None
 
     def __del__(self) -> None:

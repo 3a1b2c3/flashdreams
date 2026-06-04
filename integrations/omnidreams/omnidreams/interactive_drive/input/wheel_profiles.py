@@ -24,11 +24,15 @@ the demo runtime can both depend on it cheaply.
 from __future__ import annotations
 
 import array
-import fcntl
 import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # Windows: evdev wheel/controller support is Linux-only.
+    fcntl = None
 
 import yaml
 
@@ -144,6 +148,8 @@ def name_match_strength(device_name: str, patterns) -> int:
 
 def read_evdev_name(path: Path) -> str | None:
     """Return the evdev device name at *path*, or ``None`` if unreadable."""
+    if fcntl is None:
+        return None
     try:
         with path.open("rb") as handle:
             name_buf = array.array("B", [0] * 256)
@@ -159,6 +165,8 @@ def query_axis_range(path: Path, axis: int) -> AxisRange | None:
     Returns ``None`` when the device has no such axis (which is also how
     callers test whether a candidate device exposes a required axis).
     """
+    if fcntl is None:
+        return None
     try:
         with path.open("rb") as handle:
             payload = array.array("i", [0, 0, 0, 0, 0, 0])
@@ -209,6 +217,8 @@ def read_axis_states(path: Path) -> dict[int, tuple[int, AxisRange]]:
     its first event.
     """
     states: dict[int, tuple[int, AxisRange]] = {}
+    if fcntl is None:
+        return {}
     try:
         with path.open("rb") as handle:
             for axis in range(0x40):

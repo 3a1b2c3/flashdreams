@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+# Low-resolution eager manifest for interactive-drive on GPUs with limited
+# shared memory. Copy of example_world_model.yaml with:
+#   - resolution_wh lowered to [1024, 560] for higher FPS (both /16)
+#   - compile_net: false (eager) to avoid the torch.compile / Triton autotune
+#     "No valid triton configs. OutOfMemoryError" crash on ~99 KB-smem GPUs.
+# The checkpoint is 720p-trained, so going much lower softens output; 1024x560
+# / 896x496 are reasonable, 640x352 is noticeably softer.
+resolution_wh: [1024, 560]
+fps: 30
+num_frames_per_block: 8
+compile_net: false
+light_vae: true
+encode_with_pixel_shuffle: false
+local_attn_size: 6
+skip_finalize_kv_cache: false
+sink_size: 0
+denoising_steps: [1000, 500]
+upsampling_enabled: false
+upsampling_scale: 4
+device: cuda:0
+seed_for_every_rollout:
