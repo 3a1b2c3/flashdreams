@@ -221,6 +221,10 @@ class _LudusConditionRasterizerImpl:
         self._selected_camera_name: str | None = None
         self._bev_camera_id: int | None = None
         self._bev_sensor_to_rig: Tensor | None = None
+        # Fixed world (x, y) the BEV target dot is pinned to. Set to the ego's
+        # spawn position on the first render after load_scene ("home"), so the
+        # dot sits on a real spot and falls behind as you drive away.
+        self._bev_target_world: tuple[float, float] | None = None
         self._temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     def _to_ludus_camera_pose(self, camera_poses: Tensor) -> Tensor:
@@ -234,6 +238,8 @@ class _LudusConditionRasterizerImpl:
             scene: Scene bundle containing path to USDZ and camera selection.
         """
         self.ctx.clear_scenes()
+        # Re-pin "home" for the new scene on its first rendered frame.
+        self._bev_target_world = None
 
         if self._temp_dir is not None:
             self._temp_dir.cleanup()
@@ -292,6 +298,33 @@ class _LudusConditionRasterizerImpl:
         # divergence is no longer worth the extra GPU upload + the
         # second scene-id bookkeeping.
         self._scene_id = self.ctx.upload_scene(clipgt_scene.timestamped_scene)
+
+    def _project_bev_target(
+        self, rig_pose_world: npt.NDArray[np.float32]
+    ) -> tuple[float, float, bool]:
+        """Project the pinned world target into normalized BEV panel coords.
+
+        ``rig_pose_world`` is the 4x4 rig-to-world pose. Returns ``(nx, ny,
+        offscreen)`` with the ego at panel centre, forward toward the top,
+        for the straight-down (tilt=0) BEV. ``nx``/``ny`` are in [0,1] when
+        on-panel. Assumes ``self._bev`` and ``self._bev_target_world`` are set.
+        """
+        assert self._bev is not None and self._bev_target_world is not None
+        ego_x = float(rig_pose_world[0, 3])
+        ego_y = float(rig_pose_world[1, 3])
+        forward = rig_pose_world[:2, 0]  # rig +X (forward) in world xy
+        left = rig_pose_world[:2, 1]  # rig +Y (left) in world xy
+        dx = self._bev_target_world[0] - ego_x
+        dy = self._bev_target_world[1] - ego_y
+        forward_m = float(dx * forward[0] + dy * forward[1])
+        left_m = float(dx * left[0] + dy * left[1])
+        half_m = max(
+            1e-3, self._bev.height_m * math.tan(math.radians(self._bev.fov_deg) / 2.0)
+        )
+        nx = 0.5 - left_m / (2.0 * half_m)
+        ny = 0.5 - forward_m / (2.0 * half_m)
+        offscreen = not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0)
+        return nx, ny, offscreen
 
     def render_chunk(
         self,
@@ -359,6 +392,21 @@ class _LudusConditionRasterizerImpl:
                 resolution=(self._bev.height, self._bev.width),
             )
 
+        # Pin the target to the spawn on the first BEV frame, then project it
+        # into normalized panel coords per frame using that frame's ego pose.
+        if bev_frames is not None:
+            if self._bev_target_world is None:
+                self._bev_target_world = (
+                    float(rig_poses_world[0][0, 3]),
+                    float(rig_poses_world[0][1, 3]),
+                )
+            bev_targets: list[tuple[float, float, bool] | None] = [
+                self._project_bev_target(rig_poses_world[idx])
+                for idx in range(len(timestamps_us))
+            ]
+        else:
+            bev_targets = [None] * len(timestamps_us)
+
         if self._use_cuda_frames:
             frames = [
                 PresentedFrame(
@@ -378,6 +426,14 @@ class _LudusConditionRasterizerImpl:
                         if bev_frames is not None
                         else None
                     ),
+                    bev_target_norm=(
+                        (bev_targets[idx][0], bev_targets[idx][1])
+                        if bev_targets[idx] is not None
+                        else None
+                    ),
+                    bev_target_offscreen=(
+                        bev_targets[idx][2] if bev_targets[idx] is not None else False
+                    ),
                 )
                 for idx in range(len(timestamps_us))
             ]
@@ -394,6 +450,14 @@ class _LudusConditionRasterizerImpl:
                 depth_host_f32=None,
                 bev_host_uint8=(
                     bev_host_frames[idx] if bev_host_frames is not None else None
+                ),
+                bev_target_norm=(
+                    (bev_targets[idx][0], bev_targets[idx][1])
+                    if bev_targets[idx] is not None
+                    else None
+                ),
+                bev_target_offscreen=(
+                    bev_targets[idx][2] if bev_targets[idx] is not None else False
                 ),
             )
             for idx in range(len(timestamps_us))

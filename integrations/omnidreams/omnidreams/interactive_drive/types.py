@@ -215,6 +215,12 @@ class PresentedFrame:
     # debug HDMap override (BEV is not in that override set).
     bev_host_uint8: Any | None = None
     status_message: str | None = None
+    # Normalized [0,1] panel coords of the BEV target marker (x right, y down),
+    # projected from a fixed world point (the spawn/"home") using this frame's
+    # ego pose. ``None`` when BEV is disabled. ``bev_target_offscreen`` is True
+    # when the target is outside the panel (the HUD clamps it to the edge).
+    bev_target_norm: tuple[float, float] | None = None
+    bev_target_offscreen: bool = False
 
 
 @dataclass(frozen=True)

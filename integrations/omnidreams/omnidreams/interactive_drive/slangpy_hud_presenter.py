@@ -410,6 +410,10 @@ class SlangPyHudPresenter:
 
         self._latest_camera_pil: Image.Image | None = None
         self._latest_bev_pil: Image.Image | None = None
+        # Normalized BEV target marker position (x, y in [0,1]) for the latest
+        # frame, projected by the rasterizer from the pinned world point.
+        self._latest_bev_target: tuple[float, float] | None = None
+        self._latest_bev_target_offscreen: bool = False
         # Numpy view of the latest world-model frame (RGBA8 with alpha
         # padded to 255) used by the GPU camera path. Lazily filled on
         # demand from ``_latest_camera_pil`` so we don't pay for the
@@ -536,6 +540,12 @@ class SlangPyHudPresenter:
 
     def present_frame(self, frame: PresentedFrame, view_mode: str) -> None:
         total_start = time.perf_counter()
+        # Latch the BEV target marker for this frame (used by _draw_bev on
+        # either the CUDA or host present path).
+        self._latest_bev_target = getattr(frame, "bev_target_norm", None)
+        self._latest_bev_target_offscreen = bool(
+            getattr(frame, "bev_target_offscreen", False)
+        )
         # Apply any pending resize before touching the display texture
         # this frame. Done here (not inside on_resize) so Vulkan
         # resources are only ever rebuilt on the main thread.
@@ -1999,6 +2009,23 @@ class SlangPyHudPresenter:
         marker_cy = inner[1] + int(inner_h * self._bev_marker_y_rel())
         marker_size = max(10, min(inner_w, inner_h) // 14)
         self._draw_bev_marker(draw, marker_cx, marker_cy, marker_size)
+
+        # Target dot pinned to a world point ("home"/spawn): projected by the
+        # rasterizer into normalized panel coords. Clamp to the panel edge so
+        # it stays visible (and reads as a direction) once the ego drives past.
+        target = self._latest_bev_target
+        if target is not None:
+            nx = min(1.0, max(0.0, float(target[0])))
+            ny = min(1.0, max(0.0, float(target[1])))
+            tx = inner[0] + int(nx * inner_w)
+            ty = inner[1] + int(ny * inner_h)
+            tr = max(4, marker_size // 3)
+            draw.ellipse(
+                (tx - tr, ty - tr, tx + tr, ty + tr),
+                fill=(255, 40, 40),
+                outline=(255, 255, 255),
+                width=2,
+            )
 
     def _get_bev_panel_image(self, target_size: tuple[int, int]) -> Image.Image | None:
         if self._latest_bev_pil is None:

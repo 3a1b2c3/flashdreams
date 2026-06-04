@@ -76,7 +76,7 @@ BEV_PANEL_MIN_HEIGHT = 100
 # off-white background on Google Maps' default day-mode tiles. Black /
 # unrendered regions of the BEV image get blended toward this colour by
 # :func:`_apply_googlemaps_filter`.
-GMAPS_LAND_RGB = (234, 226, 209)
+GMAPS_LAND_RGB = (0, 0, 0)
 # Highlight tint for road paint / lane markings. Google Maps draws minor
 # roads in pale grey; we keep the rasterizer's whites/yellows but blend
 # them slightly toward this so they don't feel neon-bright on the cream.
