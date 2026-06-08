@@ -172,6 +172,28 @@ Run the demo and stream to your browser:
 Then open ``http://<server-ip>:8080/`` in any browser on the same
 network and pick a scene from the picker in the bottom-right.
 
+.. note::
+
+   **The first launch is slow.** The first time you start the demo, the world
+   model spends several minutes in a one-time optimization pass -- checkpoint
+   loading, ``torch.compile`` / CUDA-graph capture, and Triton autotuning --
+   before the view becomes interactive. The on-screen indicator shows
+   ``Loading world model...`` during warmup and then ``Optimizing world
+   model...`` while the first generated chunk is autotuned; this phase is
+   longest on the perf manifest. Subsequent launches are much faster because
+   the compiled kernels and CUDA graphs are cached and reused.
+
+.. note::
+
+   Add ``--offload-text-encoder`` to reduce peak VRAM usage by ~15 GB.
+   The text and first-frame encoders are run once per scene and freed before the
+   diffusion pipeline is built, and the resulting embeddings are cached and
+   reused across world-model resets.
+
+   Trade-off: the world model is rebuilt on each scene load instead of staying
+   resident, so the first load and scene/variant switches are slower. Prefer it
+   when VRAM-constrained; otherwise leave it off for faster switching.
+
 For execution using a consumer NVIDIA GPU that exposes a graphics stack,
 omit the ``--stream-mjpeg`` flag to open the demo in a local Vulkan window
 instead:
@@ -197,7 +219,7 @@ conditions.
    libraries are missing.
 
 Steering wheel and game controller
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A steering wheel or game controller can be used to control the local window mode.
 Any device that Ubuntu detects as a standard game controller
@@ -207,9 +229,39 @@ or joystick is viable. We provide a configuration tool to calibrate these:
 
    uv run --package flashdreams-omnidreams interactive-drive-configuration
 
-The demo loads the saved profile automatically on subsequent launches.
-Re-run the configuration tool to specify the default profile, edit a profile
-(steering sensitivity, deadzone, buttons), or delete a profile.
+The demo auto-loads your default profile on subsequent launches. When you
+have more than one profile, the configuration tool's start screen lists them
+with **Make default** (plus Edit and Delete) buttons -- re-run the tool to
+choose which profile ``interactive-drive`` loads by default, tweak a profile
+(steering sensitivity, deadzone, buttons, force feedback), or remove one.
+
+**Multiple devices.** A profile can bind controls across several devices --
+for example a wheel base plus a separately-connected or different-brand pedal
+set. Ctrl+click to select more than one device on the configuration tool's
+device page; each control binds to whichever selected device it moves on.
+
+**Force feedback.** The method is auto-detected per wheel: a driver-managed
+autocenter spring (Thrustmaster, Logitech) or a self-rendered constant force
+(Fanatec, which has no autocenter). FFB needs the vendor's Linux driver and
+write access to ``/dev/input/*`` (add your user to the ``input`` group):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Vendor
+     - Driver
+   * - Thrustmaster
+     - Out-of-tree `hid-tmff2 <https://github.com/Kimplul/hid-tmff2>`__ plus a
+       wheel-mode init (``hid-tminit``, or ``tmdrv`` for TX / TS-XW), for
+       modern wheels (T300RS, T248, TX, T-GT II, TS-PC, TS-XW, …).
+   * - Fanatec
+     - `hid-fanatecff <https://github.com/gotzl/hid-fanatecff>`__ with the
+       base in PC mode (CSL DD, ClubSport, Podium, DD Pro).
+   * - Logitech
+     - In-kernel ``hid-lg4ff`` or `new-lg4ff
+       <https://github.com/berarma/new-lg4ff>`__ (G29, G27, G923 PS); the G920
+       and Xbox/PC G923 use the HID++ driver (kernel 6.3+).
 
 Native acceleration (perf manifest)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
