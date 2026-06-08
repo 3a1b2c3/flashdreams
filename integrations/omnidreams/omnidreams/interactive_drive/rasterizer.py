@@ -396,9 +396,14 @@ class _LudusConditionRasterizerImpl:
         # into normalized panel coords per frame using that frame's ego pose.
         if bev_frames is not None:
             if self._bev_target_world is None:
+                # Pin the goal 200 m straight ahead of the ego's spawn (forward
+                # = rig +X in world xy) so the dot sits in front and the ego
+                # drives toward it, instead of behind at the spawn point.
+                pose0 = rig_poses_world[0]
+                fwd0 = pose0[:2, 0]
                 self._bev_target_world = (
-                    float(rig_poses_world[0][0, 3]),
-                    float(rig_poses_world[0][1, 3]),
+                    float(pose0[0, 3]) + 200.0 * float(fwd0[0]),
+                    float(pose0[1, 3]) + 200.0 * float(fwd0[1]),
                 )
             bev_targets: list[tuple[float, float, bool] | None] = [
                 self._project_bev_target(rig_poses_world[idx])

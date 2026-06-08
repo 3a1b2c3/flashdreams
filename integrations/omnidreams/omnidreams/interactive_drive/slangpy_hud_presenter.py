@@ -2019,7 +2019,15 @@ class SlangPyHudPresenter:
             ny = min(1.0, max(0.0, float(target[1])))
             tx = inner[0] + int(nx * inner_w)
             ty = inner[1] + int(ny * inner_h)
-            tr = max(4, marker_size // 3)
+            # Big, high-contrast marker (white outer ring + red core) so it's
+            # unmistakable on the dark map at any zoom. Clamped to the panel
+            # edge above, so it stays visible once the ego drives past it.
+            tr = max(7, marker_size // 2)
+            draw.ellipse(
+                (tx - tr - 3, ty - tr - 3, tx + tr + 3, ty + tr + 3),
+                outline=(255, 255, 255),
+                width=2,
+            )
             draw.ellipse(
                 (tx - tr, ty - tr, tx + tr, ty + tr),
                 fill=(255, 40, 40),

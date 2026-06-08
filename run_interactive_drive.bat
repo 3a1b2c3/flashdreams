@@ -65,8 +65,8 @@ REM embeds the prompt once, freeing that VRAM for the world model (32 GB card vs
 REM ~48 GB nominal min). Override by passing --offload-text-encoder again or not.
 REM BEV minimap as a zoomed-out, pure top-down bird's-eye:
 REM   --bev-tilt-deg 0  -> straight down (no Google-Maps forward lean)
-REM   --bev-height-m 300 + --bev-fov-deg 70 -> ~420 m ground coverage (vs ~87 m default)
+REM   --bev-height-m 700 + --bev-fov-deg 70 -> ~980 m ground coverage (vs ~87 m default)
 REM Override by passing your own --bev-* after (later value wins).
-uv run --no-sync --package flashdreams-omnidreams interactive-drive --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 300 --bev-fov-deg 70 %*
+uv run --no-sync --package flashdreams-omnidreams interactive-drive --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 700 --bev-fov-deg 70 %*
 
 endlocal
