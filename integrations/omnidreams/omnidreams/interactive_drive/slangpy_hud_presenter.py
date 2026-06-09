@@ -21,7 +21,11 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
-from omnidreams.interactive_drive.colors import BEV_INTERSECTION_MARKER_RGB
+from omnidreams.interactive_drive.colors import (
+    BEV_INTERSECTION_MARKER_RGB,
+    VIEWPORT_INTERSECTION_MARKER_RGB,
+)
+from omnidreams.interactive_drive import live_edits
 from omnidreams.interactive_drive.config import RasterConfig
 from omnidreams.interactive_drive.cuda_env import DISABLE_CUDA_INTEROP_ENV
 from omnidreams.interactive_drive.input.keyboard import KeyboardState
@@ -1020,6 +1024,13 @@ class SlangPyHudPresenter:
             # Single strided RGB copy into the alpha-padded staging buffer;
             # ``np.asarray(pil)`` is a zero-copy view of the world-model frame.
             self._camera_rgba_staging[..., :3] = np.asarray(self._latest_camera_pil)
+            # Bake the goal cylinder / edge-arrow into the camera (source coords)
+            # so it lands on top after _composite_camera_gpu stamps the camera
+            # over the canvas. fit = full source image (no letterbox offset).
+            if self._latest_viewport_intersection_marker is not None:
+                cam_img = Image.fromarray(self._camera_rgba_staging, mode="RGBA")
+                self._draw_viewport_intersection_marker(cam_img, (src_w, src_h, 0, 0))
+                self._camera_rgba_staging[:] = np.asarray(cam_img)
             self._latest_camera_rgba = self._camera_rgba_staging
         self._camera_texture.copy_from_numpy(self._latest_camera_rgba)
         return True
@@ -1167,14 +1178,11 @@ class SlangPyHudPresenter:
                 placeholder = "Loading Scene..."
             self._draw_camera_placeholder(canvas, draw, camera_area, placeholder)
 
-        # Overlay the translucent first-intersection cylinder on the canvas over
-        # the camera region. Done here (not in _draw_camera) because normal play
-        # blits the camera via the GPU texture path, which never calls
-        # _draw_camera; the canvas camera area is transparent there so the
-        # overlay composites on top of the GPU camera. Guarded so the camera
-        # still renders untouched when no marker is present.
-        if camera_drawn:
-            self._draw_viewport_intersection_marker(canvas)
+        # NB: the goal cylinder / edge-arrow is baked into the *camera* image in
+        # _ensure_camera_texture_uploaded (source coords), not drawn here -- the
+        # GPU path stamps the camera over this canvas region (see
+        # _composite_camera_gpu) and would overwrite anything drawn on the canvas
+        # there.
 
         # Poll the drive sink *every* tick (before the conditional panel draw):
         # ``_keyboard_drive.update()`` publishes key state to the simulation, so
@@ -1237,32 +1245,87 @@ class SlangPyHudPresenter:
         else:
             canvas.alpha_composite(resized, (x, y))
 
-    def _draw_viewport_intersection_marker(self, canvas: Image.Image) -> None:
+    def _marker_log(self, msg: str) -> None:
+        """Log a viewport-marker state line, but only when it changes (the draw
+        runs every frame, so unguarded logging would spam). Diagnostic only."""
+        if getattr(self, "_marker_dbg_last", None) != msg:
+            self._marker_dbg_last = msg
+            logger.info(f"[hud-marker] {msg}")
+
+    def _draw_offscreen_target_arrow(
+        self,
+        target: Image.Image,
+        fit: tuple[float, float, float, float],
+        base_nx: float,
+        base_ny: float,
+    ) -> None:
+        """Off-screen goal indicator: a chevron clamped to the camera-area edge,
+        pointing toward the (off-frame) target so it never just vanishes.
+
+        ``base_nx/base_ny`` are the target's projected image fractions (here
+        outside the visible window). Cast a ray from the camera-area centre
+        toward that point, clip it to the rect boundary (minus an inset), and
+        draw a filled triangle at the hit, pointing outward.
+        """
+        w, h, x, y = fit
+        inset = 18.0
+        cx, cy = x + w * 0.5, y + h * 0.5
+        dx, dy = (x + base_nx * w) - cx, (y + base_ny * h) - cy
+        d = _math.hypot(dx, dy)
+        if d < 1e-3:
+            return
+        ux, uy = dx / d, dy / d
+        half_w = max(1.0, w * 0.5 - inset)
+        half_h = max(1.0, h * 0.5 - inset)
+        tx = half_w / abs(ux) if abs(ux) > 1e-6 else float("inf")
+        ty = half_h / abs(uy) if abs(uy) > 1e-6 else float("inf")
+        t = min(tx, ty)
+        ex, ey = cx + ux * t, cy + uy * t
+        size = 16.0
+        nx, ny = -uy, ux  # perpendicular to the pointing direction
+        tip = (ex + ux * size, ey + uy * size)
+        left = (ex - ux * size * 0.4 + nx * size * 0.7, ey - uy * size * 0.4 + ny * size * 0.7)
+        right = (ex - ux * size * 0.4 - nx * size * 0.7, ey - uy * size * 0.4 - ny * size * 0.7)
+        draw = ImageDraw.Draw(target, "RGBA")
+        draw.polygon([tip, left, right], fill=VIEWPORT_INTERSECTION_MARKER_RGB + (220,))
+
+    def _draw_viewport_intersection_marker(
+        self, target: Image.Image, fit: tuple[int, int, int, int] | None
+    ) -> None:
         """Draw a half-transparent cylinder billboard at the projected goal.
 
-        Drawn on ``self._canvas`` over the camera region (which the GPU path
-        composites under the canvas, and the CPU path paints opaque), using the
-        same centered cover-fit rect as the displayed camera frame so the
-        projected normalized coords land on the right pixels.
+        ``target`` is the RGBA image to draw into; ``fit`` is the
+        ``(w, h, off_x, off_y)`` rect the camera occupies within it. This is
+        baked into the *camera* image (fit = full source) by
+        :meth:`_ensure_camera_texture_uploaded`, NOT the chrome canvas: the GPU
+        path stamps the camera over the canvas (see :meth:`_composite_camera_gpu`)
+        and would otherwise overwrite a canvas-drawn marker.
 
         ``self._latest_viewport_intersection_marker`` is
         ``(base_nx, base_ny, top_nx, top_ny)`` in [0,1] image fractions. The
         cylinder body is a translucent quad between the base and top, capped with
         ellipses; size follows the projected base->top pixel height (so it shrinks
-        with distance). Skipped when ``None`` (behind camera / passed over) or
-        clearly outside the panel.
+        with distance). Skipped when ``None`` (behind camera / passed over); an
+        off-frame goal becomes an edge-clamped arrow instead.
         """
         marker = self._latest_viewport_intersection_marker
         if marker is None:
+            self._marker_log("none: no viewport_intersection_marker this frame")
             return
-        fit = self._compute_camera_fit()
         if fit is None:
+            self._marker_log("skip: no camera fit")
             return
         w, h, x, y = fit  # fit_w, fit_h, offset_x, offset_y (camera-area coords)
         base_nx, base_ny, top_nx, top_ny = marker
         # Skip if the base is well outside the visible image (in front of the
         # camera but out of frame).
         if not (-0.15 <= base_nx <= 1.15 and -0.15 <= base_ny <= 1.15):
+            # Off-screen target: clamp a directional arrow to the camera-area
+            # edge so the goal stays visible instead of vanishing.
+            self._draw_offscreen_target_arrow(target, fit, base_nx, base_ny)
+            self._marker_log(
+                f"edge-arrow: base_n=({base_nx:.3f},{base_ny:.3f}) -> clamped to edge"
+            )
             return
         bx = x + base_nx * w
         by = y + base_ny * h
@@ -1282,7 +1345,11 @@ class SlangPyHudPresenter:
         tx, ty = bx + ux * draw_h, by + uy * draw_h
         r = max(8.0, min(draw_h * 0.32, w * 0.12))
         ery = max(3.0, r * 0.42)  # ellipse vertical half-height (foreshortening)
-        rgb = BEV_INTERSECTION_MARKER_RGB
+        self._marker_log(
+            f"DRAW base_px=({bx:.0f},{by:.0f}) draw_h={draw_h:.0f} r={r:.0f} "
+            f"base_n=({base_nx:.3f},{base_ny:.3f}) fit=({w:.0f}x{h:.0f}@{x:.0f},{y:.0f})"
+        )
+        rgb = VIEWPORT_INTERSECTION_MARKER_RGB
         body_rgba = rgb + (90,)
         cap_rgba = rgb + (150,)
         # Draw onto a transparent layer the size of the marker's bounding box so
@@ -1323,7 +1390,7 @@ class SlangPyHudPresenter:
             outline=rgb + (220,),
             width=2,
         )
-        canvas.alpha_composite(layer, (min_x, min_y))
+        target.alpha_composite(layer, (min_x, min_y))
 
     def _draw_camera_placeholder(
         self,
@@ -2281,6 +2348,7 @@ class SlangPyHudPresenter:
             "r": _lookup_key(spy.KeyCode, "r"),
             "x": _lookup_key(spy.KeyCode, "x"),
             "h": _lookup_key(spy.KeyCode, "h"),
+            "c": _lookup_key(spy.KeyCode, "c"),
             # Minimap zoom: '=' / ']' zoom in, '-' / '[' zoom out (first alias
             # the slangpy KeyCode enum exposes wins).
             "bev_zoom_in": _lookup_key(
@@ -2361,6 +2429,11 @@ class SlangPyHudPresenter:
             self._bev_zoom = max(1.0, self._bev_zoom / 1.3)
         elif self._key_matches(key, "x"):
             self.exit_scene()
+        elif self._key_matches(key, "c"):
+            # Drop an obstacle cuboid ahead of the ego. Only records intent here
+            # (UI thread); the rasterizer drains it and uploads on the worker.
+            live_edits.request_drop_cuboid()
+            logger.info("[hud] 'c' pressed -> requested cuboid drop ahead of ego")
 
     def _expire_pending_drive_releases(self) -> None:
         """Commit any debounced release whose grace window has passed.

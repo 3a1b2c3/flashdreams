@@ -23,13 +23,18 @@ import numpy.typing as npt
 import torch
 from loguru import logger
 from ludus_renderer import (
+    CUBE_FLAG_WIREFRAME,
+    PRIM_OBSTACLE,
+    CubePool,
     FThetaCamera,
+    TimestampedScene,
     load_clipgt_scene,
 )
 from ludus_renderer.clipgt import ClipgtGpuScene
 from ludus_renderer.render_utils import SceneAdapter
 from ludus_renderer.torch import LudusCudaTimestampedContext
 from ludus_renderer.torch.ops import CAMERA_TYPE_BEV, CAMERA_TYPE_REGULAR
+from omnidreams.interactive_drive import live_edits
 from omnidreams.interactive_drive.config import BevConfig, RasterConfig
 from omnidreams.interactive_drive.cuda_env import DISABLE_CUDA_INTEROP_ENV, env_truthy
 from omnidreams.interactive_drive.camera import FThetaCameraModel
@@ -212,6 +217,11 @@ class _LudusConditionRasterizerImpl:
 
         self._scene_data: _LoadedSceneData | None = None
         self._scene_id: int | None = None
+        # Live obstacle cuboids (CubePool) composed over the base scene without a
+        # rebuild; rendered via _dynamic_scene_id when any are present.
+        self._base_timestamped_scene: TimestampedScene | None = None
+        self._dynamic_scene_id: int | None = None
+        self._road_cuboids: list[dict] = []
         self._all_cameras: list[FThetaCamera] = []
         self._all_camera_map: dict[str, int] = {}
         self._sensor_to_rig: dict[str, Tensor] = {}
@@ -236,6 +246,12 @@ class _LudusConditionRasterizerImpl:
         # outside the reach radius, so spawning on/near the intersection shows
         # the dot instead of instantly hiding it.
         self._intersection_target_armed: bool = False
+        # When False (default) the goal marker stays visible for the whole
+        # rollout; set IDRIVE_MARKER_HIDE_ON_PASS=1 to restore the old behaviour
+        # of hiding it once the ego drives over it.
+        self._marker_hide_on_pass: bool = (
+            os.environ.get("IDRIVE_MARKER_HIDE_ON_PASS") == "1"
+        )
         self._temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     def _to_ludus_camera_pose(self, camera_poses: Tensor) -> Tensor:
@@ -329,7 +345,132 @@ class _LudusConditionRasterizerImpl:
         self.ctx.upload_cameras(self._all_cameras)
 
         # Single scene upload shared by the main camera and the BEV minimap.
-        self._scene_id = self.ctx.upload_scene(clipgt_scene.timestamped_scene)
+        self._base_timestamped_scene = clipgt_scene.timestamped_scene
+        self._scene_id = self.ctx.upload_scene(self._base_timestamped_scene)
+        # Optionally drop obstacle cuboids in the middle of the road ahead of
+        # spawn (IDRIVE_ROAD_CUBOIDS_AHEAD = comma-separated metres).
+        self._dynamic_scene_id = None
+        self._road_cuboids = []
+        self._seed_road_cuboids(scene)
+
+    def _seed_road_cuboids(self, scene: SceneBundle) -> None:
+        """Place obstacle cuboids down the road centreline ahead of spawn, per
+        IDRIVE_ROAD_CUBOIDS_AHEAD (comma-separated metres, e.g. ``25,40``)."""
+        spec = os.environ.get("IDRIVE_ROAD_CUBOIDS_AHEAD", "").strip()
+        if not spec:
+            return
+        spawn_x = float(scene.initial_rig_to_world[0, 3])
+        spawn_y = float(scene.initial_rig_to_world[1, 3])
+        spawn_z = float(scene.initial_rig_to_world[2, 3])
+        fwd = np.asarray(scene.initial_rig_to_world[:2, 0], dtype=np.float64)
+        norm = float(np.hypot(fwd[0], fwd[1]))
+        if norm <= 1e-6:
+            return
+        fwd = fwd / norm
+        for tok in spec.split(","):
+            try:
+                dist = float(tok)
+            except ValueError:
+                continue
+            self.add_road_cuboid(
+                (spawn_x + dist * float(fwd[0]), spawn_y + dist * float(fwd[1]), spawn_z + 1.0)
+            )
+
+    def add_road_cuboid(
+        self,
+        world_xyz: tuple[float, float, float],
+        size: tuple[float, float, float] = (2.0, 2.0, 2.0),
+        color_front: tuple[float, float, float] = (1.0, 0.15, 0.15),
+        color_back: tuple[float, float, float] = (0.6, 0.0, 0.0),
+    ) -> None:
+        """Add a live obstacle cuboid at a world point and recompose the scene
+        (no rebuild of the base scene). Safe to call between chunks."""
+        self._road_cuboids.append(
+            {
+                "translation": (
+                    float(world_xyz[0]),
+                    float(world_xyz[1]),
+                    float(world_xyz[2]),
+                ),
+                "scale": (float(size[0]), float(size[1]), float(size[2])),
+                "quat_xyzw": (0.0, 0.0, 0.0, 1.0),
+                "colors6": (*color_front, *color_back),
+            }
+        )
+        self._rebuild_dynamic_scene()
+
+    def clear_road_cuboids(self) -> None:
+        """Remove all live cuboids; render falls back to the base scene."""
+        self._road_cuboids = []
+        self._dynamic_scene_id = None
+
+    def _build_road_cube_pool(self) -> CubePool | None:
+        if not self._road_cuboids:
+            return None
+        device = self._device
+        n = len(self._road_cuboids)
+        # Two-keyframe static tracks spanning all realistic frame timestamps so
+        # each obstacle samples to a fixed pose at every rendered frame.
+        ts2 = torch.tensor([0, 10**15], dtype=torch.int64, device=device)
+        track_lengths = torch.full((n,), 2, dtype=torch.int32, device=device)
+        cube_ts_prefix_sum = torch.cumsum(track_lengths, dim=0, dtype=torch.int32)
+        track_timestamps_us = ts2.repeat(n)
+        translations = torch.cat(
+            [
+                torch.tensor(c["translation"], dtype=torch.float32, device=device).repeat(2, 1)
+                for c in self._road_cuboids
+            ]
+        )
+        quaternions = torch.cat(
+            [
+                torch.tensor(c["quat_xyzw"], dtype=torch.float32, device=device).repeat(2, 1)
+                for c in self._road_cuboids
+            ]
+        )
+        scales = torch.stack(
+            [
+                torch.tensor(c["scale"], dtype=torch.float32, device=device)
+                for c in self._road_cuboids
+            ]
+        )
+        colors = torch.stack(
+            [
+                torch.tensor(c["colors6"], dtype=torch.float32, device=device)
+                for c in self._road_cuboids
+            ]
+        )
+        return CubePool(
+            timestamps_us=ts2,
+            cube_ts_prefix_sum=cube_ts_prefix_sum,
+            track_timestamps_us=track_timestamps_us,
+            translations=translations,
+            quaternions=quaternions,
+            scales=scales,
+            colors=colors,
+            prim_type_id=PRIM_OBSTACLE,
+            render_flags=CUBE_FLAG_WIREFRAME,
+        )
+
+    def _rebuild_dynamic_scene(self) -> None:
+        """Recompose base pools + the obstacle cube pool and upload it, giving a
+        fresh scene id rendered in place of the static one (no clear_scenes)."""
+        pool = self._build_road_cube_pool()
+        if pool is None or self._base_timestamped_scene is None:
+            self._dynamic_scene_id = None
+            return
+        base = self._base_timestamped_scene
+        cube_pools = list(base.cube_pools or [])
+        cube_pools.append(pool)
+        scene = TimestampedScene(
+            polyline_pools=base.polyline_pools,
+            polygon_pools=base.polygon_pools,
+            cube_pools=cube_pools,
+        )
+        self._dynamic_scene_id = self.ctx.upload_scene(scene)
+        logger.info(
+            f"[rasterizer] road cuboids={len(self._road_cuboids)} -> "
+            f"dynamic scene_id={self._dynamic_scene_id}"
+        )
 
     def rearm_intersection_target(self) -> None:
         """Clear the passed-over latch so the first-intersection marker reappears.
@@ -361,14 +502,14 @@ class _LudusConditionRasterizerImpl:
         spawn_y = float(scene.initial_rig_to_world[1, 3])
         # Testing placement: pin the goal a fixed distance straight ahead of
         # spawn so it's visible immediately and stays put until the car drives
-        # over it. Defaults to 200 m; IDRIVE_TEST_MARKER_AHEAD_M overrides the
+        # over it. Defaults to 50 m; IDRIVE_TEST_MARKER_AHEAD_M overrides the
         # distance, and setting it to 0 falls back to the real first-intersection
         # search below.
         ahead_env = os.environ.get("IDRIVE_TEST_MARKER_AHEAD_M")
         try:
-            ahead_m = float(ahead_env) if ahead_env is not None else 200.0
+            ahead_m = float(ahead_env) if ahead_env is not None else 50.0
         except ValueError:
-            ahead_m = 200.0
+            ahead_m = 50.0
         if ahead_m > 0.0:
             fwd = np.asarray(scene.initial_rig_to_world[:2, 0], dtype=np.float64)
             norm = float(np.hypot(fwd[0], fwd[1]))
@@ -499,6 +640,7 @@ class _LudusConditionRasterizerImpl:
         behind the camera (so the HUD skips drawing).
         """
         if self._main_camera_model is None:
+            self._vp_marker_log("None: main_camera_model is unset")
             return None
         bx, by, bz = target_xyz
         pts = np.array(
@@ -509,15 +651,29 @@ class _LudusConditionRasterizerImpl:
             pts, rig_pose_world.astype(np.float32)
         )
         if not (bool(valid[0]) and bool(valid[1])):
+            self._vp_marker_log(
+                f"None: behind camera depth={_depth.tolist()} valid={valid.tolist()}"
+            )
             return None
         w = float(self._raster.width)
         h = float(self._raster.height)
-        return (
+        result = (
             float(uv[0, 0]) / w,
             float(uv[0, 1]) / h,
             float(uv[1, 0]) / w,
             float(uv[1, 1]) / h,
         )
+        self._vp_marker_log(
+            f"ok base_n=({result[0]:.3f},{result[1]:.3f}) uv={uv.tolist()} "
+            f"depth={_depth.tolist()}"
+        )
+        return result
+
+    def _vp_marker_log(self, msg: str) -> None:
+        """Throttled diagnostic for the viewport marker projection (logs on change)."""
+        if getattr(self, "_vp_marker_dbg_last", None) != msg:
+            self._vp_marker_dbg_last = msg
+            logger.info(f"[viewport-marker] {msg}")
 
     def render_chunk(
         self,
@@ -551,6 +707,30 @@ class _LudusConditionRasterizerImpl:
                 f"Camera {camera_name!r} not found. Available: {available}"
             )
 
+        # Drain any 'c'-hotkey cuboid drops (recorded on the UI thread) and place
+        # them ahead of the current ego. The GPU upload (add_road_cuboid) happens
+        # here on the worker thread, where the Ludus context is safe to touch.
+        pending_drops = live_edits.take_pending_cuboid_drops()
+        if pending_drops:
+            pose0 = rig_poses_world[0]
+            ex, ey, ez = float(pose0[0, 3]), float(pose0[1, 3]), float(pose0[2, 3])
+            fwd = np.asarray(pose0[:2, 0], dtype=np.float64)
+            fnorm = float(np.hypot(fwd[0], fwd[1]))
+            if fnorm > 1e-6:
+                fx, fy = float(fwd[0]) / fnorm, float(fwd[1]) / fnorm
+                dist = live_edits.DROP_AHEAD_M
+                for _ in range(pending_drops):
+                    self.add_road_cuboid((ex + dist * fx, ey + dist * fy, ez + 1.0))
+                    dist += 6.0  # stagger repeated drops down the road
+
+        # Render the cuboid-augmented scene when any live obstacles are present,
+        # else the static base scene. Same id feeds the main view and the BEV.
+        active_scene_id = (
+            self._dynamic_scene_id
+            if self._dynamic_scene_id is not None
+            else self._scene_id
+        )
+
         rig_poses_torch = torch.from_numpy(
             np.ascontiguousarray(rig_poses_world, dtype=np.float32)
         ).to(device=self._device)
@@ -561,7 +741,7 @@ class _LudusConditionRasterizerImpl:
         rgb_frames = self._render_one_camera(
             rig_poses=rig_poses_torch,
             timestamps_batch=timestamps_batch,
-            scene_id=self._scene_id,
+            scene_id=active_scene_id,
             camera_id=self._all_camera_map[camera_name],
             sensor_to_rig=self._sensor_to_rig[camera_name],
             camera_type=CAMERA_TYPE_REGULAR,
@@ -578,7 +758,7 @@ class _LudusConditionRasterizerImpl:
             bev_frames = self._render_one_camera(
                 rig_poses=rig_poses_torch,
                 timestamps_batch=timestamps_batch,
-                scene_id=self._scene_id,
+                scene_id=active_scene_id,
                 camera_id=self._bev_camera_id,
                 sensor_to_rig=self._bev_sensor_to_rig,
                 camera_type=CAMERA_TYPE_BEV,
@@ -628,7 +808,7 @@ class _LudusConditionRasterizerImpl:
                     # Outside the radius: keep showing the marker and arm it so a
                     # later approach can count as "passed over".
                     self._intersection_target_armed = True
-                elif self._intersection_target_armed:
+                elif self._marker_hide_on_pass and self._intersection_target_armed:
                     # Drove over it after starting away: hide it for good.
                     self._intersection_target_reached = True
                     logger.info(

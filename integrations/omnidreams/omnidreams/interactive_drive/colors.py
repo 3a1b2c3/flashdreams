@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-# HUD overlay markers drawn on the BEV minimap. PIL 0-255 int RGB (the HUD
-# draws with PIL, unlike the float RGBA map-layer palettes below). Red for now
-# while we confirm the static first-intersection goal renders.
+# HUD overlay markers. PIL 0-255 int RGB (the HUD draws with PIL, unlike the
+# float RGBA map-layer palettes below). The minimap first-intersection dot is
+# red; the viewport cylinder overlaid on the video is green.
 BEV_INTERSECTION_MARKER_RGB: tuple[int, int, int] = (255, 40, 40)
+VIEWPORT_INTERSECTION_MARKER_RGB: tuple[int, int, int] = (40, 200, 70)
 
 LANE_LINE_STYLE_CONFIG: dict[str, dict[str, object]] = {
     "WHITE SOLID_SINGLE": {
