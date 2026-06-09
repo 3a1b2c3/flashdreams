@@ -47,6 +47,10 @@ from torch import Tensor
 
 _BEV_CAMERA_NAME = "interactive_drive_bev"
 
+# Distance (m) within which the ego is considered to have "passed over" the
+# static green first-intersection goal, after which it disappears for good.
+_GREEN_TARGET_REACH_M = 10.0
+
 
 def _extract_clipgt_from_usdz(usdz_path: Path, dest_dir: Path) -> Path:
     """Extract clipgt parquet files from USDZ archive.
@@ -224,6 +228,17 @@ class _LudusConditionRasterizerImpl:
         # spawn position on the first render after load_scene ("home"), so the
         # dot sits on a real spot and falls behind as you drive away.
         self._bev_target_world: tuple[float, float] | None = None
+        # Fixed world (x, y) of the static green "first intersection" goal, set
+        # at load_scene to the intersection-area polygon centroid nearest the
+        # spawn. ``None`` when the scene has no intersection data.
+        # ``_green_target_reached`` latches True once the ego drives over it so
+        # the dot disappears permanently for the rest of the rollout.
+        self._bev_green_target_world: tuple[float, float] | None = None
+        self._green_target_reached: bool = False
+        # Only let the goal count as "passed over" after the ego has first been
+        # outside the reach radius, so spawning on/near the intersection shows
+        # the dot instead of instantly hiding it.
+        self._green_target_armed: bool = False
         self._temp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     def _to_ludus_camera_pose(self, camera_poses: Tensor) -> Tensor:
@@ -239,6 +254,12 @@ class _LudusConditionRasterizerImpl:
         self.ctx.clear_scenes()
         # Re-pin "home" for the new scene on its first rendered frame.
         self._bev_target_world = None
+        # Pin the static green goal to the intersection nearest the spawn (or
+        # leave it unset if the scene ships no intersection data), and re-arm
+        # its "passed over" latch for the new rollout.
+        self._bev_green_target_world = self._find_first_intersection_world(scene)
+        self._green_target_reached = False
+        self._green_target_armed = False
 
         if self._temp_dir is not None:
             self._temp_dir.cleanup()
@@ -298,23 +319,54 @@ class _LudusConditionRasterizerImpl:
         # second scene-id bookkeeping.
         self._scene_id = self.ctx.upload_scene(clipgt_scene.timestamped_scene)
 
-    def _project_bev_target(
-        self, rig_pose_world: npt.NDArray[np.float32]
+    def _find_first_intersection_world(
+        self, scene: SceneBundle
+    ) -> tuple[float, float] | None:
+        """World (x, y) of the intersection-area polygon nearest the spawn.
+
+        The scene exposes intersection geometry as a polygon layer named
+        ``intersection_areas`` (loaded from ``clipgt/intersection_area.parquet``).
+        Each polygon centroid is a candidate; "first" is the one closest to the
+        ego spawn. Returns ``None`` when the scene has no intersection layer or
+        all its polygons are empty.
+        """
+        spawn_x = float(scene.initial_rig_to_world[0, 3])
+        spawn_y = float(scene.initial_rig_to_world[1, 3])
+        best: tuple[float, float] | None = None
+        best_d2 = math.inf
+        for layer in scene.polygon_layers:
+            if "intersection" not in layer.layer_name.lower():
+                continue
+            for poly in layer.polygons_world:
+                if poly is None or len(poly) == 0:
+                    continue
+                cx = float(np.mean(poly[:, 0]))
+                cy = float(np.mean(poly[:, 1]))
+                d2 = (cx - spawn_x) ** 2 + (cy - spawn_y) ** 2
+                if d2 < best_d2:
+                    best_d2 = d2
+                    best = (cx, cy)
+        return best
+
+    def _project_bev_point(
+        self,
+        rig_pose_world: npt.NDArray[np.float32],
+        target_world: tuple[float, float],
     ) -> tuple[float, float, bool]:
-        """Project the pinned world target into normalized BEV panel coords.
+        """Project a fixed world (x, y) into normalized BEV panel coords.
 
         ``rig_pose_world`` is the 4x4 rig-to-world pose. Returns ``(nx, ny,
         offscreen)`` with the ego at panel centre, forward toward the top,
         for the straight-down (tilt=0) BEV. ``nx``/``ny`` are in [0,1] when
-        on-panel. Assumes ``self._bev`` and ``self._bev_target_world`` are set.
+        on-panel. Assumes ``self._bev`` is set.
         """
-        assert self._bev is not None and self._bev_target_world is not None
+        assert self._bev is not None
         ego_x = float(rig_pose_world[0, 3])
         ego_y = float(rig_pose_world[1, 3])
         forward = rig_pose_world[:2, 0]  # rig +X (forward) in world xy
         left = rig_pose_world[:2, 1]  # rig +Y (left) in world xy
-        dx = self._bev_target_world[0] - ego_x
-        dy = self._bev_target_world[1] - ego_y
+        dx = target_world[0] - ego_x
+        dy = target_world[1] - ego_y
         forward_m = float(dx * forward[0] + dy * forward[1])
         left_m = float(dx * left[0] + dy * left[1])
         half_m = max(
@@ -324,6 +376,13 @@ class _LudusConditionRasterizerImpl:
         ny = 0.5 - forward_m / (2.0 * half_m)
         offscreen = not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0)
         return nx, ny, offscreen
+
+    def _project_bev_target(
+        self, rig_pose_world: npt.NDArray[np.float32]
+    ) -> tuple[float, float, bool]:
+        """Project the pinned home/spawn target into normalized BEV coords."""
+        assert self._bev_target_world is not None
+        return self._project_bev_point(rig_pose_world, self._bev_target_world)
 
     def render_chunk(
         self,
@@ -411,6 +470,33 @@ class _LudusConditionRasterizerImpl:
         else:
             bev_targets = [None] * len(timestamps_us)
 
+        # Static green first-intersection goal: pinned in the world, projected
+        # per frame, and removed for good once the ego drives within
+        # _GREEN_TARGET_REACH_M of it (the dot then disappears for the rest of
+        # the rollout).
+        green_targets: list[tuple[float, float, bool] | None] = [None] * len(
+            timestamps_us
+        )
+        if bev_frames is not None and self._bev_green_target_world is not None:
+            gx, gy = self._bev_green_target_world
+            reach2 = _GREEN_TARGET_REACH_M * _GREEN_TARGET_REACH_M
+            for idx in range(len(timestamps_us)):
+                if self._green_target_reached:
+                    break
+                ego_x = float(rig_poses_world[idx][0, 3])
+                ego_y = float(rig_poses_world[idx][1, 3])
+                if (ego_x - gx) ** 2 + (ego_y - gy) ** 2 > reach2:
+                    # Outside the radius: keep showing the dot and arm it so a
+                    # later approach can count as "passed over".
+                    self._green_target_armed = True
+                elif self._green_target_armed:
+                    # Drove over it after starting away: hide it for good.
+                    self._green_target_reached = True
+                    break
+                green_targets[idx] = self._project_bev_point(
+                    rig_poses_world[idx], self._bev_green_target_world
+                )
+
         if self._use_cuda_frames:
             frames = [
                 PresentedFrame(
@@ -438,6 +524,16 @@ class _LudusConditionRasterizerImpl:
                     bev_target_offscreen=(
                         bev_targets[idx][2] if bev_targets[idx] is not None else False
                     ),
+                    bev_green_target_norm=(
+                        (green_targets[idx][0], green_targets[idx][1])
+                        if green_targets[idx] is not None
+                        else None
+                    ),
+                    bev_green_target_offscreen=(
+                        green_targets[idx][2]
+                        if green_targets[idx] is not None
+                        else False
+                    ),
                 )
                 for idx in range(len(timestamps_us))
             ]
@@ -462,6 +558,14 @@ class _LudusConditionRasterizerImpl:
                 ),
                 bev_target_offscreen=(
                     bev_targets[idx][2] if bev_targets[idx] is not None else False
+                ),
+                bev_green_target_norm=(
+                    (green_targets[idx][0], green_targets[idx][1])
+                    if green_targets[idx] is not None
+                    else None
+                ),
+                bev_green_target_offscreen=(
+                    green_targets[idx][2] if green_targets[idx] is not None else False
                 ),
             )
             for idx in range(len(timestamps_us))

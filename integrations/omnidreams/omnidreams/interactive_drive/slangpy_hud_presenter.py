@@ -53,6 +53,7 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
+from omnidreams.interactive_drive.colors import BEV_INTERSECTION_MARKER_RGB
 from omnidreams.interactive_drive.config import RasterConfig
 from omnidreams.interactive_drive.cuda_env import DISABLE_CUDA_INTEROP_ENV
 from omnidreams.interactive_drive.input.keyboard import KeyboardState
@@ -414,6 +415,10 @@ class SlangPyHudPresenter:
         # frame, projected by the rasterizer from the pinned world point.
         self._latest_bev_target: tuple[float, float] | None = None
         self._latest_bev_target_offscreen: bool = False
+        # Static green "first intersection" goal for the latest frame. ``None``
+        # once the ego has driven over it (the dot then disappears).
+        self._latest_bev_green_target: tuple[float, float] | None = None
+        self._latest_bev_green_target_offscreen: bool = False
         # Numpy view of the latest world-model frame (RGBA8 with alpha
         # padded to 255) used by the GPU camera path. Lazily filled on
         # demand from ``_latest_camera_pil`` so we don't pay for the
@@ -545,6 +550,10 @@ class SlangPyHudPresenter:
         self._latest_bev_target = getattr(frame, "bev_target_norm", None)
         self._latest_bev_target_offscreen = bool(
             getattr(frame, "bev_target_offscreen", False)
+        )
+        self._latest_bev_green_target = getattr(frame, "bev_green_target_norm", None)
+        self._latest_bev_green_target_offscreen = bool(
+            getattr(frame, "bev_green_target_offscreen", False)
         )
         # Apply any pending resize before touching the display texture
         # this frame. Done here (not inside on_resize) so Vulkan
@@ -2023,6 +2032,30 @@ class SlangPyHudPresenter:
                 width=2,
             )
 
+        # Static "first intersection" goal. Pinned to a world point and
+        # projected by the rasterizer; ``None`` (so skipped here) once the ego
+        # has driven over it, which is how it disappears. Clamped to the panel
+        # edge like the home dot so it reads as a direction while still ahead.
+        # Drawn last so it sits on top of the GoogleMaps-filtered panel.
+        intersection_target = self._latest_bev_green_target
+        if intersection_target is not None:
+            nx = min(1.0, max(0.0, float(intersection_target[0])))
+            ny = min(1.0, max(0.0, float(intersection_target[1])))
+            tx = inner[0] + int(nx * inner_w)
+            ty = inner[1] + int(ny * inner_h)
+            tr = max(7, marker_size // 2)
+            draw.ellipse(
+                (tx - tr - 3, ty - tr - 3, tx + tr + 3, ty + tr + 3),
+                outline=(255, 255, 255),
+                width=2,
+            )
+            draw.ellipse(
+                (tx - tr, ty - tr, tx + tr, ty + tr),
+                fill=BEV_INTERSECTION_MARKER_RGB,
+                outline=(255, 255, 255),
+                width=2,
+            )
+
     def _get_bev_panel_image(self, target_size: tuple[int, int]) -> Image.Image | None:
         if self._latest_bev_pil is None:
             return None
@@ -2086,23 +2119,9 @@ class SlangPyHudPresenter:
     def _draw_bev_marker(
         draw: ImageDraw.ImageDraw, cx: int, cy: int, size: int
     ) -> None:
-        # Soft drop shadow.
-        shadow_size = size + 4
-        draw.ellipse(
-            (
-                cx - shadow_size,
-                cy - shadow_size + 2,
-                cx + shadow_size,
-                cy + shadow_size + 2,
-            ),
-            fill=(0, 0, 0, 60),
-        )
-        # White outer ring.
-        draw.ellipse(
-            (cx - size, cy - size, cx + size, cy + size), fill=(255, 255, 255, 255)
-        )
-        # Forward chevron in Google-Maps blue.
-        chevron = size - 4
+        # Forward chevron in Google-Maps blue. No white puck / ring around it --
+        # the heading arrow is drawn on its own directly over the map.
+        chevron = size
         draw.polygon(
             [
                 (cx, cy - chevron),

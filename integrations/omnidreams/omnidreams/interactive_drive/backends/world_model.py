@@ -275,6 +275,10 @@ class WorldModelRenderBackend(RenderBackend):
                     depth_native=raster_frame.depth_native,
                     model_rgb_host_uint8=model_rgb,
                     bev_host_uint8=raster_frame.bev_host_uint8,
+                    bev_target_norm=raster_frame.bev_target_norm,
+                    bev_target_offscreen=raster_frame.bev_target_offscreen,
+                    bev_green_target_norm=raster_frame.bev_green_target_norm,
+                    bev_green_target_offscreen=raster_frame.bev_green_target_offscreen,
                     status_message=(
                         _FIRST_STEADY_STATE_WARMUP_MESSAGE
                         if annotate_first_transition and index == last_index
