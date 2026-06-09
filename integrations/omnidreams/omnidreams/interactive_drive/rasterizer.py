@@ -775,17 +775,12 @@ class _LudusConditionRasterizerImpl:
         return _RenderedCameraFrames(frames_hwc_uint8=rgb, ready_event=ready_event)
 
     def cleanup(self) -> None:
-<<<<<<< HEAD
         """Cleanup resources."""
         # getattr guard: __init__ can raise before _temp_dir is assigned (e.g.
         # the ludus extension build fails), and __del__ still runs cleanup.
         temp_dir = getattr(self, "_temp_dir", None)
         if temp_dir is not None:
             temp_dir.cleanup()
-=======
-        if self._temp_dir is not None:
-            self._temp_dir.cleanup()
->>>>>>> main
             self._temp_dir = None
 
     def __del__(self) -> None:

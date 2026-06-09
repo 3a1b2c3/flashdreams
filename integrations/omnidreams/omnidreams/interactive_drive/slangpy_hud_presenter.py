@@ -485,7 +485,6 @@ class SlangPyHudPresenter:
             _prefetch_to_numpy(frame.bev_host_uint8)
 
     def present_frame(self, frame: PresentedFrame, view_mode: str) -> None:
-<<<<<<< HEAD
         total_start = time.perf_counter()
         # Latch the BEV target marker for this frame (used by _draw_bev on
         # either the CUDA or host present path).
@@ -500,8 +499,6 @@ class SlangPyHudPresenter:
         self._latest_viewport_intersection_marker = getattr(
             frame, "viewport_intersection_marker", None
         )
-=======
->>>>>>> main
         # Apply any pending resize before touching the display texture
         # this frame. Done here (not inside on_resize) so Vulkan
         # resources are only ever rebuilt on the main thread.
@@ -1170,7 +1167,6 @@ class SlangPyHudPresenter:
                 placeholder = "Loading Scene..."
             self._draw_camera_placeholder(canvas, draw, camera_area, placeholder)
 
-<<<<<<< HEAD
         # Overlay the translucent first-intersection cylinder on the canvas over
         # the camera region. Done here (not in _draw_camera) because normal play
         # blits the camera via the GPU texture path, which never calls
@@ -1180,22 +1176,10 @@ class SlangPyHudPresenter:
         if camera_drawn:
             self._draw_viewport_intersection_marker(canvas)
 
-        # Poll the wheel / keyboard drive sink *every* tick, before any
-        # conditional panel drawing below. ``_keyboard_drive.update()``
-        # is the side-effect that publishes key state into the
-        # simulation; if it only ran from inside ``_draw_panel`` then a
-        # narrow window (``panel_w == 0``) or a user who resized the
-        # panel away mid-keypress would leave the last published drive
-        # command frozen until the panel came back -- e.g. release the
-        # throttle while the panel is hidden, then the throttle stays
-        # "down" until the next ``_draw_panel`` call. Speed-digit smoothing
-        # also lives downstream of this state, so it would otherwise drift.
-=======
         # Poll the drive sink *every* tick (before the conditional panel draw):
         # ``_keyboard_drive.update()`` publishes key state to the simulation, so
         # gating it on ``_draw_panel`` would freeze drive input whenever the
         # panel is hidden (narrow window). Speed smoothing also reads this.
->>>>>>> main
         wheel_state = self._poll_drive_state()
         self._update_speed(wheel_state)
 

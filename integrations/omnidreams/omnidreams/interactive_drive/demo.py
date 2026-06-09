@@ -73,21 +73,10 @@ BEV_PANEL_SIDE_MARGIN = 14
 BEV_PANEL_BOTTOM_MARGIN = 12
 BEV_PANEL_MIN_HEIGHT = 100
 
-<<<<<<< HEAD
-# Google-Maps "land" colour: warm cream, slightly desaturated. Matches the
-# off-white background on Google Maps' default day-mode tiles. Black /
-# unrendered regions of the BEV image get blended toward this colour by
-# :func:`_apply_googlemaps_filter`.
-GMAPS_LAND_RGB = (0, 0, 0)
-# Highlight tint for road paint / lane markings. Google Maps draws minor
-# roads in pale grey; we keep the rasterizer's whites/yellows but blend
-# them slightly toward this so they don't feel neon-bright on the cream.
-=======
 # Google-Maps day-mode palette for the BEV filter (:func:`_apply_googlemaps_filter`).
-# Warm cream "land" that unrendered/black BEV regions blend toward.
-GMAPS_LAND_RGB = (234, 226, 209)
+# "Land" colour that unrendered/black BEV regions blend toward; kept black here.
+GMAPS_LAND_RGB = (0, 0, 0)
 # Off-white "road" tint so lane paint reads as roads, not neon on the cream.
->>>>>>> main
 GMAPS_ROAD_RGB = (252, 250, 244)
 # Low-contrast warm grey for magenta road boundaries: keeps the edge readable
 # while dropping the cream-vs-magenta lightness jump that drove diagonal aliasing.
