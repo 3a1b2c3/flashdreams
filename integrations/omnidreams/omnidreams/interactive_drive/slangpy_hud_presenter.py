@@ -105,6 +105,9 @@ EVENT_POLL_INTERVAL_S = 0.005
 # Metres-per-second to miles-per-hour, for the speed digit.
 MPS_TO_MPH = 2.2369362920544
 
+# Miles-per-hour to kilometres-per-hour, for the secondary km/h readout.
+MPH_TO_KMH = 1.609344
+
 # Drive-key release debounce window. See the
 # ``_pending_drive_releases`` field documentation in
 # :class:`SlangPyHudPresenter`.
@@ -408,6 +411,9 @@ class SlangPyHudPresenter:
         self._variant_thumb_cache: dict[tuple[Any, str], Image.Image | None] = {}
         self._bev_panel_cache_key: tuple[int, int, int] | None = None
         self._bev_panel_cache: Image.Image | None = None
+        # Minimap zoom factor (1.0 = full view). Zooms the BEV panel and its
+        # markers about the ego position; adjusted live via the zoom keys.
+        self._bev_zoom: float = 1.0
 
         self._latest_camera_pil: Image.Image | None = None
         self._latest_bev_pil: Image.Image | None = None
@@ -415,10 +421,15 @@ class SlangPyHudPresenter:
         # frame, projected by the rasterizer from the pinned world point.
         self._latest_bev_target: tuple[float, float] | None = None
         self._latest_bev_target_offscreen: bool = False
-        # Static green "first intersection" goal for the latest frame. ``None``
-        # once the ego has driven over it (the dot then disappears).
-        self._latest_bev_green_target: tuple[float, float] | None = None
-        self._latest_bev_green_target_offscreen: bool = False
+        # Static "first intersection" goal for the latest frame. ``None`` once
+        # the ego has driven over it (the dot then disappears).
+        self._latest_bev_intersection_target: tuple[float, float] | None = None
+        self._latest_bev_intersection_target_offscreen: bool = False
+        # Main-viewport cylinder marker (base_nx, base_ny, top_nx, top_ny) for
+        # the first-intersection goal. ``None`` when it should not be drawn.
+        self._latest_viewport_intersection_marker: (
+            tuple[float, float, float, float] | None
+        ) = None
         # Numpy view of the latest world-model frame (RGBA8 with alpha
         # padded to 255) used by the GPU camera path. Lazily filled on
         # demand from ``_latest_camera_pil`` so we don't pay for the
@@ -463,6 +474,10 @@ class SlangPyHudPresenter:
         self._variant_item_rects: list[tuple[tuple[int, int, int, int], str]] = []
         self._hovered_scene_label: str | None = None
         self._hovered_variant: str | None = None
+        # Clickable HOME button (returns the ego to spawn). Rect is set each
+        # frame in _draw_panel; hover toggles its highlight.
+        self._home_button_rect: tuple[int, int, int, int] | None = None
+        self._hovered_home: bool = False
         self._mouse_pos: tuple[int, int] = (0, 0)
         self._speed_mph: float = 0.0
         self._is_fullscreen = False
@@ -551,9 +566,12 @@ class SlangPyHudPresenter:
         self._latest_bev_target_offscreen = bool(
             getattr(frame, "bev_target_offscreen", False)
         )
-        self._latest_bev_green_target = getattr(frame, "bev_green_target_norm", None)
-        self._latest_bev_green_target_offscreen = bool(
-            getattr(frame, "bev_green_target_offscreen", False)
+        self._latest_bev_intersection_target = getattr(frame, "bev_intersection_target_norm", None)
+        self._latest_bev_intersection_target_offscreen = bool(
+            getattr(frame, "bev_intersection_target_offscreen", False)
+        )
+        self._latest_viewport_intersection_marker = getattr(
+            frame, "viewport_intersection_marker", None
         )
         # Apply any pending resize before touching the display texture
         # this frame. Done here (not inside on_resize) so Vulkan
@@ -1340,6 +1358,15 @@ class SlangPyHudPresenter:
                 placeholder = "Loading Scene..."
             self._draw_camera_placeholder(canvas, draw, camera_area, placeholder)
 
+        # Overlay the translucent first-intersection cylinder on the canvas over
+        # the camera region. Done here (not in _draw_camera) because normal play
+        # blits the camera via the GPU texture path, which never calls
+        # _draw_camera; the canvas camera area is transparent there so the
+        # overlay composites on top of the GPU camera. Guarded so the camera
+        # still renders untouched when no marker is present.
+        if camera_drawn:
+            self._draw_viewport_intersection_marker(canvas)
+
         # Poll the wheel / keyboard drive sink *every* tick, before any
         # conditional panel drawing below. ``_keyboard_drive.update()``
         # is the side-effect that publishes key state into the
@@ -1406,6 +1433,94 @@ class SlangPyHudPresenter:
             canvas.paste(resized, (x, y))
         else:
             canvas.alpha_composite(resized, (x, y))
+
+    def _draw_viewport_intersection_marker(self, canvas: Image.Image) -> None:
+        """Draw a half-transparent cylinder billboard at the projected goal.
+
+        Drawn on ``self._canvas`` over the camera region (which the GPU path
+        composites under the canvas, and the CPU path paints opaque), using the
+        same centered cover-fit rect as the displayed camera frame so the
+        projected normalized coords land on the right pixels.
+
+        ``self._latest_viewport_intersection_marker`` is
+        ``(base_nx, base_ny, top_nx, top_ny)`` in [0,1] image fractions. The
+        cylinder body is a translucent quad between the base and top, capped with
+        ellipses; size follows the projected base->top pixel height (so it shrinks
+        with distance). Skipped when ``None`` (behind camera / passed over) or
+        clearly outside the panel.
+        """
+        marker = self._latest_viewport_intersection_marker
+        if marker is None:
+            return
+        fit = self._compute_camera_fit()
+        if fit is None:
+            return
+        w, h, x, y = fit  # fit_w, fit_h, offset_x, offset_y (camera-area coords)
+        base_nx, base_ny, top_nx, top_ny = marker
+        # Skip if the base is well outside the visible image (in front of the
+        # camera but out of frame).
+        if not (-0.15 <= base_nx <= 1.15 and -0.15 <= base_ny <= 1.15):
+            return
+        bx = x + base_nx * w
+        by = y + base_ny * h
+        tx = x + top_nx * w
+        ty = y + top_ny * h
+        # On-screen height = projected base->top distance, but floored to a
+        # minimum so the cylinder stays visible even far away (a 3 m post at
+        # ~200 m would otherwise be sub-pixel). Keep the projected lean
+        # direction; fall back to straight-up when it's degenerate.
+        seg_x, seg_y = tx - bx, ty - by
+        seg = _math.hypot(seg_x, seg_y)
+        draw_h = max(seg, 36.0)
+        if seg > 1e-3:
+            ux, uy = seg_x / seg, seg_y / seg
+        else:
+            ux, uy = 0.0, -1.0
+        tx, ty = bx + ux * draw_h, by + uy * draw_h
+        r = max(8.0, min(draw_h * 0.32, w * 0.12))
+        ery = max(3.0, r * 0.42)  # ellipse vertical half-height (foreshortening)
+        rgb = BEV_INTERSECTION_MARKER_RGB
+        body_rgba = rgb + (90,)
+        cap_rgba = rgb + (150,)
+        # Draw onto a transparent layer the size of the marker's bounding box so
+        # alpha composites correctly over the camera image (PIL ImageDraw with an
+        # alpha fill on the RGBA canvas would overwrite rather than blend).
+        pad = int(r + ery + 4)
+        min_x = int(min(bx, tx) - pad)
+        max_x = int(max(bx, tx) + pad)
+        min_y = int(min(by, ty) - pad)
+        max_y = int(max(by, ty) + pad)
+        layer_w = max(1, max_x - min_x)
+        layer_h = max(1, max_y - min_y)
+        layer = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
+        ld = ImageDraw.Draw(layer)
+        # Local coords within the layer.
+        lbx, lby = bx - min_x, by - min_y
+        ltx, lty = tx - min_x, ty - min_y
+        # Body as a quad between the two cap centres.
+        ld.polygon(
+            [
+                (lbx - r, lby),
+                (ltx - r, lty),
+                (ltx + r, lty),
+                (lbx + r, lby),
+            ],
+            fill=body_rgba,
+        )
+        # Top and base caps (top fully drawn; base front arc reads as the rim).
+        ld.ellipse(
+            (ltx - r, lty - ery, ltx + r, lty + ery),
+            fill=cap_rgba,
+            outline=rgb + (220,),
+            width=2,
+        )
+        ld.ellipse(
+            (lbx - r, lby - ery, lbx + r, lby + ery),
+            fill=cap_rgba,
+            outline=rgb + (220,),
+            width=2,
+        )
+        canvas.alpha_composite(layer, (min_x, min_y))
 
     def _draw_camera_placeholder(
         self,
@@ -1536,6 +1651,19 @@ class SlangPyHudPresenter:
         speed_y = variant_y + bar_h + 12
         self._draw_speed(canvas, draw, center_x, speed_y, int(self._speed_mph))
 
+        # Secondary km/h readout, centered just below the cached "mph" label and
+        # above the wheel. Drawn live (the value is dynamic, unlike the static
+        # "mph" unit text in the cached chrome).
+        kmh_text = f"{int(self._speed_mph * MPH_TO_KMH)} km/h"
+        kbox = _measure_text(self._font_tiny, kmh_text)
+        kw = kbox[2] - kbox[0]
+        draw.text(
+            (center_x - kw // 2 - kbox[0], speed_y + 90 - kbox[1]),
+            kmh_text,
+            fill=LABEL_COLOR,
+            font=self._font_tiny,
+        )
+
         # Light the reverse indicator red when reverse is engaged; the cached
         # chrome only draws the inactive grey "R" box at the same spot.
         if getattr(wheel_state, "reverse", False):
@@ -1551,6 +1679,28 @@ class SlangPyHudPresenter:
                 fill=(255, 255, 255),
                 font=self._font_tiny,
             )
+
+        # Clickable HOME button, mirroring the reverse "R" box on the right.
+        # Click (or press H) returns the ego to its spawn pose via the reset
+        # path. Drawn live (not in cached chrome) so the hover highlight can
+        # change without invalidating the chrome cache.
+        hb_label = "HOME"
+        hlbox = _measure_text(self._font_small, hb_label)
+        hlw, hlh = hlbox[2] - hlbox[0], hlbox[3] - hlbox[1]
+        hb_w = hlw + 18
+        hb_h = 32
+        hb_x0 = pr - 14 - hb_w
+        hb_y0 = speed_y + 70
+        self._home_button_rect = (hb_x0, hb_y0, hb_x0 + hb_w, hb_y0 + hb_h)
+        hb_fill = (70, 150, 80, 255) if self._hovered_home else (60, 70, 60, 255)
+        hb_fg = (235, 255, 235) if self._hovered_home else (190, 205, 190)
+        draw.rounded_rectangle(self._home_button_rect, radius=5, fill=hb_fill)
+        draw.text(
+            (hb_x0 + (hb_w - hlw) // 2 - hlbox[0], hb_y0 + (hb_h - hlh) // 2 - hlbox[1]),
+            hb_label,
+            fill=hb_fg,
+            font=self._font_small,
+        )
 
         # The wheel sits a little below the speed readout. Pedals are
         # anchored to ``speed_y`` (NOT the wheel center) below, so this
@@ -1997,13 +2147,20 @@ class SlangPyHudPresenter:
             )
             return
 
+        # Ego position within the panel (chevron anchor) -- also the centre the
+        # minimap zoom scales about, so the ego stays fixed while the map and
+        # markers magnify around it.
+        ego_ix = inner_w / 2.0
+        ego_iy = inner_h * self._bev_marker_y_rel()
+
         panel_image = self._get_bev_panel_image((inner_w, inner_h))
         if panel_image is not None:
+            panel_image = self._zoom_bev_panel(panel_image, ego_ix, ego_iy)
             canvas.paste(panel_image, (inner[0], inner[1]))
 
         # Ego marker (Google-Maps chevron) over the BEV panel.
-        marker_cx = inner[0] + inner_w // 2
-        marker_cy = inner[1] + int(inner_h * self._bev_marker_y_rel())
+        marker_cx = inner[0] + int(ego_ix)
+        marker_cy = inner[1] + int(ego_iy)
         marker_size = max(10, min(inner_w, inner_h) // 14)
         self._draw_bev_marker(draw, marker_cx, marker_cy, marker_size)
 
@@ -2012,10 +2169,11 @@ class SlangPyHudPresenter:
         # it stays visible (and reads as a direction) once the ego drives past.
         target = self._latest_bev_target
         if target is not None:
-            nx = min(1.0, max(0.0, float(target[0])))
-            ny = min(1.0, max(0.0, float(target[1])))
-            tx = inner[0] + int(nx * inner_w)
-            ty = inner[1] + int(ny * inner_h)
+            px, py = self._zoom_bev_point(
+                float(target[0]), float(target[1]), inner_w, inner_h, ego_ix, ego_iy
+            )
+            tx = inner[0] + int(px)
+            ty = inner[1] + int(py)
             # Big, high-contrast marker (white outer ring + red core) so it's
             # unmistakable on the dark map at any zoom. Clamped to the panel
             # edge above, so it stays visible once the ego drives past it.
@@ -2037,12 +2195,18 @@ class SlangPyHudPresenter:
         # has driven over it, which is how it disappears. Clamped to the panel
         # edge like the home dot so it reads as a direction while still ahead.
         # Drawn last so it sits on top of the GoogleMaps-filtered panel.
-        intersection_target = self._latest_bev_green_target
+        intersection_target = self._latest_bev_intersection_target
         if intersection_target is not None:
-            nx = min(1.0, max(0.0, float(intersection_target[0])))
-            ny = min(1.0, max(0.0, float(intersection_target[1])))
-            tx = inner[0] + int(nx * inner_w)
-            ty = inner[1] + int(ny * inner_h)
+            px, py = self._zoom_bev_point(
+                float(intersection_target[0]),
+                float(intersection_target[1]),
+                inner_w,
+                inner_h,
+                ego_ix,
+                ego_iy,
+            )
+            tx = inner[0] + int(px)
+            ty = inner[1] + int(py)
             tr = max(7, marker_size // 2)
             draw.ellipse(
                 (tx - tr - 3, ty - tr - 3, tx + tr + 3, ty + tr + 3),
@@ -2055,6 +2219,47 @@ class SlangPyHudPresenter:
                 outline=(255, 255, 255),
                 width=2,
             )
+
+    def _zoom_bev_panel(
+        self, panel: Image.Image, ego_ix: float, ego_iy: float
+    ) -> Image.Image:
+        """Magnify the BEV panel about the ego point by ``self._bev_zoom``.
+
+        Scales the panel up by the zoom factor and crops a panel-sized window
+        positioned so the ego pixel stays fixed, so zooming pushes the map out
+        from under the ego (which stays put). No-op at zoom 1.0.
+        """
+        z = self._bev_zoom
+        if z <= 1.0001:
+            return panel
+        w, h = panel.size
+        sw, sh = max(1, int(w * z)), max(1, int(h * z))
+        scaled = panel.resize((sw, sh), Image.Resampling.BILINEAR)
+        ox = min(max(0, int(round(ego_ix * (z - 1.0)))), sw - w)
+        oy = min(max(0, int(round(ego_iy * (z - 1.0)))), sh - h)
+        return scaled.crop((ox, oy, ox + w, oy + h))
+
+    def _zoom_bev_point(
+        self,
+        nx: float,
+        ny: float,
+        inner_w: int,
+        inner_h: int,
+        ego_ix: float,
+        ego_iy: float,
+    ) -> tuple[float, float]:
+        """Map a normalized BEV coord to a zoomed inner-panel pixel about the ego.
+
+        Uses the same ego-centred scaling as :meth:`_zoom_bev_panel` so markers
+        track the map under zoom, then clamps to the panel so an off-map marker
+        stays pinned to the edge as a direction indicator.
+        """
+        z = self._bev_zoom
+        px = ego_ix + (nx * inner_w - ego_ix) * z
+        py = ego_iy + (ny * inner_h - ego_iy) * z
+        px = min(float(inner_w), max(0.0, px))
+        py = min(float(inner_h), max(0.0, py))
+        return px, py
 
     def _get_bev_panel_image(self, target_size: tuple[int, int]) -> Image.Image | None:
         if self._latest_bev_pil is None:
@@ -2306,6 +2511,15 @@ class SlangPyHudPresenter:
             "d": _lookup_key(spy.KeyCode, "d"),
             "r": _lookup_key(spy.KeyCode, "r"),
             "x": _lookup_key(spy.KeyCode, "x"),
+            "h": _lookup_key(spy.KeyCode, "h"),
+            # Minimap zoom: '=' / ']' zoom in, '-' / '[' zoom out (first alias
+            # the slangpy KeyCode enum exposes wins).
+            "bev_zoom_in": _lookup_key(
+                spy.KeyCode, "equal", "plus", "bracket_right", "bracketright"
+            ),
+            "bev_zoom_out": _lookup_key(
+                spy.KeyCode, "minus", "bracket_left", "bracketleft"
+            ),
             "space": _lookup_key(spy.KeyCode, "space"),
             "up": _lookup_key(spy.KeyCode, "up", "arrow_up"),
             "down": _lookup_key(spy.KeyCode, "down", "arrow_down"),
@@ -2367,6 +2581,15 @@ class SlangPyHudPresenter:
             self._keyboard.set_view_mode("rgb")
         elif self._key_matches(key, "r"):
             self._keyboard.request_reset()
+        elif self._key_matches(key, "h"):
+            # Home: return the ego to its spawn pose. Reuses the reset path
+            # (full respawn at the scene's initial pose), which is the only
+            # consistent option for the world-model backend.
+            self._keyboard.request_reset()
+        elif self._key_matches(key, "bev_zoom_in"):
+            self._bev_zoom = min(4.0, self._bev_zoom * 1.3)
+        elif self._key_matches(key, "bev_zoom_out"):
+            self._bev_zoom = max(1.0, self._bev_zoom / 1.3)
         elif self._key_matches(key, "x"):
             self.exit_scene()
 
@@ -2445,6 +2668,9 @@ class SlangPyHudPresenter:
     def _update_hover(self, pos: tuple[int, int]) -> None:
         self._hovered_scene_label = None
         self._hovered_variant = None
+        self._hovered_home = self._home_button_rect is not None and _rect_contains(
+            self._home_button_rect, pos
+        )
         if self._scene_dropdown_open:
             for rect, scene in self._scene_item_rects:
                 if _rect_contains(rect, pos):
@@ -2461,6 +2687,11 @@ class SlangPyHudPresenter:
         # locked (the only mouse-clickable HUD elements), so ignore clicks
         # until every scene is cached and selection is instant.
         if self._scene_selection_locked():
+            return
+        # HOME button: return the ego to spawn (reset path). Checked before the
+        # dropdowns since it's a fixed control that should always win.
+        if self._home_button_rect and _rect_contains(self._home_button_rect, pos):
+            self._keyboard.request_reset()
             return
         # Variant dropdown sits on top of the scene dropdown items, so
         # check it first.

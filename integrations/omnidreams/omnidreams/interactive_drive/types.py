@@ -221,12 +221,17 @@ class PresentedFrame:
     # when the target is outside the panel (the HUD clamps it to the edge).
     bev_target_norm: tuple[float, float] | None = None
     bev_target_offscreen: bool = False
-    # Normalized [0,1] panel coords of the static green "first intersection"
+    # Normalized [0,1] panel coords of the static "first intersection"
     # goal, pinned to a fixed world point (the intersection-area polygon nearest
     # the spawn). ``None`` once the ego has driven over it (it then disappears),
     # when BEV is disabled, or when the scene has no intersection data.
-    bev_green_target_norm: tuple[float, float] | None = None
-    bev_green_target_offscreen: bool = False
+    bev_intersection_target_norm: tuple[float, float] | None = None
+    bev_intersection_target_offscreen: bool = False
+    # Main-viewport cylinder marker for the first-intersection goal, as
+    # ``(base_nx, base_ny, top_nx, top_ny)`` normalized [0,1] image fractions
+    # (base on the ground, top above it). ``None`` when behind the camera, BEV
+    # disabled, the scene has no intersection, or the ego has passed over it.
+    viewport_intersection_marker: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)

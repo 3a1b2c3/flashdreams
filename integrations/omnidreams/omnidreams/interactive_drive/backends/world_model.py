@@ -211,6 +211,9 @@ class WorldModelRenderBackend(RenderBackend):
     def reset(self) -> None:
         self._session.reset()
         self._next_chunk_count = 0
+        # Home / manual reset returns the ego to spawn, so bring the
+        # first-intersection marker back (clear its passed-over latch).
+        self._rasterizer.rearm_intersection_target()
 
     def reset_scene_conditioning(self) -> None:
         self._session.reset(clear_precomputed_embeddings=True)
@@ -277,8 +280,9 @@ class WorldModelRenderBackend(RenderBackend):
                     bev_host_uint8=raster_frame.bev_host_uint8,
                     bev_target_norm=raster_frame.bev_target_norm,
                     bev_target_offscreen=raster_frame.bev_target_offscreen,
-                    bev_green_target_norm=raster_frame.bev_green_target_norm,
-                    bev_green_target_offscreen=raster_frame.bev_green_target_offscreen,
+                    bev_intersection_target_norm=raster_frame.bev_intersection_target_norm,
+                    bev_intersection_target_offscreen=raster_frame.bev_intersection_target_offscreen,
+                    viewport_intersection_marker=raster_frame.viewport_intersection_marker,
                     status_message=(
                         _FIRST_STEADY_STATE_WARMUP_MESSAGE
                         if annotate_first_transition and index == last_index
