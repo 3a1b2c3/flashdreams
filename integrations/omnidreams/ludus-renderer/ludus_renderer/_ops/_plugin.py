@@ -37,7 +37,6 @@ def _get_plugin():
 
     # Make sure we can find the necessary compiler and library binaries.
     if os.name == "nt":
-        lib_dir = os.path.dirname(__file__) + r"\..\lib"
 
         def find_cl_path():
             import glob
@@ -77,6 +76,9 @@ def _get_plugin():
     # (-Wno-psabi mutes the GCC 7.1->10.1 PSABI advisory notes on Math.hpp
     # Vec2f/Vec3f/Vec4f/Mat* members -- informational, no source-level fix.)
     if os.name == "nt":
+        # TODO: add MSVC warnings-as-errors (/W3 /WX) so the Windows build does
+        # not drift to warnings-ignored; the POSIX branch already gates on
+        # -Wall -Werror. Bootstrapped without it to land the initial port.
         cc_opts = common_defines + ["/wd4067", "/wd4624"]
         cuda_opts = common_defines + [
             "-lineinfo",
@@ -99,6 +101,9 @@ def _get_plugin():
     elif os.name == "nt":
         # Link the CUDA driver API (cu* functions). MSVC needs cuda.lib, which
         # lives in $CUDA_HOME\lib\x64 (not auto-added like the runtime libs).
+        # torch's ninja writer quotes each ldflag via _nt_quote_args, so a
+        # /LIBPATH whose CUDA home contains spaces (C:\Program Files\...) is
+        # passed to link.exe as a single quoted token rather than splitting.
         _cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH") or ""
         ldflags = ["cuda.lib"]
         if _cuda_home:

@@ -34,8 +34,10 @@ import yaml
 from loguru import logger
 
 # fcntl is Linux-only (used for the evdev ioctls below). It's absent on Windows,
-# where those evdev code paths are never exercised -- so import it optionally and
-# let the (unused-on-Windows) call sites no-op rather than crashing at import.
+# where there are no /dev/input evdev nodes, so the ioctl call sites are
+# unreachable. Import it optionally so the module loads on Windows; the two
+# public entry points (read_evdev_name, scan_evdev_devices) short-circuit when
+# fcntl is None so the unreachable ioctl paths are never entered.
 try:
     import fcntl
 except ImportError:  # Windows / non-Linux
@@ -188,6 +190,8 @@ def name_match_strength(device_name: str, patterns) -> int:
 
 def read_evdev_name(path: Path) -> str | None:
     """Return the evdev device name at *path*, or ``None`` if unreadable."""
+    if fcntl is None:  # no evdev on this platform (e.g. Windows)
+        return None
     try:
         with path.open("rb") as handle:
             name_buf = array.array("B", [0] * 256)
@@ -237,6 +241,8 @@ def scan_evdev_devices() -> tuple[EvdevDevice, ...]:
     Scans ``/dev/input/by-id`` first (stable, descriptive symlinks) then
     ``/dev/input/event*``, de-duplicating by resolved path.
     """
+    if fcntl is None:  # no evdev on this platform (e.g. Windows)
+        return ()
     candidates: list[Path] = []
     by_id = Path("/dev/input/by-id")
     if by_id.is_dir():
