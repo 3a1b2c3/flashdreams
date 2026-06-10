@@ -24,7 +24,6 @@ the demo runtime can both depend on it cheaply.
 from __future__ import annotations
 
 import array
-import fcntl
 import os
 import struct
 import time
@@ -33,6 +32,14 @@ from pathlib import Path
 
 import yaml
 from loguru import logger
+
+# fcntl is Linux-only (used for the evdev ioctls below). It's absent on Windows,
+# where those evdev code paths are never exercised -- so import it optionally and
+# let the (unused-on-Windows) call sites no-op rather than crashing at import.
+try:
+    import fcntl
+except ImportError:  # Windows / non-Linux
+    fcntl = None
 
 # --- evdev wire format / ioctl constants -------------------------------
 # Linux input_event struct: two longs (timeval), two u16, one s32.
