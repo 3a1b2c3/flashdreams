@@ -70,6 +70,11 @@ dependencies = [
 # binary, tyro union over runners as direct subcommands).
 flashdreams-run = "flashdreams.scripts.cli:entrypoint"
 
+[project.entry-points."flashdreams.postprocess_presets"]
+"rtx-super-resolution" = "flashdreams.infra.postprocess:POSTPROCESS_PRESET_RTX_SUPER_RESOLUTION"
+"rtx-super-resolution-ultra" = "flashdreams.infra.postprocess:POSTPROCESS_PRESET_RTX_SUPER_RESOLUTION_ULTRA"
+"rtx-deblur-ultra" = "flashdreams.infra.postprocess:POSTPROCESS_PRESET_RTX_DEBLUR_ULTRA"
+
 [project.urls]
 Homepage = "https://github.com/NVIDIA/flashdreams"
 Repository = "https://github.com/NVIDIA/flashdreams"
@@ -107,6 +112,12 @@ runners = [
     "mediapy>=1.1",
     "opencv-python-headless>=4.5",
     "scipy>=1.11",
+]
+# Optional NVIDIA VFX runtime used only by the RTX postprocess presets.
+# Kept out of the default install because it is proprietary and requires
+# supported NVIDIA RTX hardware.
+rtx-postprocess = [
+    "nvidia-vfx==0.1.0.1",
 ]
 serving = [
     "aiohttp>=3.9",
