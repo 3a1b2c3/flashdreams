@@ -273,31 +273,44 @@ class PyNvHardwareEncoder:
                 f"{type(track).__name__}. Create it via encoder.create_track()."
             )
         loop = asyncio.get_running_loop()
+        emitted = 0
+        enqueued = 0
 
-        def _stream(pkt: Packet) -> None:
-            # Marshal each packet back onto the asyncio loop as soon as
-            # NVENC produces it, rather than waiting for the whole chunk
-            # to finish encoding — otherwise the first packet's latency is
-            # bounded below by ``T / fps``.
+        def _stream(packet: Packet) -> None:
+            nonlocal emitted, enqueued
+            emitted += 1
+            enqueue = track.enqueue_encoded_packet(packet)
             try:
-                loop.call_soon_threadsafe(
-                    track.enqueue_encoded_packet_nowait,
-                    pkt,
+                future = asyncio.run_coroutine_threadsafe(
+                    enqueue,
+                    loop,
                 )
             except RuntimeError:
-                # Loop has been closed; drop the packet silently rather
-                # than raising from the encode worker thread.
+                enqueue.close()
                 return
+            try:
+                accepted = future.result()
+            except Exception:
+                return
+            if accepted:
+                enqueued += 1
 
-        num_frames, num_keyframes, encode_ms = await asyncio.to_thread(
+        _num_frames, num_keyframes, encode_ms = await asyncio.to_thread(
             self.encode_chunk_sync,
             chunk,
             force_keyframe=force_keyframe,
             on_packet=_stream,
         )
+        if enqueued < emitted:
+            logger.debug(
+                "NVENC track closed while enqueueing encoded chunk; "
+                "enqueued {} of {} packet(s).",
+                enqueued,
+                emitted,
+            )
         return ChunkDeliveryResult(
             backend=self.backend,
-            num_frames=num_frames,
+            num_frames=enqueued,
             num_keyframes=num_keyframes,
             encode_ms=encode_ms,
         )
