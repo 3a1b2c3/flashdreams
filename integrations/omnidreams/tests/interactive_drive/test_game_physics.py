@@ -64,6 +64,7 @@ from omnidreams.interactive_drive.simulation.game_physics import (
     _is_visual_flare_impact,
     _recorded_actor_trajectory,
     _simplify_barrier_segments,
+    _yaw_from_quaternion_xyzw,
 )
 from omnidreams.interactive_drive.simulation.traffic_ai import TrafficDriverAI
 from omnidreams.interactive_drive.types import (
@@ -357,6 +358,64 @@ def test_side_impact_is_resolved_by_physx_contact() -> None:
     assert max(actor_tilts) < 0.5
     assert actor_heights[-1] == pytest.approx(0.8, abs=0.08)
     world.close()
+
+
+def test_physx_vehicle_yaw_is_free_away_from_road_boundaries() -> None:
+    config = VehicleConfig()
+    world = PhysXWorld(
+        PhysicsObjectGraph(objects=()),
+        rigid_body_model_from_vehicle_config(config),
+    )
+    initial_yaw = math.radians(70.0)
+    ego = BodyState(
+        position_m=np.asarray([0.0, 0.0, 2.0], dtype=np.float32),
+        orientation_xyzw=np.asarray(
+            [0.0, 0.0, math.sin(initial_yaw * 0.5), math.cos(initial_yaw * 0.5)],
+            dtype=np.float32,
+        ),
+        linear_velocity_mps=np.zeros(3, dtype=np.float32),
+        angular_velocity_radps=np.zeros(3, dtype=np.float32),
+    )
+
+    try:
+        resolved = world.step(ego, timestamp_us=0, dt_s=1.0 / 120.0).ego
+    finally:
+        world.close()
+
+    assert _yaw_from_quaternion_xyzw(resolved.orientation_xyzw) == pytest.approx(
+        initial_yaw, abs=1.0e-5
+    )
+
+
+def test_physx_vehicle_yaw_is_limited_at_road_boundary() -> None:
+    config = VehicleConfig()
+    world = PhysXWorld(
+        PhysicsObjectGraph(
+            objects=(),
+            barriers=(InvisibleBarrier((-10.0, 0.0), (10.0, 0.0)),),
+        ),
+        rigid_body_model_from_vehicle_config(config),
+    )
+    initial_yaw = math.radians(70.0)
+    ego = BodyState(
+        position_m=np.asarray([0.0, 0.0, 2.0], dtype=np.float32),
+        orientation_xyzw=np.asarray(
+            [0.0, 0.0, math.sin(initial_yaw * 0.5), math.cos(initial_yaw * 0.5)],
+            dtype=np.float32,
+        ),
+        linear_velocity_mps=np.zeros(3, dtype=np.float32),
+        angular_velocity_radps=np.asarray([0.0, 0.0, 1.0], dtype=np.float32),
+    )
+
+    try:
+        resolved = world.step(ego, timestamp_us=0, dt_s=1.0 / 120.0).ego
+    finally:
+        world.close()
+
+    assert abs(_yaw_from_quaternion_xyzw(resolved.orientation_xyzw)) <= math.radians(
+        25.0
+    ) + 1.0e-5
+    assert resolved.angular_velocity_radps[2] <= 1.0e-5
 
 
 def test_collision_yaw_impulse_stays_within_camera_continuity_envelope() -> None:

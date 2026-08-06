@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -30,6 +31,7 @@ using namespace physx;
 namespace {
 
 constexpr std::size_t kStateWidth = 13;
+constexpr float kMaxOffRoadYawRad = 0.4363323129985824f;
 
 PxFilterFlags vehicleFilterShader(
     PxFilterObjectAttributes,
@@ -709,6 +711,76 @@ private:
             mScene->simulate(substepDt);
             if (!mScene->fetchResults(true))
                 throw std::runtime_error("PhysX fetchResults failed");
+            constrainVehicleYawsAtBarriers();
+        }
+    }
+
+    void constrainVehicleYawsAtBarriers()
+    {
+        for (auto& entry : mBodies) {
+            BodyRecord& body = entry.second;
+            if (!body.hasVehicle()
+                || body.actor->getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC))
+                continue;
+
+            PxTransform pose = body.actor->getGlobalPose();
+            const float yaw = yawFromQuaternion(pose.q);
+            const PxVec2 position(pose.p.x, pose.p.y);
+            const PxVec2 forward(std::cos(yaw), std::sin(yaw));
+            const PxVec2 left(-forward.y, forward.x);
+            const BarrierRecord* nearestBoundary = nullptr;
+            float nearestClearance = std::numeric_limits<float>::max();
+            for (const auto& barrierEntry : mBarriers) {
+                const BarrierRecord& barrier = barrierEntry.second;
+                const PxVec2 segment = barrier.end - barrier.start;
+                const float lengthSquared = segment.magnitudeSquared();
+                if (lengthSquared <= 1.0e-8f)
+                    continue;
+                const float alpha = std::clamp(
+                    (position - barrier.start).dot(segment) / lengthSquared,
+                    0.0f,
+                    1.0f);
+                const PxVec2 offset = position - (barrier.start + segment * alpha);
+                const float distance = offset.magnitude();
+                const PxVec2 normal = distance > 1.0e-6f
+                    ? offset / distance
+                    : PxVec2(-segment.y, segment.x).getNormalized();
+                const float support = std::abs(normal.dot(forward)) * body.halfExtents.x
+                    + std::abs(normal.dot(left)) * body.halfExtents.y;
+                const float clearance = distance - support - barrier.thickness * 0.5f;
+                if (clearance <= 0.05f && clearance < nearestClearance) {
+                    nearestBoundary = &barrier;
+                    nearestClearance = clearance;
+                }
+            }
+            // A vehicle whose complete footprint clears every road boundary
+            // remains free to take any heading while it is fully on the road.
+            if (!nearestBoundary)
+                continue;
+
+            const PxVec2 roadAxis = nearestBoundary->end - nearestBoundary->start;
+            const float roadYaw = std::atan2(roadAxis.y, roadAxis.x);
+            float yawError = wrappedAngle(yaw - roadYaw);
+            if (yawError > 1.5707963267948966f)
+                yawError -= 3.1415926535897932f;
+            else if (yawError < -1.5707963267948966f)
+                yawError += 3.1415926535897932f;
+            const float constrainedYawError = std::clamp(
+                yawError, -kMaxOffRoadYawRad, kMaxOffRoadYawRad);
+            if (constrainedYawError == yawError)
+                continue;
+
+            pose.q = PxQuat(
+                constrainedYawError - yawError,
+                PxVec3(0.0f, 0.0f, 1.0f)) * pose.q;
+            pose.q.normalize();
+            body.actor->setGlobalPose(pose, false);
+
+            PxVec3 angularVelocity = body.actor->getAngularVelocity();
+            if (angularVelocity.z * yawError > 0.0f) {
+                angularVelocity.z = 0.0f;
+                body.actor->setAngularVelocity(angularVelocity, false);
+            }
         }
     }
 
