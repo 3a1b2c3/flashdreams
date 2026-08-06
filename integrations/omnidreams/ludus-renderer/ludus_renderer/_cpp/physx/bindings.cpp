@@ -31,6 +31,7 @@ using namespace physx;
 namespace {
 
 constexpr std::size_t kStateWidth = 13;
+constexpr std::size_t kTrackStateWidth = 10;
 constexpr float kMaxOffRoadYawRad = 0.4363323129985824f;
 
 PxFilterFlags vehicleFilterShader(
@@ -109,6 +110,11 @@ struct BarrierRecord {
     PxMaterial* material = nullptr;
     PxVec2 start{0.0f};
     PxVec2 end{0.0f};
+    PxVec2 segment{0.0f};
+    PxVec2 minimum{0.0f};
+    PxVec2 maximum{0.0f};
+    float lengthSquared = 0.0f;
+    float yaw = 0.0f;
     float thickness = 0.0f;
 };
 
@@ -141,6 +147,7 @@ class NativeScene {
 public:
     explicit NativeScene(std::size_t capacity)
         : mCapacity(capacity), mStates(capacity * kStateWidth, 0.0f),
+          mTrackStates(capacity * kTrackStateWidth, 0.0f),
           mIds(capacity, -1), mActive(capacity, 0),
           mCollisionActive(capacity, 0), mDetached(capacity, 0),
           mStruck(capacity, 0)
@@ -486,6 +493,15 @@ public:
                 material,
                 PxVec2(start.data()[0], start.data()[1]),
                 PxVec2(end.data()[0], end.data()[1]),
+                PxVec2(dx, dy),
+                PxVec2(
+                    std::min(start.data()[0], end.data()[0]),
+                    std::min(start.data()[1], end.data()[1])),
+                PxVec2(
+                    std::max(start.data()[0], end.data()[0]),
+                    std::max(start.data()[1], end.data()[1])),
+                length * length,
+                yaw,
                 thickness});
     }
 
@@ -566,6 +582,7 @@ public:
                 body.trackVisible = true;
                 ++visibleCount;
                 const TrackSample track = sampleTrack(body, timestampUs);
+                writeTrackState(body, track);
                 const PxTransform actorTransform = body.actor->getGlobalPose();
                 const PxVec3 actorVelocity = body.actor->getLinearVelocity();
                 const bool overlapsEgo = actorCollisionEnabled
@@ -634,6 +651,15 @@ public:
             {static_cast<py::ssize_t>(mCapacity), static_cast<py::ssize_t>(kStateWidth)},
             {static_cast<py::ssize_t>(kStateWidth * sizeof(float)), static_cast<py::ssize_t>(sizeof(float))},
             mStates.data(),
+            py::none());
+    }
+
+    py::array trackStateBuffer()
+    {
+        return py::array_t<float>(
+            {static_cast<py::ssize_t>(mCapacity), static_cast<py::ssize_t>(kTrackStateWidth)},
+            {static_cast<py::ssize_t>(kTrackStateWidth * sizeof(float)), static_cast<py::ssize_t>(sizeof(float))},
+            mTrackStates.data(),
             py::none());
     }
 
@@ -730,21 +756,29 @@ private:
             const PxVec2 left(-forward.y, forward.x);
             const BarrierRecord* nearestBoundary = nullptr;
             float nearestClearance = std::numeric_limits<float>::max();
+            const float bodyRadius = std::sqrt(
+                body.halfExtents.x * body.halfExtents.x
+                + body.halfExtents.y * body.halfExtents.y) + 0.05f;
             for (const auto& barrierEntry : mBarriers) {
                 const BarrierRecord& barrier = barrierEntry.second;
-                const PxVec2 segment = barrier.end - barrier.start;
-                const float lengthSquared = segment.magnitudeSquared();
-                if (lengthSquared <= 1.0e-8f)
+                const float broadPhaseRadius =
+                    bodyRadius + barrier.thickness * 0.5f;
+                if (position.x < barrier.minimum.x - broadPhaseRadius
+                    || position.x > barrier.maximum.x + broadPhaseRadius
+                    || position.y < barrier.minimum.y - broadPhaseRadius
+                    || position.y > barrier.maximum.y + broadPhaseRadius)
                     continue;
                 const float alpha = std::clamp(
-                    (position - barrier.start).dot(segment) / lengthSquared,
+                    (position - barrier.start).dot(barrier.segment)
+                        / barrier.lengthSquared,
                     0.0f,
                     1.0f);
-                const PxVec2 offset = position - (barrier.start + segment * alpha);
+                const PxVec2 offset =
+                    position - (barrier.start + barrier.segment * alpha);
                 const float distance = offset.magnitude();
                 const PxVec2 normal = distance > 1.0e-6f
                     ? offset / distance
-                    : PxVec2(-segment.y, segment.x).getNormalized();
+                    : PxVec2(-barrier.segment.y, barrier.segment.x).getNormalized();
                 const float support = std::abs(normal.dot(forward)) * body.halfExtents.x
                     + std::abs(normal.dot(left)) * body.halfExtents.y;
                 const float clearance = distance - support - barrier.thickness * 0.5f;
@@ -758,9 +792,7 @@ private:
             if (!nearestBoundary)
                 continue;
 
-            const PxVec2 roadAxis = nearestBoundary->end - nearestBoundary->start;
-            const float roadYaw = std::atan2(roadAxis.y, roadAxis.x);
-            float yawError = wrappedAngle(yaw - roadYaw);
+            float yawError = wrappedAngle(yaw - nearestBoundary->yaw);
             if (yawError > 1.5707963267948966f)
                 yawError -= 3.1415926535897932f;
             else if (yawError < -1.5707963267948966f)
@@ -1131,15 +1163,24 @@ private:
         const float yaw = yawFromQuaternion(egoTransform.q);
         const PxVec2 forward(std::cos(yaw), std::sin(yaw));
         const PxVec2 left(-forward.y, forward.x);
+        const float egoRadius = std::sqrt(
+            ego.halfExtents.x * ego.halfExtents.x
+            + ego.halfExtents.y * ego.halfExtents.y) + 0.05f;
         for (const auto& entry : mBarriers) {
             const BarrierRecord& barrier = entry.second;
-            const PxVec2 segment = barrier.end - barrier.start;
-            const float lengthSquared = segment.magnitudeSquared();
-            if (lengthSquared <= 1.0e-8f)
+            const float broadPhaseRadius = egoRadius + barrier.thickness * 0.5f;
+            if (position.x < barrier.minimum.x - broadPhaseRadius
+                || position.x > barrier.maximum.x + broadPhaseRadius
+                || position.y < barrier.minimum.y - broadPhaseRadius
+                || position.y > barrier.maximum.y + broadPhaseRadius)
                 continue;
             const float alpha = std::clamp(
-                (position - barrier.start).dot(segment) / lengthSquared, 0.0f, 1.0f);
-            const PxVec2 offset = position - (barrier.start + segment * alpha);
+                (position - barrier.start).dot(barrier.segment)
+                    / barrier.lengthSquared,
+                0.0f,
+                1.0f);
+            const PxVec2 offset =
+                position - (barrier.start + barrier.segment * alpha);
             const float distance = offset.magnitude();
             PxVec2 normal;
             if (distance > 1.0e-6f) {
@@ -1192,6 +1233,10 @@ private:
         mDetached[slot] = 0;
         mStruck[slot] = 0;
         std::fill_n(mStates.data() + slot * kStateWidth, kStateWidth, 0.0f);
+        std::fill_n(
+            mTrackStates.data() + slot * kTrackStateWidth,
+            kTrackStateWidth,
+            0.0f);
         mFreeSlots.push_back(slot);
     }
 
@@ -1224,6 +1269,21 @@ private:
         output[12] = angular.z;
     }
 
+    void writeTrackState(const BodyRecord& body, const TrackSample& track)
+    {
+        float* output = mTrackStates.data() + body.slot * kTrackStateWidth;
+        output[0] = track.transform.p.x;
+        output[1] = track.transform.p.y;
+        output[2] = track.transform.p.z;
+        output[3] = track.transform.q.x;
+        output[4] = track.transform.q.y;
+        output[5] = track.transform.q.z;
+        output[6] = track.transform.q.w;
+        output[7] = track.velocity.x;
+        output[8] = track.velocity.y;
+        output[9] = track.velocity.z;
+    }
+
     void addGround()
     {
         mGroundMaterial = mPhysics->createMaterial(0.8f, 0.8f, 0.05f);
@@ -1249,6 +1309,7 @@ private:
     std::size_t mNextSlot = 0;
     std::vector<std::size_t> mFreeSlots;
     std::vector<float> mStates;
+    std::vector<float> mTrackStates;
     std::vector<std::int64_t> mIds;
     std::vector<std::uint8_t> mActive;
     std::vector<std::uint8_t> mCollisionActive;
@@ -1278,6 +1339,7 @@ PYBIND11_MODULE(ludus_physx_native, module)
         .def("step", &NativeScene::step)
         .def("step_tracked", &NativeScene::stepTracked)
         .def("state_buffer", &NativeScene::stateBuffer)
+        .def("track_state_buffer", &NativeScene::trackStateBuffer)
         .def("id_buffer", &NativeScene::idBuffer)
         .def("active_buffer", &NativeScene::activeBuffer)
         .def("collision_active_buffer", &NativeScene::collisionActiveBuffer)

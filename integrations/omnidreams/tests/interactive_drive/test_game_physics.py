@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -121,9 +122,7 @@ def _fast_moving_track() -> WorldVehicleBBoxTrack:
         centers_world=np.asarray(
             [[20.0, 0.0, 0.8], [220.0, 0.0, 0.8]], dtype=np.float32
         ),
-        dimensions_lwh=np.asarray(
-            [[4.0, 1.9, 1.6], [4.0, 1.9, 1.6]], dtype=np.float32
-        ),
+        dimensions_lwh=np.asarray([[4.0, 1.9, 1.6], [4.0, 1.9, 1.6]], dtype=np.float32),
         orientations_xyzw=np.asarray(
             [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]], dtype=np.float32
         ),
@@ -193,9 +192,7 @@ def test_visual_flare_ignores_side_swipe_that_only_adds_lateral_velocity() -> No
     assert not _is_visual_flare_impact(
         True,
         before_velocity_mps=np.asarray([20.0 * mph_to_mps, 0.0, 0.0]),
-        after_velocity_mps=np.asarray(
-            [20.0 * mph_to_mps, 5.0 * mph_to_mps, 0.0]
-        ),
+        after_velocity_mps=np.asarray([20.0 * mph_to_mps, 5.0 * mph_to_mps, 0.0]),
         driving_direction_xy=np.asarray([1.0, 0.0]),
     )
 
@@ -220,9 +217,7 @@ def test_visual_flare_counts_external_hit_across_driving_direction() -> None:
     assert _is_visual_flare_impact(
         True,
         before_velocity_mps=np.asarray([20.0 * mph_to_mps, 0.0, 0.0]),
-        after_velocity_mps=np.asarray(
-            [20.0 * mph_to_mps, 5.0 * mph_to_mps, 0.0]
-        ),
+        after_velocity_mps=np.asarray([20.0 * mph_to_mps, 5.0 * mph_to_mps, 0.0]),
         driving_direction_xy=np.asarray([1.0, 0.0]),
         impact_normal_xy=np.asarray([0.0, 1.0]),
     )
@@ -412,9 +407,10 @@ def test_physx_vehicle_yaw_is_limited_at_road_boundary() -> None:
     finally:
         world.close()
 
-    assert abs(_yaw_from_quaternion_xyzw(resolved.orientation_xyzw)) <= math.radians(
-        25.0
-    ) + 1.0e-5
+    assert (
+        abs(_yaw_from_quaternion_xyzw(resolved.orientation_xyzw))
+        <= math.radians(25.0) + 1.0e-5
+    )
     assert resolved.angular_velocity_radps[2] <= 1.0e-5
 
 
@@ -526,9 +522,7 @@ def test_non_ego_track_drive_is_limited_to_fifteen_mph() -> None:
     try:
         for frame_index in range(180):
             world.step(parked_ego, frame_index * 33_333, 1.0 / 30.0)
-            actor_velocity = world._world.body_state(
-                "car-fast"
-            ).linear_velocity_mps
+            actor_velocity = world._world.body_state("car-fast").linear_velocity_mps
             actor_speeds_mps.append(float(np.linalg.norm(actor_velocity[:2])))
     finally:
         world.close()
@@ -831,6 +825,7 @@ def test_physx_world_applies_incremental_graph_changes_in_stable_buffers() -> No
     graph = PhysicsObjectGraph()
     world = PhysXWorld(graph, ego_model, capacity=8)
     state_pointer = world.state_buffer.__array_interface__["data"][0]
+    track_state_pointer = world._track_state_buffer.__array_interface__["data"][0]
     active_pointer = world.active_buffer.__array_interface__["data"][0]
     track = _track()
     actor = SceneObject(
@@ -849,6 +844,9 @@ def test_physx_world_applies_incremental_graph_changes_in_stable_buffers() -> No
     assert world.body_count == 2
     assert world.barrier_count == 1
     assert world.state_buffer.__array_interface__["data"][0] == state_pointer
+    assert world._track_state_buffer.__array_interface__["data"][0] == (
+        track_state_pointer
+    )
     assert world.active_buffer.__array_interface__["data"][0] == active_pointer
 
     graph.remove_object(actor.object_id)
@@ -860,6 +858,30 @@ def test_physx_world_applies_incremental_graph_changes_in_stable_buffers() -> No
     assert int(world.active_buffer.sum()) == 1
     assert world.state_buffer.__array_interface__["data"][0] == state_pointer
     world.close()
+
+
+def test_game_world_reuses_native_track_samples_during_step() -> None:
+    world = GamePhysicsWorld(_scene(_track()), VehicleConfig())
+    parked_ego = VehicleState(
+        x_m=-20.0,
+        y_m=0.0,
+        z_m=0.0,
+        yaw_rad=0.0,
+        speed_mps=0.0,
+        steer_rad=0.0,
+    )
+
+    try:
+        with patch.object(
+            SceneObject,
+            "sample",
+            side_effect=AssertionError("track was sampled again in Python"),
+        ):
+            _, samples = world.step(parked_ego, timestamp_us=0, dt_s=1.0 / 30.0)
+
+        assert len(samples) == 1
+    finally:
+        world.close()
 
 
 def test_game_world_recenters_topology_without_reallocating_state_buffers() -> None:
@@ -881,7 +903,7 @@ def test_game_world_bounds_physics_topology_around_ego() -> None:
     world = GamePhysicsWorld(
         _scene(
             _track("Car", x_m=95.0),
-            _track("Truck", x_m=97.0),
+            _track("Truck", x_m=100.0),
         ),
         VehicleConfig(),
     )
@@ -890,6 +912,31 @@ def test_game_world_bounds_physics_topology_around_ego() -> None:
     assert world.synchronize_window(np.asarray([32.0, 0.0], dtype=np.float32))
     assert [entity.entity_id for entity in world.entities] == ["car-1", "truck-1"]
     world.close()
+
+
+def test_physics_topology_keeps_collider_crossing_window_boundary() -> None:
+    world = GamePhysicsWorld(_scene(_track("Truck", x_m=97.0)), VehicleConfig())
+
+    assert [entity.entity_id for entity in world.entities] == ["truck-1"]
+    world.close()
+
+
+def test_physics_topology_indexes_sparse_track_segments() -> None:
+    track = _track()
+    actor = SceneObject(
+        object_id=track.track_id,
+        object_type=track.object_type,
+        model=rigid_body_model_for_object(track.object_type, track.dimensions_lwh[0]),
+        timestamps_us=np.asarray([0, 1_000_000], dtype=np.int64),
+        positions_m=np.asarray([[-200.0, 0.0, 0.8], [200.0, 0.0, 0.8]]),
+        orientations_xyzw=track.orientations_xyzw,
+    )
+
+    culled = PhysicsObjectGraph(objects=(actor,)).copy_for_physx(
+        np.zeros(2, dtype=np.float32), 10.0
+    )
+
+    assert culled.objects == (actor,)
 
 
 def test_game_world_activates_actor_at_current_track_pose() -> None:
@@ -901,9 +948,7 @@ def test_game_world_activates_actor_at_current_track_pose() -> None:
         centers_world=np.asarray(
             [[120.0, 0.0, 0.8], [90.0, 0.0, 0.8]], dtype=np.float32
         ),
-        dimensions_lwh=np.asarray(
-            [[4.0, 1.9, 1.6], [4.0, 1.9, 1.6]], dtype=np.float32
-        ),
+        dimensions_lwh=np.asarray([[4.0, 1.9, 1.6], [4.0, 1.9, 1.6]], dtype=np.float32),
         orientations_xyzw=np.asarray(
             [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]], dtype=np.float32
         ),
@@ -926,7 +971,7 @@ def test_game_world_keeps_out_of_window_actor_on_recorded_trajectory() -> None:
     world = GamePhysicsWorld(
         _scene(
             _track("Car", x_m=5.0),
-            _track("Truck", x_m=97.0),
+            _track("Truck", x_m=100.0),
         ),
         VehicleConfig(),
     )
@@ -943,7 +988,7 @@ def test_game_world_keeps_out_of_window_actor_on_recorded_trajectory() -> None:
     assert trajectories["truck-1"].is_simulated is False
     np.testing.assert_array_equal(
         trajectories["truck-1"].translations_world[0],
-        np.asarray([97.0, 0.0, 0.8], dtype=np.float32),
+        np.asarray([100.0, 0.0, 0.8], dtype=np.float32),
     )
     world.close()
 

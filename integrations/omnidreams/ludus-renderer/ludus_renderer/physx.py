@@ -55,6 +55,7 @@ class PhysXStepTimings:
 class _CompactPhysicsStep:
     ego: BodyState
     actor_samples: tuple[tuple[str, BodyState, bool], ...]
+    track_samples: tuple[tuple[str, np.ndarray, np.ndarray, np.ndarray], ...]
     struck_object_ids: frozenset[str]
     impact: bool
     timings: PhysXStepTimings
@@ -83,12 +84,14 @@ def _state_arrays(state: BodyState) -> tuple[np.ndarray, np.ndarray, np.ndarray]
     )
 
 
-def _body_state(row: np.ndarray) -> BodyState:
+def _body_state(row: np.ndarray, *, copy: bool = True) -> BodyState:
+    """Create a body state, optionally borrowing one stable native-buffer row."""
+    values = row.copy() if copy else row
     return BodyState(
-        position_m=row[:3].copy(),
-        orientation_xyzw=row[3:7].copy(),
-        linear_velocity_mps=row[7:10].copy(),
-        angular_velocity_radps=row[10:13].copy(),
+        position_m=values[:3],
+        orientation_xyzw=values[3:7],
+        linear_velocity_mps=values[7:10],
+        angular_velocity_radps=values[10:13],
     )
 
 
@@ -184,12 +187,9 @@ class PhysXWorld:
         max_actor_drive_speed_mps: float | None = None,
         capacity: int | None = None,
     ) -> None:
-        if (
-            max_actor_drive_speed_mps is not None
-            and (
-                not math.isfinite(max_actor_drive_speed_mps)
-                or max_actor_drive_speed_mps <= 0.0
-            )
+        if max_actor_drive_speed_mps is not None and (
+            not math.isfinite(max_actor_drive_speed_mps)
+            or max_actor_drive_speed_mps <= 0.0
         ):
             raise ValueError("max_actor_drive_speed_mps must be finite and positive")
         native = load_native_physx()
@@ -209,6 +209,7 @@ class PhysXWorld:
         self._detached_object_ids: set[str] = set()
         self._barriers: dict[str, InvisibleBarrier] = {}
         self._state_buffer = self._scene.state_buffer()
+        self._track_state_buffer = self._scene.track_state_buffer()
         self._id_buffer = self._scene.id_buffer()
         self._active_buffer = self._scene.active_buffer()
         self._collision_active_buffer = self._scene.collision_active_buffer()
@@ -270,7 +271,9 @@ class PhysXWorld:
 
     def set_track_drive_enabled(self, object_id: str, enabled: bool) -> None:
         """Enable or suppress the tracked body's driving actuator."""
-        self.apply_track_controls(((object_id, enabled, self._objects[object_id].detached),))
+        self.apply_track_controls(
+            ((object_id, enabled, self._objects[object_id].detached),)
+        )
 
     def set_detached(self, object_id: str, detached: bool) -> None:
         """Publish the integration-owned track attachment state to PhysX."""
@@ -508,15 +511,31 @@ class PhysXWorld:
             float(dt_s),
             self.actor_collision_enabled,
         )
+        # The ego escapes through the public result, so keep its snapshot stable.
+        # Actor states remain borrowed below and are materialized once by the game
+        # adapter instead of being copied twice on every frame.
         simulated_ego = _body_state(self._state_buffer[self._ego_slot])
+        visible_slots = tuple(
+            (object_id, slot)
+            for object_id, slot in self._object_slots.items()
+            if self._objects[object_id].is_visible_at(timestamp_us)
+        )
         actor_samples = tuple(
             (
                 object_id,
-                _body_state(self._state_buffer[slot]),
+                _body_state(self._state_buffer[slot], copy=False),
                 bool(self._detached_buffer[slot]),
             )
-            for object_id, slot in self._object_slots.items()
-            if self._objects[object_id].is_visible_at(timestamp_us)
+            for object_id, slot in visible_slots
+        )
+        track_samples = tuple(
+            (
+                object_id,
+                self._track_state_buffer[slot, :3],
+                self._track_state_buffer[slot, 3:7],
+                self._track_state_buffer[slot, 7:10],
+            )
+            for object_id, slot in visible_slots
         )
         struck_object_ids = frozenset(
             object_id
@@ -544,6 +563,7 @@ class PhysXWorld:
         return _CompactPhysicsStep(
             ego=simulated_ego,
             actor_samples=actor_samples,
+            track_samples=track_samples,
             struck_object_ids=struck_object_ids,
             impact=bool(impact),
             timings=timings,

@@ -76,6 +76,7 @@ def _yaw_from_quaternion_xyzw(quaternion: np.ndarray) -> float:
     x, y, z, w = [float(value) for value in quaternion]
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
+
 def _body_state_from_vehicle(
     state: VehicleState, chassis_half_height_m: float
 ) -> BodyState:
@@ -469,8 +470,7 @@ class GamePhysicsWorld:
             )
             half_dimensions = actor_dimensions * 0.5
             actor_forward_radius = sum(
-                half_dimensions[:, axis_index]
-                * np.abs(local_axis @ forward)
+                half_dimensions[:, axis_index] * np.abs(local_axis @ forward)
                 for axis_index, local_axis in enumerate(local_axes_xy)
             )
             actor_lateral_radius = sum(
@@ -479,10 +479,7 @@ class GamePhysicsWorld:
             )
             actor_visible = (
                 (actor_forward + actor_forward_radius >= -_PHYSX_DEBUG_REAR_M)
-                & (
-                    actor_forward - actor_forward_radius
-                    <= _PHYSX_DEBUG_FORWARD_M
-                )
+                & (actor_forward - actor_forward_radius <= _PHYSX_DEBUG_FORWARD_M)
                 & (
                     np.abs(actor_lateral) - actor_lateral_radius
                     <= _PHYSX_DEBUG_LATERAL_M
@@ -593,8 +590,7 @@ class GamePhysicsWorld:
             strongest_closing_speed_mps = _VISUAL_FLARE_MIN_SPEED_DELTA_MPS
             self._visual_flare_impact_normal_xy = None
             actor_bodies = {
-                object_id: body
-                for object_id, body, _ in physics_step.actor_samples
+                object_id: body for object_id, body, _ in physics_step.actor_samples
             }
             for object_id in physics_step.struck_object_ids:
                 body = actor_bodies.get(object_id)
@@ -608,8 +604,7 @@ class GamePhysicsWorld:
                 impact_normal_xy = separation_xy / separation_m
                 _, _, track_velocity_mps = scene_object.sample(timestamp_us)
                 relative_velocity_xy = (
-                    track_velocity_mps[:2]
-                    - ego_before_step.linear_velocity_mps[:2]
+                    track_velocity_mps[:2] - ego_before_step.linear_velocity_mps[:2]
                 )
                 closing_speed_mps = -float(
                     np.dot(relative_velocity_xy, impact_normal_xy)
@@ -656,11 +651,26 @@ class GamePhysicsWorld:
             self._pending_struck_vehicle_ids.clear()
         actor_samples = []
         pending_controls = []
-        for object_id, body, native_detached in physics_step.actor_samples:
+        native_track_samples = getattr(physics_step, "track_samples", ())
+        for actor_index, (object_id, body, native_detached) in enumerate(
+            physics_step.actor_samples
+        ):
             scene_object = active_objects[object_id]
-            track_position, track_orientation, track_velocity = scene_object.sample(
-                timestamp_us
-            )
+            if actor_index < len(native_track_samples):
+                (
+                    track_object_id,
+                    track_position,
+                    track_orientation,
+                    track_velocity,
+                ) = native_track_samples[actor_index]
+                if track_object_id != object_id:
+                    raise RuntimeError("native actor and track samples are misaligned")
+            else:
+                # Compatibility path for light-weight test doubles and older
+                # native modules while their timestamp sampling remains Python-side.
+                track_position, track_orientation, track_velocity = scene_object.sample(
+                    timestamp_us
+                )
             decision = self._traffic_ai.update(
                 object_id,
                 struck=object_id in significant_struck_vehicle_ids,
@@ -680,9 +690,7 @@ class GamePhysicsWorld:
                     decision.drive_enabled
                     and object_id not in self._pending_struck_vehicle_ids
                 )
-                pending_controls.append(
-                    (object_id, drive_enabled, detached)
-                )
+                pending_controls.append((object_id, drive_enabled, detached))
             actor_samples.append(
                 (object_id, body.position_m, body.orientation_xyzw, detached)
             )
@@ -715,9 +723,7 @@ class GamePhysicsWorld:
                 np.clip(yaw_delta, -max_yaw_rate * dt_s, max_yaw_rate * dt_s)
             )
             yaw = state.yaw_rad + yaw_delta
-            yaw_rate_radps = float(
-                np.clip(yaw_rate_radps, -max_yaw_rate, max_yaw_rate)
-            )
+            yaw_rate_radps = float(np.clip(yaw_rate_radps, -max_yaw_rate, max_yaw_rate))
         forward = np.asarray([math.cos(yaw), math.sin(yaw)])
         ego_height_m = float(ego.position_m[2] - self._ego_model.half_extents_m[2])
         remains_unsettled = (

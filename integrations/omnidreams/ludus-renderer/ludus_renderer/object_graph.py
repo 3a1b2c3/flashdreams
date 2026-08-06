@@ -207,17 +207,38 @@ class PhysicsObjectGraph:
         object_cells: dict[tuple[int, int], list[int]] = {}
         for index, scene_object in enumerate(self.objects):
             positions_xy = scene_object.positions_m[:, :2]
-            cells = np.floor(positions_xy / self._spatial_cell_size_m).astype(np.int64)
-            for cell_xy in np.unique(cells, axis=0):
-                cell = (int(cell_xy[0]), int(cell_xy[1]))
+            footprint_radius_m = float(
+                np.linalg.norm(scene_object.model.half_extents_m[:2])
+            )
+            extent = np.full(2, footprint_radius_m, dtype=np.float32)
+            occupied_cells: set[tuple[int, int]] = set()
+            if len(positions_xy) == 1:
+                occupied_cells.update(
+                    self._cells_for_bounds(
+                        positions_xy[0] - extent, positions_xy[0] + extent
+                    )
+                )
+            else:
+                # Index swept segment bounds, not only recorded samples. Sparse
+                # tracks can cross a simulation window without a keyframe in it.
+                for start, end in zip(positions_xy[:-1], positions_xy[1:], strict=True):
+                    occupied_cells.update(
+                        self._cells_for_bounds(
+                            np.minimum(start, end) - extent,
+                            np.maximum(start, end) + extent,
+                        )
+                    )
+            for cell in occupied_cells:
                 object_cells.setdefault(cell, []).append(index)
         barrier_cells: dict[tuple[int, int], list[int]] = {}
         for index, barrier in enumerate(self.barriers):
             endpoints = np.asarray(
                 [barrier.start_xy_m, barrier.end_xy_m], dtype=np.float32
             )
+            extent = np.full(2, barrier.thickness_m * 0.5, dtype=np.float32)
             for cell in self._cells_for_bounds(
-                np.min(endpoints, axis=0), np.max(endpoints, axis=0)
+                np.min(endpoints, axis=0) - extent,
+                np.max(endpoints, axis=0) + extent,
             ):
                 barrier_cells.setdefault(cell, []).append(index)
         self._object_cells = {
@@ -319,23 +340,38 @@ class PhysicsObjectGraph:
             raise ValueError("center_xy_m must have shape (2,)")
         if radius_m <= 0.0:
             raise ValueError("radius_m must be positive")
-        radius_sq = float(radius_m) ** 2
         object_candidates = self._spatial_candidates(
             self._object_cells, center, float(radius_m)
         )
 
         def _object_is_near(scene_object: SceneObject) -> bool:
+            footprint_radius_m = float(
+                np.linalg.norm(scene_object.model.half_extents_m[:2])
+            )
+            expanded_radius_sq = (float(radius_m) + footprint_radius_m) ** 2
             if timestamp_us is not None:
                 if not scene_object.is_visible_at(timestamp_us):
                     return False
                 position, _, _ = scene_object.sample(timestamp_us)
                 delta = position[:2] - center
-                return float(np.dot(delta, delta)) <= radius_sq
-            distance_sq = np.sum(
-                (scene_object.positions_m[:, :2] - center[None, :]) ** 2,
-                axis=1,
+                return float(np.dot(delta, delta)) <= expanded_radius_sq
+            points = scene_object.positions_m[:, :2]
+            if len(points) == 1:
+                delta = points[0] - center
+                return float(np.dot(delta, delta)) <= expanded_radius_sq
+            segments = points[1:] - points[:-1]
+            length_sq = np.sum(segments * segments, axis=1)
+            offset = center[None, :] - points[:-1]
+            alpha = np.divide(
+                np.sum(offset * segments, axis=1),
+                length_sq,
+                out=np.zeros_like(length_sq),
+                where=length_sq > 1e-8,
             )
-            return float(np.min(distance_sq)) <= radius_sq
+            alpha = np.clip(alpha, 0.0, 1.0)
+            closest = points[:-1] + segments * alpha[:, None]
+            distance_sq = np.sum((closest - center[None, :]) ** 2, axis=1)
+            return float(np.min(distance_sq)) <= expanded_radius_sq
 
         objects = tuple(
             self.objects[index]
@@ -355,7 +391,10 @@ class PhysicsObjectGraph:
                     np.clip(np.dot(center - start, segment) / length_sq, 0.0, 1.0)
                 )
                 closest = start + segment * alpha
-            return float(np.dot(center - closest, center - closest)) <= radius_sq
+            expanded_radius = float(radius_m) + barrier.thickness_m * 0.5
+            return float(np.dot(center - closest, center - closest)) <= (
+                expanded_radius * expanded_radius
+            )
 
         barrier_candidates = self._spatial_candidates(
             self._barrier_cells, center, float(radius_m)
