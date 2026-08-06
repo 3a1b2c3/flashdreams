@@ -651,7 +651,7 @@ public:
             {static_cast<py::ssize_t>(mCapacity), static_cast<py::ssize_t>(kStateWidth)},
             {static_cast<py::ssize_t>(kStateWidth * sizeof(float)), static_cast<py::ssize_t>(sizeof(float))},
             mStates.data(),
-            py::none());
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array trackStateBuffer()
@@ -660,32 +660,47 @@ public:
             {static_cast<py::ssize_t>(mCapacity), static_cast<py::ssize_t>(kTrackStateWidth)},
             {static_cast<py::ssize_t>(kTrackStateWidth * sizeof(float)), static_cast<py::ssize_t>(sizeof(float))},
             mTrackStates.data(),
-            py::none());
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array idBuffer()
     {
-        return py::array_t<std::int64_t>(mCapacity, mIds.data(), py::none());
+        return py::array_t<std::int64_t>(
+            mCapacity,
+            mIds.data(),
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array activeBuffer()
     {
-        return py::array_t<std::uint8_t>(mCapacity, mActive.data(), py::none());
+        return py::array_t<std::uint8_t>(
+            mCapacity,
+            mActive.data(),
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array collisionActiveBuffer()
     {
-        return py::array_t<std::uint8_t>(mCapacity, mCollisionActive.data(), py::none());
+        return py::array_t<std::uint8_t>(
+            mCapacity,
+            mCollisionActive.data(),
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array detachedBuffer()
     {
-        return py::array_t<std::uint8_t>(mCapacity, mDetached.data(), py::none());
+        return py::array_t<std::uint8_t>(
+            mCapacity,
+            mDetached.data(),
+            py::cast(this, py::return_value_policy::reference));
     }
 
     py::array struckBuffer()
     {
-        return py::array_t<std::uint8_t>(mCapacity, mStruck.data(), py::none());
+        return py::array_t<std::uint8_t>(
+            mCapacity,
+            mStruck.data(),
+            py::cast(this, py::return_value_policy::reference));
     }
 
     std::size_t bodyCount() const { return mBodies.size(); }

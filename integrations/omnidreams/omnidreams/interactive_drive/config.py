@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -124,6 +124,7 @@ class BevConfig:
 class AppConfig:
     scene_path: Path
     backend: BackendName = "raster"
+    game_mode: bool = False
     camera_name: str = "camera_front_wide_120fov"
     variant: str = "default"
     prompt_override: str | None = None
@@ -162,6 +163,19 @@ class AppConfig:
     # presenter onto a specific GPU (e.g. "RTX PRO"); None lets SlangPy pick
     # the first enumerated adapter.
     presenter_adapter: str | None = None
-    # Strong, short full-screen darkening on actor collision. The CLI exposes
-    # the negative form because feedback is enabled by default.
-    visual_flare_enabled: bool = True
+    # None follows game_mode; an explicit bool remains a fine-grained override.
+    visual_flare_enabled: bool | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "vehicle",
+            replace(
+                self.vehicle,
+                speed_limit_enabled=self.game_mode,
+                actor_collision_enabled=self.game_mode,
+                static_collision_enabled=self.game_mode,
+            ),
+        )
+        if self.visual_flare_enabled is None:
+            object.__setattr__(self, "visual_flare_enabled", self.game_mode)

@@ -19,7 +19,6 @@ from omnidreams.interactive_drive.config import (
     AppConfig,
     BevConfig,
     RasterConfig,
-    VehicleConfig,
     WorldModelProfileConfig,
 )
 from omnidreams.interactive_drive.log import configure_logging
@@ -484,14 +483,10 @@ def prepare_config_and_backend(
         world_model_offload_text_encoder=bool(args.offload_text_encoder),
         postprocess=VideoPostprocessChainConfig(preset=args.postprocess_preset),
         bev=bev_config,
-        vehicle=VehicleConfig(
-            speed_limit_enabled=bool(args.game_mode),
-            actor_collision_enabled=bool(args.game_mode),
-            static_collision_enabled=bool(args.game_mode),
-        ),
+        game_mode=bool(args.game_mode),
         stream_mjpeg_bind=args.stream_mjpeg,
         stop_after_consumed_chunks=args.stop_after_chunks,
-        visual_flare_enabled=bool(args.game_mode and not args.disable_visual_flare),
+        visual_flare_enabled=False if args.disable_visual_flare else None,
         **_oob_kwargs(args),
     )
 

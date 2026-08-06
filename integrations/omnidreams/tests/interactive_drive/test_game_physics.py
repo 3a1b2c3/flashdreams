@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import gc
 import math
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -818,6 +819,34 @@ def test_physx_world_can_be_recreated_after_close() -> None:
     assert first_state.ragdoll_active is True
     assert second_state.ragdoll_active is True
     second.close()
+
+
+def test_physx_buffers_retain_native_scene_after_world_is_released() -> None:
+    world = PhysXWorld(
+        PhysicsObjectGraph(),
+        RigidBodyModel(1_550.0, (2.4, 1.0, 0.8)),
+        capacity=4,
+    )
+    native_scene = world._scene
+    buffers = (
+        world._state_buffer,
+        world._track_state_buffer,
+        world._id_buffer,
+        world._active_buffer,
+        world._collision_active_buffer,
+        world._detached_buffer,
+        world._struck_buffer,
+    )
+
+    assert all(buffer.base is native_scene for buffer in buffers)
+
+    del native_scene
+    del world
+    gc.collect()
+
+    for buffer in buffers:
+        buffer[...] = 1
+        assert np.all(buffer == 1)
 
 
 def test_physx_world_applies_incremental_graph_changes_in_stable_buffers() -> None:
