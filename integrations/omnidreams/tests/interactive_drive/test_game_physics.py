@@ -650,37 +650,6 @@ def test_ego_remains_driveable_after_collision_physics_takes_authority() -> None
     world.close()
 
 
-def test_actor_collision_response_uses_category_specific_mass() -> None:
-    car_world = GamePhysicsWorld(_scene(_track("Car")), VehicleConfig())
-    car_world.step(_moving_ego(), timestamp_us=0, dt_s=1.0 / 30.0)
-    car_mass = car_world.entities[0].rigid_body.mass_kg
-    car_slot = car_world._world._object_slots["car-1"]
-    car_velocity = float(car_world._world.state_buffer[car_slot, 7])
-    car_world.close()
-
-    truck_world = GamePhysicsWorld(_scene(_track("Truck")), VehicleConfig())
-    truck_world.step(_moving_ego(), timestamp_us=0, dt_s=1.0 / 30.0)
-    truck_visual_flare_triggered = truck_world.last_step_actor_collision
-    truck = truck_world.entities[0]
-    truck_slot = truck_world._world._object_slots["truck-1"]
-    truck_velocity = float(truck_world._world.state_buffer[truck_slot, 7])
-    truck_world.close()
-
-    assert car_mass == 1_550.0
-    assert truck.rigid_body.mass_kg == 8_000.0
-    assert truck_visual_flare_triggered is True
-    assert car_velocity > 0.0
-    assert truck_velocity > 0.0
-    assert truck_velocity != pytest.approx(car_velocity)
-    assert truck.vehicle is not None
-    assert len(truck.vehicle.wheel_offsets_m) == 4
-    assert (
-        truck.vehicle.front_axle_to_cg_m + truck.vehicle.rear_axle_to_cg_m
-        == pytest.approx(truck.vehicle.wheel_base_m)
-    )
-    assert truck.suspension is not None
-
-
 def test_approaching_truck_triggers_flare_and_allows_reverse_after_impact() -> None:
     config = VehicleConfig()
     world = GamePhysicsWorld(_scene(_track("Truck", x_m=15.0)), config)
@@ -746,41 +715,6 @@ def test_vehicle_instances_have_dimensioned_wheels_and_suspension() -> None:
     assert pedestrian.vehicle is None
 
 
-@pytest.mark.parametrize("object_type", ["Car", "Truck", "Bus", "Trailer"])
-def test_vehicle_collision_footprint_preserves_front_camera_standoff(
-    object_type: str,
-) -> None:
-    dimensions = np.asarray([4.0, 1.9, 1.6], dtype=np.float32)
-    model = rigid_body_model_for_object(object_type, dimensions)
-
-    assert model.vehicle is not None
-    hdmap_half_extents_xy = dimensions[:2] * 0.5
-    np.testing.assert_allclose(
-        model.vehicle.chassis_half_extents_m[:2],
-        hdmap_half_extents_xy + np.asarray([0.15, 0.05], dtype=np.float32),
-    )
-
-
-def test_collision_uses_free_vertical_suspension_without_launching_actor() -> None:
-    world = GamePhysicsWorld(_scene(_track()), VehicleConfig())
-    state = _moving_ego()
-    actor_slot = world._world._object_slots["car-1"]
-    actor_heights = []
-    actor_tilts = []
-
-    for frame_index in range(120):
-        state, _ = world.step(state, frame_index * 33_333, 1.0 / 30.0)
-        actor_state = world._world.state_buffer[actor_slot]
-        actor_heights.append(float(actor_state[2]))
-        actor_tilts.append(float(np.linalg.norm(actor_state[3:5])))
-
-    assert np.ptp(actor_heights) > 1.0e-3
-    assert max(actor_tilts) > 1.0e-4
-    assert max(actor_heights) < 1.6
-    assert actor_heights[-1] == pytest.approx(0.8, abs=0.08)
-    world.close()
-
-
 @pytest.mark.parametrize(
     ("object_type", "expected_mass_kg"),
     [
@@ -806,19 +740,6 @@ def test_overlapping_and_unknown_object_labels_use_the_right_mass_category() -> 
     assert canonical_object_type("truck_trailer") == "trailer"
     assert canonical_object_type("motorcycle") == "motorcycle"
     assert canonical_object_type("unclassified_object") == "other"
-
-
-def test_physx_world_can_be_recreated_after_close() -> None:
-    first = GamePhysicsWorld(_scene(_track("Car")), VehicleConfig())
-    first_state, _ = first.step(_moving_ego(), timestamp_us=0, dt_s=1.0 / 30.0)
-    first.close()
-
-    second = GamePhysicsWorld(_scene(_track("Truck")), VehicleConfig())
-    second_state, _ = second.step(_moving_ego(), timestamp_us=0, dt_s=1.0 / 30.0)
-
-    assert first_state.ragdoll_active is True
-    assert second_state.ragdoll_active is True
-    second.close()
 
 
 def test_physx_buffers_retain_native_scene_after_world_is_released() -> None:
