@@ -10,13 +10,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
+from omnidreams.interactive_drive.config import BevConfig
 from omnidreams.interactive_drive.presenter import (
     SlangPyPresenter,
     _CudaRGBFrame,
     _CudaRGBInterop,
     _NonBlockingCudaStream,
 )
-from omnidreams.interactive_drive.config import BevConfig
 from omnidreams.interactive_drive.slangpy_hud_presenter import (
     SlangPyHudPresenter,
     _bev_ego_footprint_points,

@@ -133,9 +133,7 @@ class SlangPyPresenter:
                     flare_opacity=flare_opacity,
                 )
                 if flare_opacity > 0.0
-                else self._present_cuda_rgb(
-                    rgb, status_message=frame.status_message
-                )
+                else self._present_cuda_rgb(rgb, status_message=frame.status_message)
             )
             if cuda_presented:
                 return
@@ -342,9 +340,7 @@ class SlangPyPresenter:
             time.sleep(0.001)
             return
 
-        upload = self._pack_surface_pixels(
-            darken_rgb(rgb_host_uint8, flare_opacity)
-        )
+        upload = self._pack_surface_pixels(darken_rgb(rgb_host_uint8, flare_opacity))
         self._display_texture.copy_from_numpy(upload)
 
         command_encoder = self._device.create_command_encoder()

@@ -156,10 +156,7 @@ def build_physx_debug_cube_pool(
         heights = np.asarray(snapshot.barrier_heights_m, dtype=np.float32)[valid]
         barrier_count = len(segments)
         barrier_indices = np.fromiter(
-            (
-                track_indices[("barrier", barrier_id)]
-                for barrier_id in barrier_ids
-            ),
+            (track_indices[("barrier", barrier_id)] for barrier_id in barrier_ids),
             dtype=np.intp,
             count=barrier_count,
         )

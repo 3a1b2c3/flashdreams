@@ -539,9 +539,7 @@ def run_main_loop(
                 visual_flare_events.schedule(
                     chunk_index=chunk_request.chunk_times.chunk_index,
                     frame_index=(
-                        0
-                        if collision_frame_index is None
-                        else collision_frame_index
+                        0 if collision_frame_index is None else collision_frame_index
                     ),
                 )
             pipeline.request_pose_chunk(chunk_request)

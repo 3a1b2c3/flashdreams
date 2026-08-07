@@ -124,9 +124,7 @@ class MutableObjectSceneBuffer:
             and partition == self._actor_partition
             and self._dynamic_pool_index is not None
         ):
-            dynamic_pool = build_hdmap_object_pool(
-                dynamic_actors, device=self._device
-            )
+            dynamic_pool = build_hdmap_object_pool(dynamic_actors, device=self._device)
             if self._context.update_cube_pool_at_index(
                 self._scene_id, self._dynamic_pool_index, dynamic_pool
             ):

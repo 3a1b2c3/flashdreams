@@ -641,9 +641,7 @@ class SlangPyHudPresenter:
             return
         try:
             cuda_presented = (
-                self._present_cuda_hud_frame(
-                    frame, rgb, flare_opacity=flare_opacity
-                )
+                self._present_cuda_hud_frame(frame, rgb, flare_opacity=flare_opacity)
                 if flare_opacity > 0.0
                 else self._present_cuda_hud_frame(frame, rgb)
             )
