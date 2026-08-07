@@ -125,10 +125,17 @@ Interpret the report as follows:
 The `omnidreams.interactive_drive` subpackage ships a single-process
 driving demo. Refer to [README for full guide](omnidreams/interactive_drive/README.md)
 
-Example execution below:
+Validated & Supported GPU: RTX 6000 Pro Blackwell
+Validated & Supported OS: Ubuntu 26.04
+Validated & Supported Controllers: Playstation Dualshock - Fanatec Driving-sim wheel
+
+Execute the following:
 ```bash
+# We are Assuming `uv` is installed
+
 # Token For Asset Repos
 export HF_TOKEN=<YOUR-HF-TOKEN>
+
 # Enable long paths to avoid breaking third-party source checkouts
 git config --system core.longpaths true
 
@@ -138,11 +145,15 @@ uv run --package flashdreams-omnidreams python integrations/omnidreams/omnidream
 
 # Prepare to run tuned for performance
 uv run --package flashdreams-omnidreams omnidreams-prepare --perf
-# Run demo
+
+# Setup controllers if not using keyboard as control scheme
+uv run --package flashdreams-omnidreams interactive-drive-configuration
+
+# Run demo - Long startup to autotune - If it gets stuck, remove/delete stale pytorch/triton/compiler lock-files (likely in `/tmp` or `~/.cache/ludus-renderer`)
 uv run --package flashdreams-omnidreams interactive-drive \
 	--manifest example_world_model_perf.yaml --auto-start --game-mode
 
-# add `--stream-mjpeg :8080` to stream to your browser
+# add `--stream-mjpeg :8080` to stream to your browser. Required if running headless system.
 ```
 
 ## Native DiT defaults
