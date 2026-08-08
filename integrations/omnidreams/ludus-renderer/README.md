@@ -2,7 +2,7 @@
 
 GPU-native F-theta renderer and PhysX-first object graph for autonomous
 vehicle simulation. Rendering is CUDA-only and is built on the HPG 2011
-CudaRaster triangle pipeline; the former Vulkan backend has been removed.
+CudaRaster triangle pipeline.
 
 ## Features
 
@@ -66,8 +66,10 @@ ctx = LudusCudaTimestampedContext(device="cuda")
 
 `PhysXWorld` consumes `PhysicsObjectGraph` and creates `PxScene`, rigid actors,
 materials, and shapes directly, without an intermediate scene-format runtime.
-The first use builds the pinned CPU PhysX module in the platform cache; later
-processes load that module directly. Set `LUDUS_PHYSX_CACHE` to place this cache
+The first PhysX use in each process asks CMake to configure and build the pinned
+CPU module. CMake reuses the platform build cache and only rebuilds targets that
+are out of date; later PhysX worlds in the same process reuse the already-loaded
+module without invoking CMake again. Set `LUDUS_PHYSX_CACHE` to place this cache
 elsewhere.
 
 `PhysicsObjectGraph.upsert_object`, `remove_object`, `upsert_barrier`, and

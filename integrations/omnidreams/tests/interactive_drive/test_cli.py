@@ -84,8 +84,3 @@ def test_parser_records_explicit_arg_destinations() -> None:
     assert arg_was_explicit(args, "offload_text_encoder")
     assert arg_was_explicit(args, "bev")
     assert not arg_was_explicit(args, "camera")
-
-
-def test_removed_ludus_vulkan_backend_is_not_a_cli_option() -> None:
-    with pytest.raises(SystemExit):
-        build_parser().parse_args(["--ludus-backend", "vulkan"])

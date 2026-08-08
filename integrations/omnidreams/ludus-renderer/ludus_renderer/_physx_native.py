@@ -144,18 +144,8 @@ def _module_path(output_dir: Path) -> Path | None:
     return max(candidates, key=lambda path: path.stat().st_mtime, default=None)
 
 
-def _needs_rebuild(module_path: Path | None) -> bool:
-    if module_path is None:
-        return True
-    newest_source = max(
-        path.stat().st_mtime
-        for path in _native_source_dir().iterdir()
-        if path.suffix in {".cpp", ".txt"}
-    )
-    return module_path.stat().st_mtime < newest_source
-
-
 def _configure_and_build(cache_root: Path, physx_root: Path) -> Path:
+    """Configure once for this process and let CMake decide what to rebuild."""
     cmake = shutil.which("cmake")
     if cmake is None:
         raise RuntimeError(
@@ -219,22 +209,22 @@ def load_native_physx() -> ModuleType:
     if _CACHED_MODULE is not None:
         return _CACHED_MODULE
     cache_root = _cache_root()
-    output_dir = cache_root / "module"
-    module_path = _module_path(output_dir)
-    if _needs_rebuild(module_path):
-        with _build_lock(cache_root):
-            module_path = _module_path(output_dir)
-            if _needs_rebuild(module_path):
-                physx_root = _download_source(cache_root)
-                module_path = _configure_and_build(cache_root, physx_root)
-    assert module_path is not None
-    spec = importlib.util.spec_from_file_location(_MODULE_NAME, module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"could not load native PhysX module at {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[_MODULE_NAME] = module
-    spec.loader.exec_module(module)
-    _CACHED_MODULE = module
+    with _build_lock(cache_root):
+        # Another thread may have loaded the module while this thread waited.
+        if _CACHED_MODULE is not None:
+            return _CACHED_MODULE
+        physx_root = _download_source(cache_root)
+        # Always enter CMake on the first load in a process. Its generated
+        # dependency graph, rather than a partial Python timestamp check,
+        # determines whether the cached native target is up to date.
+        module_path = _configure_and_build(cache_root, physx_root)
+        spec = importlib.util.spec_from_file_location(_MODULE_NAME, module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"could not load native PhysX module at {module_path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_MODULE_NAME] = module
+        spec.loader.exec_module(module)
+        _CACHED_MODULE = module
     return module
 
 
