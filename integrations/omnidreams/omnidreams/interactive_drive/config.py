@@ -62,7 +62,8 @@ class VehicleConfig:
     steer_rate_rad_per_s: float = 0.55
     steer_return_rate_rad_per_s: float = 0.9
     speed_limit_enabled: bool = True
-    max_speed_mps: float = 18.0
+    # 70 mph, expressed in the simulation's SI units.
+    max_speed_mps: float = 31.2928
     max_reverse_speed_mps: float = 6.0
     max_accel_mps2: float = 3.5
     max_brake_mps2: float = 6.0

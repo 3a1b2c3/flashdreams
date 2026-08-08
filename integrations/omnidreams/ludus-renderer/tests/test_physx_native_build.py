@@ -33,6 +33,10 @@ def test_build_lock_can_become_stale_before_wait_timeout() -> None:
         _physx_native._BUILD_LOCK_STALE_SECONDS
         <= _physx_native._BUILD_LOCK_TIMEOUT_SECONDS
     )
+    assert (
+        _physx_native._BUILD_LOCK_HEARTBEAT_SECONDS
+        < _physx_native._BUILD_LOCK_STALE_SECONDS
+    )
 
 
 def test_build_lock_reclaims_abandoned_lock(tmp_path: Path) -> None:
@@ -42,7 +46,26 @@ def test_build_lock_reclaims_abandoned_lock(tmp_path: Path) -> None:
     os.utime(lock_path, (stale_time, stale_time))
 
     with _physx_native._build_lock(tmp_path):
-        assert lock_path.read_text(encoding="utf-8") == f"{os.getpid()}\n"
+        assert lock_path.read_text(encoding="utf-8").startswith(f"{os.getpid()}:")
+
+    assert not lock_path.exists()
+
+
+def test_build_lock_heartbeat_refreshes_active_lock(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(_physx_native, "_BUILD_LOCK_HEARTBEAT_SECONDS", 0.01)
+
+    with _physx_native._build_lock(tmp_path):
+        lock_path = tmp_path / "build.lock"
+        old_time = time.time() - _physx_native._BUILD_LOCK_STALE_SECONDS - 1.0
+        os.utime(lock_path, (old_time, old_time))
+        stale_mtime = lock_path.stat().st_mtime
+        deadline = time.monotonic() + 1.0
+        while lock_path.stat().st_mtime == stale_mtime and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert lock_path.stat().st_mtime > stale_mtime
 
     assert not lock_path.exists()
 

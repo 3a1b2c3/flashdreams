@@ -542,22 +542,13 @@ def _terminate_process(process: subprocess.Popen[str]) -> None:
         _terminate_windows_process_tree(process)
         return
 
-    _send_process_signal(process, signal.SIGTERM)
+    process.terminate()
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         pass
 
-    if os.name == "posix":
-        if not _send_process_group_signal(process.pid, signal.SIGKILL):
-            if process.poll() is None:
-                process.kill()
-    elif process.poll() is None:
-        process.kill()
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        return
+    process.kill()
 
 
 def _process_group_popen_kwargs() -> dict[str, Any]:
@@ -637,28 +628,6 @@ def _run_windows_powershell_stop_process_tree(pid: int) -> bool:
         if result.returncode == 0:
             return True
     return False
-
-
-def _send_process_signal(process: subprocess.Popen[str], sig: signal.Signals) -> None:
-    if process.poll() is not None:
-        return
-    if os.name == "posix":
-        if _send_process_group_signal(process.pid, sig):
-            return
-    try:
-        process.send_signal(sig)
-    except ProcessLookupError:
-        return
-
-
-def _send_process_group_signal(pgid: int, sig: signal.Signals) -> bool:
-    try:
-        os.killpg(pgid, sig)
-    except ProcessLookupError:
-        return False
-    except OSError:
-        return False
-    return True
 
 
 def _collect_scenario_metrics(

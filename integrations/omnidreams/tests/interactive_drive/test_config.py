@@ -13,6 +13,7 @@ def test_app_config_defaults_to_non_game_mode() -> None:
     config = AppConfig(scene_path=Path("scene.usdz"))
 
     assert config.game_mode is False
+    assert config.vehicle.max_speed_mps == pytest.approx(70.0 * 0.44704)
     assert config.vehicle.speed_limit_enabled is False
     assert config.vehicle.actor_collision_enabled is False
     assert config.vehicle.static_collision_enabled is False

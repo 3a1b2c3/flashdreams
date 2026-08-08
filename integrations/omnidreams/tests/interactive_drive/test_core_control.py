@@ -149,13 +149,13 @@ def test_speed_limit_is_only_applied_when_enabled(manual_control: bool) -> None:
         state,
         throttle,
         dt_s=0.1,
-        vehicle=VehicleConfig(speed_limit_enabled=True),
+        vehicle=VehicleConfig(speed_limit_enabled=True, max_speed_mps=18.0),
     )
     unlimited = integrate_vehicle(
         state,
         throttle,
         dt_s=0.1,
-        vehicle=VehicleConfig(speed_limit_enabled=False),
+        vehicle=VehicleConfig(speed_limit_enabled=False, max_speed_mps=18.0),
     )
 
     assert limited.speed_mps == pytest.approx(18.0)

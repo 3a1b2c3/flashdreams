@@ -25,8 +25,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
+import uuid
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -46,6 +48,7 @@ _PHYSX_ARCHIVE_SHA256 = (
 _MODULE_NAME = "ludus_physx_native"
 _BUILD_LOCK_TIMEOUT_SECONDS = 1_800.0
 _BUILD_LOCK_STALE_SECONDS = 1_800.0
+_BUILD_LOCK_HEARTBEAT_SECONDS = 60.0
 _CACHED_MODULE: ModuleType | None = None
 
 
@@ -105,6 +108,19 @@ def _native_source_dir() -> Path:
     return Path(__file__).resolve().parent / "_cpp" / "physx"
 
 
+def _heartbeat_build_lock(
+    lock_path: Path, owner: str, stopped: threading.Event
+) -> None:
+    """Keep a live build lock from being mistaken for an abandoned one."""
+    while not stopped.wait(_BUILD_LOCK_HEARTBEAT_SECONDS):
+        try:
+            if lock_path.read_text(encoding="utf-8") != owner:
+                return
+            lock_path.touch()
+        except OSError:
+            return
+
+
 @contextmanager
 def _build_lock(cache_root: Path) -> Iterator[None]:
     """Serialize first-use builds that share the platform cache."""
@@ -112,6 +128,7 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
     lock_path = cache_root / "build.lock"
     deadline = time.monotonic() + _BUILD_LOCK_TIMEOUT_SECONDS
     descriptor: int | None = None
+    owner = f"{os.getpid()}:{uuid.uuid4().hex}\n"
     while descriptor is None:
         try:
             descriptor = os.open(
@@ -119,12 +136,11 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 0o600,
             )
-            os.write(descriptor, f"{os.getpid()}\n".encode())
+            os.write(descriptor, owner.encode())
         except FileExistsError:
             try:
                 stale = (
-                    time.time() - lock_path.stat().st_mtime
-                    > _BUILD_LOCK_STALE_SECONDS
+                    time.time() - lock_path.stat().st_mtime > _BUILD_LOCK_STALE_SECONDS
                 )
             except FileNotFoundError:
                 continue
@@ -136,11 +152,25 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
                     f"timed out waiting for the PhysX build lock at {lock_path}"
                 ) from None
             time.sleep(0.1)
+    heartbeat_stopped = threading.Event()
+    heartbeat = threading.Thread(
+        target=_heartbeat_build_lock,
+        args=(lock_path, owner, heartbeat_stopped),
+        name="ludus-physx-build-lock-heartbeat",
+        daemon=True,
+    )
+    heartbeat.start()
     try:
         yield
     finally:
+        heartbeat_stopped.set()
+        heartbeat.join()
         os.close(descriptor)
-        lock_path.unlink(missing_ok=True)
+        try:
+            if lock_path.read_text(encoding="utf-8") == owner:
+                lock_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _module_path(output_dir: Path) -> Path | None:
