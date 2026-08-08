@@ -146,14 +146,14 @@ uv run --package flashdreams-omnidreams python integrations/omnidreams/omnidream
 # Prepare to run tuned for performance
 uv run --package flashdreams-omnidreams omnidreams-prepare --perf
 
-# Setup controllers if not using keyboard as control scheme
+# Setup controllers if not using keyboard as control scheme & NOT runing headless
 uv run --package flashdreams-omnidreams interactive-drive-configuration
 
 # Run demo - Long startup to autotune - If it gets stuck, remove/delete stale pytorch/triton/compiler lock-files (likely in `/tmp` or `~/.cache/ludus-renderer`)
 uv run --package flashdreams-omnidreams interactive-drive \
 	--manifest example_world_model_perf.yaml --auto-start --game-mode
 
-# add `--stream-mjpeg :8080` to stream to your browser. Required if running headless system.
+# add `--stream-mjpeg :8080` to stream to your browser; required if running headless system
 ```
 
 ## Native DiT defaults
