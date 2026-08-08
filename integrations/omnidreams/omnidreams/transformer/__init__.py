@@ -78,6 +78,41 @@ DEFAULT_CAMERA_VIEW_MAPPING: dict[str, int] = dict(
 
 
 @dataclass(kw_only=True)
+class TextEditGuidance:
+    """Transient two-prompt guidance for a mid-rollout text edit.
+
+    Built by :meth:`CosmosTransformer.replace_text_embeddings` when an edit
+    strength is requested. While active, ``predict_flow`` runs the cond
+    branch twice — once with the pre-edit ("old") text K/V and once with the
+    post-edit ("new") K/V — and combines them CFG-style:
+
+        ``flow = flow_old + scale * (flow_new - flow_old)``
+
+    Both branches share the same self-attention history, so the guidance
+    direction is purely the text difference; the old-prompt branch anchors
+    scene identity while ``scale > 1`` amplifies the edit. KV contents are
+    loaded into the existing cross-attention buffers via ``overwrite_kv_``,
+    which preserves storage addresses and therefore composes with CUDA-graph
+    replay. The per-chunk KV commit (``finalize_kv_cache``) always runs
+    single-branch under the new prompt.
+    """
+
+    scale: float
+    """Edit strength: 1.0 reproduces the new prompt exactly (but wastes a
+    forward — callers should just not build this state); > 1.0 amplifies."""
+
+    chunks_remaining: int
+    """Number of upcoming AR chunks to apply guidance to. Decremented by
+    :meth:`CosmosTransformerCache.start`; the state clears itself after."""
+
+    kv_old: list[tuple[Tensor, Tensor]]
+    """Per-block (K, V) cross-attention contents of the pre-edit prompt."""
+
+    kv_new: list[tuple[Tensor, Tensor]]
+    """Per-block (K, V) cross-attention contents of the post-edit prompt."""
+
+
+@dataclass(kw_only=True)
 class CosmosTransformerCache(TransformerAutoregressiveCache):
     """Long-lived AR cache for the Cosmos transformer."""
 
@@ -114,7 +149,20 @@ class CosmosTransformerCache(TransformerAutoregressiveCache):
     autoregressive_index: int = -1
     """AR step index for the chunk currently being processed; ``-1`` before the first ``start``."""
 
+    text_edit_guidance: TextEditGuidance | None = None
+    """Two-prompt guidance for an in-flight text edit; ``None`` when idle."""
+
     def start(self, autoregressive_index: int) -> None:
+        # Advance the text-edit guidance countdown on real chunk advances
+        # only (a same-index re-open, e.g. a post-swap KV re-commit of the
+        # previous chunk, must not consume a guidance chunk).
+        guidance = self.text_edit_guidance
+        if guidance is not None and autoregressive_index > self.autoregressive_index:
+            if guidance.chunks_remaining <= 0:
+                self.text_edit_guidance = None
+            else:
+                guidance.chunks_remaining -= 1
+
         # Hoist KV pre-update and RoPE shift out of the graph-captured forward
         # (predict_flow runs eager_mode=False; cond/uncond share rope_freqs).
         self.rope_freqs = self.rope_adapter.shift_t(autoregressive_index)
@@ -345,6 +393,11 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         # Single view: flatten latent to 4D [B, V, L, D] so CP applies on L
         # directly. Multi-view: keep 5D [B, V, T, HW, D] for hierarchical CP.
         self.flatten_thw = config.num_views == 1
+
+        # True while finalize_kv_cache runs its context forward; text-edit
+        # guidance is suppressed there so the KV commit is single-branch
+        # under the (new) post-edit prompt.
+        self._finalizing_kv_cache = False
 
     def _configure_optimized_dit_from_config(self) -> None:
         from omnidreams.native import omnidreams_singleview
@@ -616,6 +669,77 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             self._optimized_dit_executor.after_initialize_autoregressive_cache(cache)
         return cache
 
+    @torch.no_grad()
+    def replace_text_embeddings(
+        self,
+        cache: CosmosTransformerCache,
+        text_embeddings: Tensor,
+        *,
+        guidance_scale: float = 1.0,
+        guidance_chunks: int = 0,
+    ) -> None:
+        """Hot-swap the rollout's text conditioning at a chunk boundary.
+
+        Rebuilds the per-block cross-attention text K/V in place (storage
+        addresses survive, so captured CUDA graphs stay valid) while the
+        self-attention history, RoPE state, and image/mask conditioning are
+        untouched — the rollout continues under the new prompt with full
+        visual continuity. Call between ``finalize`` of one AR step and
+        ``generate`` of the next.
+
+        Args:
+            cache: Live per-rollout cache.
+            text_embeddings: ``[B, V, L, D]`` replacement text embeddings
+                (same fixed ``L`` as the original prompt).
+            guidance_scale: Optional edit strength. Values ``> 1.0`` enable
+                two-prompt guidance for the next ``guidance_chunks`` chunks:
+                the old prompt anchors the scene and the flow is pushed
+                along the new-minus-old text direction (costs one extra
+                network forward per denoising step while active). ``1.0``
+                disables guidance (plain hot-swap).
+            guidance_chunks: Number of upcoming chunks to guide; ``0``
+                disables guidance.
+        """
+        if self._optimized_dit_executor is not None:
+            raise NotImplementedError(
+                "replace_text_embeddings is not wired for the native "
+                "optimized-DiT path yet; run with "
+                "native_dit_acceleration='disabled'."
+            )
+        cfg = self.config
+        text_embeddings = text_embeddings.to(device=self.device, dtype=cfg.dtype)
+        if self.cp_groups.V_group is not None:
+            text_embeddings = split_inputs_cp(
+                text_embeddings, seq_dim=1, cp_group=self.cp_groups.V_group
+            )
+
+        use_guidance = guidance_scale != 1.0 and guidance_chunks > 0
+        assert not (use_guidance and cache.network_cache_uncond is not None), (
+            "Text-edit guidance shares the cond branch's self-attention "
+            "history and is mutually exclusive with negative-prompt CFG "
+            "(guidance_scale > 1.0 configs)."
+        )
+
+        block_caches = cache.network_cache.block_caches
+        kv_old: list[tuple[Tensor, Tensor]] | None = None
+        if use_guidance:
+            kv_old = [bc.cross_attn.clone_kv() for bc in block_caches]
+
+        self.network.replace_text_embeddings(cache.network_cache, text_embeddings)
+
+        if use_guidance:
+            assert kv_old is not None
+            cache.text_edit_guidance = TextEditGuidance(
+                scale=guidance_scale,
+                chunks_remaining=guidance_chunks,
+                kv_old=kv_old,
+                kv_new=[bc.cross_attn.clone_kv() for bc in block_caches],
+            )
+        else:
+            # A plain swap supersedes any in-flight guidance (whose old/new
+            # snapshots no longer match the buffers).
+            cache.text_edit_guidance = None
+
     ## Mask-injection helpers
 
     def _maybe_inject_image(
@@ -675,6 +799,45 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             eager_mode=False,
         )
 
+    def _predict_with_text_edit_guidance(
+        self,
+        noisy_latent: Tensor,
+        timestep: Tensor,
+        cache: CosmosTransformerCache,
+        input: Tensor | None,
+        guidance: TextEditGuidance,
+    ) -> Tensor:
+        """Two-prompt CFG for an in-flight text edit.
+
+        Runs the cond branch under the old and the new text K/V against the
+        SAME self-attention history and combines CFG-style. The KV loads
+        write in place, so under CUDA graphs both calls are plain replays of
+        the already-captured cond graph (whose outputs are cloned per
+        replay). Buffers are left holding the new-prompt K/V.
+        """
+        block_caches = cache.network_cache.block_caches
+        for bc, (k, v) in zip(block_caches, guidance.kv_old):
+            bc.cross_attn.overwrite_kv_(k, v)
+        flow_old = self._predict_branch(
+            noisy_latent=noisy_latent,
+            timestep=timestep,
+            cache=cache,
+            network_cache=cache.network_cache,
+            input=input,
+            uncond=False,
+        )
+        for bc, (k, v) in zip(block_caches, guidance.kv_new):
+            bc.cross_attn.overwrite_kv_(k, v)
+        flow_new = self._predict_branch(
+            noisy_latent=noisy_latent,
+            timestep=timestep,
+            cache=cache,
+            network_cache=cache.network_cache,
+            input=input,
+            uncond=False,
+        )
+        return flow_old + guidance.scale * (flow_new - flow_old)
+
     def predict_flow(
         self,
         noisy_latent: Tensor,
@@ -688,6 +851,19 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
                 timestep=timestep,
                 cache=cache,
                 input=input,
+            )
+        guidance = cache.text_edit_guidance
+        if (
+            guidance is not None
+            and not self._finalizing_kv_cache
+            and cache.network_cache_uncond is None
+        ):
+            return self._predict_with_text_edit_guidance(
+                noisy_latent=noisy_latent,
+                timestep=timestep,
+                cache=cache,
+                input=input,
+                guidance=guidance,
             )
         flow_cond = self._predict_branch(
             noisy_latent=noisy_latent,
@@ -724,7 +900,14 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
     ) -> None:
         try:
             if not self.config.skip_finalize_kv_cache:
-                super().finalize_kv_cache(*args, **kwargs)
+                # The context forward commits KV history single-branch under
+                # the current (post-edit) prompt; text-edit guidance only
+                # shapes the denoising flow, never the committed history.
+                self._finalizing_kv_cache = True
+                try:
+                    super().finalize_kv_cache(*args, **kwargs)
+                finally:
+                    self._finalizing_kv_cache = False
         finally:
             if self._optimized_dit_executor is not None:
                 self._optimized_dit_executor.after_finalize_kv_cache()

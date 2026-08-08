@@ -363,6 +363,100 @@ class OmnidreamsPipeline(
             torch_module=torch,
         )
 
+    @torch.no_grad()
+    def replace_text(
+        self,
+        cache: OmnidreamsPipelineCache,
+        text: list[list[str]],
+        *,
+        guidance_scale: float = 1.0,
+        guidance_chunks: int = 0,
+        recache_last_chunk: bool = False,
+    ) -> None:
+        """Hot-swap the rollout's prompt between two AR steps.
+
+        Encodes ``text`` with the resident text encoder and rebuilds the
+        cross-attention text K/V in place; the self-attention history keeps
+        the generated scene, so the video continues seamlessly under the new
+        prompt. Call after ``finalize`` of one AR step and before
+        ``generate`` of the next.
+
+        Args:
+            cache: Live per-rollout cache.
+            text: ``[B, V]`` nested list of prompts, as in
+                ``initialize_cache``.
+            guidance_scale: Optional edit strength (``> 1.0`` pushes the
+                flow along the new-minus-old text direction for the next
+                ``guidance_chunks`` chunks at the cost of one extra network
+                forward per denoising step).
+            guidance_chunks: Number of upcoming chunks to guide.
+            recache_last_chunk: Re-commit the previous chunk's KV history
+                under the new prompt (one extra context forward), so the
+                window the next chunk attends to is already "explained" by
+                the new text. Helps the scene react faster after a swap.
+        """
+        assert self.text_encoder is not None, (
+            "replace_text requires the text encoder to be loaded; use "
+            "replace_text_from_embeddings with precomputed embeddings "
+            "otherwise."
+        )
+        assert isinstance(text, list) and len(text) > 0 and isinstance(text[0], list), (
+            f"text must be a [B, V] nested list of prompts, got {type(text)}"
+        )
+        text_embeddings = torch.stack(
+            [self.text_encoder(t) for t in text], dim=0
+        )  # [B, V, L, D]
+        self.replace_text_from_embeddings(
+            cache,
+            text_embeddings,
+            guidance_scale=guidance_scale,
+            guidance_chunks=guidance_chunks,
+            recache_last_chunk=recache_last_chunk,
+        )
+
+    @torch.no_grad()
+    def replace_text_from_embeddings(
+        self,
+        cache: OmnidreamsPipelineCache,
+        text_embeddings: Tensor,
+        *,
+        guidance_scale: float = 1.0,
+        guidance_chunks: int = 0,
+        recache_last_chunk: bool = False,
+    ) -> None:
+        """``replace_text`` for precomputed ``[B, V, L, D]`` embeddings."""
+        transformer = self.diffusion_model.transformer
+        assert isinstance(transformer, CosmosTransformer)
+        text_embeddings = text_embeddings.to(device=self.device)
+        text_embeddings = split_inputs_cp(
+            text_embeddings, seq_dim=1, cp_group=self.V_group
+        )
+        transformer.replace_text_embeddings(
+            cache.transformer_cache,
+            text_embeddings,
+            guidance_scale=guidance_scale,
+            guidance_chunks=guidance_chunks,
+        )
+        if recache_last_chunk:
+            self.recache_last_chunk(cache)
+
+    @torch.no_grad()
+    def recache_last_chunk(self, cache: OmnidreamsPipelineCache) -> None:
+        """Re-commit the previous chunk's KV history under the current text.
+
+        Re-opens the just-finalized AR step (``BlockKVCache`` permits
+        same-index rewrites: the window does not roll and the same physical
+        slots are overwritten) and re-runs the context forward, so the
+        cached history becomes consistent with a freshly swapped prompt.
+        Requires the step's ``finalize`` to have completed; a no-op before
+        the first ``generate``.
+        """
+        final_state = cache.final_state
+        if final_state is None:
+            return
+        final_state.cache.start(final_state.autoregressive_index)
+        self.diffusion_model.finalize(final_state=final_state)
+
     def _validate_image_resolution(self, image: Tensor) -> None:
         transformer = self.diffusion_model.transformer
         assert isinstance(transformer, CosmosTransformer), (

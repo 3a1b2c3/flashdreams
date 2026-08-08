@@ -98,6 +98,9 @@ class OmnidreamsConditioningWrapper(nn.Module):
         resolution_wh: tuple[int, int],
         seed_for_every_rollout: int | None = None,
         device: torch.device = torch.device("cuda:0"),
+        text_edit_guidance_scale: float = 1.0,
+        text_edit_guidance_chunks: int = 0,
+        text_edit_recache: bool = True,
     ) -> None:
         """Instantiate the pipeline from a registered Omnidreams config.
 
@@ -113,6 +116,16 @@ class OmnidreamsConditioningWrapper(nn.Module):
             seed_for_every_rollout: Optional per-rollout RNG seed override. When
                 ``None``, each rollout draws a fresh OS-entropy seed.
             device: CUDA device the pipeline is moved to.
+            text_edit_guidance_scale: Edit strength applied when a mid-stream
+                prompt swap arrives via ``continue_generation``. ``1.0``
+                disables guidance (plain hot-swap); ``> 1.0`` amplifies the
+                edit for ``text_edit_guidance_chunks`` chunks at the cost of
+                one extra network forward per denoising step while active.
+            text_edit_guidance_chunks: Number of chunks to guide after a swap.
+            text_edit_recache: Re-commit the previous chunk's KV history
+                under the new prompt on every swap (one extra context
+                forward), so the attended window is consistent with the new
+                text.
 
         Raises:
             KeyError: ``pipeline_config`` is omitted and ``pipeline_config_name``
@@ -143,6 +156,9 @@ class OmnidreamsConditioningWrapper(nn.Module):
         self.video_resolution_wh = resolution_wh
         self._rollout_seed = seed_for_every_rollout
         self.fps = 30
+        self._text_edit_guidance_scale = text_edit_guidance_scale
+        self._text_edit_guidance_chunks = text_edit_guidance_chunks
+        self._text_edit_recache = text_edit_recache
 
         # ``len_t`` latent frames per AR block decode into ``len_t * 4`` pixel
         # frames for every continuation step; the first block emits a single
@@ -461,6 +477,36 @@ class OmnidreamsConditioningWrapper(nn.Module):
             finalization_state={"autoregressive_index": 0},
         )
 
+    def apply_text_prompts(
+        self,
+        state: OmnidreamsConditioningState,
+        text_prompts: list[TextPrompt],
+    ) -> None:
+        """Mid-stream prompt swap at a chunk boundary.
+
+        Rebuilds the text cross-attention KV in place; the KV history
+        carries the generated scene forward under the new prompt. Only call
+        between a finalized chunk and the next ``continue_generation`` (or
+        pass ``text_prompts`` to ``continue_generation`` directly), and only
+        when the prompt actually changes — every call re-runs the 7B text
+        encoder.
+        """
+        assert len(text_prompts) == 1, (
+            "Only one text prompt (batch size == 1) is supported for now"
+        )
+        if state.pipeline_cache is None:
+            raise ValueError(
+                "Cannot swap the prompt: pipeline_cache is None "
+                "(session was started with skip_video_generation=True)"
+            )
+        self.pipeline.replace_text(
+            state.pipeline_cache,
+            self._build_text_batch(text_prompts),
+            guidance_scale=self._text_edit_guidance_scale,
+            guidance_chunks=self._text_edit_guidance_chunks,
+            recache_last_chunk=self._text_edit_recache,
+        )
+
     def continue_generation(
         self,
         state: OmnidreamsConditioningState,
@@ -525,12 +571,17 @@ class OmnidreamsConditioningWrapper(nn.Module):
         prev_block_idx = state.pipeline_cache.autoregressive_index
         block_idx = 0 if prev_block_idx is None else prev_block_idx + 1
 
+        if text_prompts is not None:
+            with profiler.measure(
+                "pipeline.replace_text", session_id=session_id, chunk_idx=chunk_idx
+            ):
+                self.apply_text_prompts(state, text_prompts)
+
         with profiler.measure(
             "pipeline.continue_generation",
             session_id=session_id,
             chunk_idx=chunk_idx,
         ):
-            del text_prompts  # Pipeline currently keeps prompts from initialize_cache.
             rgb_frames = self.pipeline.generate(
                 autoregressive_index=block_idx,
                 hdmap=condition,
