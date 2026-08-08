@@ -484,7 +484,7 @@ def _run_process(
             env=dict(env),
             stdout=log,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
         start = time.perf_counter()
         deadline = None if timeout_s is None else start + timeout_s
