@@ -512,6 +512,13 @@ warmup was 14.95 s, the first chunk was 5.73 s, and the next 8-frame chunk was
 356.6 ms. The compiled-wrapper baseline's steady chunk was 319.7 ms, so this
 trades about 37 ms per chunk for roughly 55 s less startup.
 
+FlashDreams stores Inductor FX-graph and Triton cubin artifacts together under
+`$FLASHDREAMS_CACHE_DIR/torchinductor` (by default
+`~/.cache/flashdreams/torchinductor`). Set `TORCHINDUCTOR_CACHE_DIR` to override
+that location. Keep the FX-graph and `triton/` subtrees together when copying or
+cleaning this cache; deleting only one side forces kernel recovery on the next
+compiled run.
+
 ```bash
 uv run --no-sync --package flashdreams-omnidreams interactive-drive \
   --manifest example_world_model_perf.yaml --synthetic-model \
