@@ -44,6 +44,8 @@ _PHYSX_ARCHIVE_SHA256 = (
     "b2f713bac94e2655614b1c8c34ba18750673d5d780fba19e0a23a21bda5695bb"
 )
 _MODULE_NAME = "ludus_physx_native"
+_BUILD_LOCK_TIMEOUT_SECONDS = 1_800.0
+_BUILD_LOCK_STALE_SECONDS = 1_800.0
 _CACHED_MODULE: ModuleType | None = None
 
 
@@ -108,7 +110,7 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
     """Serialize first-use builds that share the platform cache."""
     cache_root.mkdir(parents=True, exist_ok=True)
     lock_path = cache_root / "build.lock"
-    deadline = time.monotonic() + 600.0
+    deadline = time.monotonic() + _BUILD_LOCK_TIMEOUT_SECONDS
     descriptor: int | None = None
     while descriptor is None:
         try:
@@ -120,7 +122,10 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
             os.write(descriptor, f"{os.getpid()}\n".encode())
         except FileExistsError:
             try:
-                stale = time.time() - lock_path.stat().st_mtime > 1_800.0
+                stale = (
+                    time.time() - lock_path.stat().st_mtime
+                    > _BUILD_LOCK_STALE_SECONDS
+                )
             except FileNotFoundError:
                 continue
             if stale:

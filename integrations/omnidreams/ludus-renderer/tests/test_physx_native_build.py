@@ -15,6 +15,8 @@
 
 """CPU-only contracts for the first-use PhysX CMake build."""
 
+import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -24,6 +26,25 @@ import pytest
 from ludus_renderer import _physx_native
 
 pytestmark = pytest.mark.ci_cpu
+
+
+def test_build_lock_can_become_stale_before_wait_timeout() -> None:
+    assert (
+        _physx_native._BUILD_LOCK_STALE_SECONDS
+        <= _physx_native._BUILD_LOCK_TIMEOUT_SECONDS
+    )
+
+
+def test_build_lock_reclaims_abandoned_lock(tmp_path: Path) -> None:
+    lock_path = tmp_path / "build.lock"
+    lock_path.write_text("abandoned\n", encoding="utf-8")
+    stale_time = time.time() - _physx_native._BUILD_LOCK_STALE_SECONDS - 1.0
+    os.utime(lock_path, (stale_time, stale_time))
+
+    with _physx_native._build_lock(tmp_path):
+        assert lock_path.read_text(encoding="utf-8") == f"{os.getpid()}\n"
+
+    assert not lock_path.exists()
 
 
 def test_load_native_physx_runs_cmake_path_once_per_process(
