@@ -55,8 +55,8 @@ from tools.benchmarks.scenarios import (
 
 _SCHEMA_VERSION = "0.1.0"
 ProgressCallback = Callable[[str], None]
-_PROCESS_TERMINATE_GRACE_S = 0.25
 _PROCESS_KILL_TIMEOUT_S = 10.0
+_PROCESS_WAIT_POLL_S = 0.1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -524,24 +524,27 @@ def _run_process(
 def _terminate_process(process: subprocess.Popen[str]) -> None:
     try:
         root = psutil.Process(process.pid)
-        processes = [root, *root.children(recursive=True)]
+        processes = [*reversed(root.children(recursive=True)), root]
     except psutil.NoSuchProcess:
         processes = []
 
     for item in processes:
         try:
-            item.terminate()
-        except psutil.NoSuchProcess:
-            pass
-
-    _, alive = psutil.wait_procs(processes, timeout=_PROCESS_TERMINATE_GRACE_S)
-    for item in alive:
-        try:
             item.kill()
         except psutil.NoSuchProcess:
             pass
 
-    _, alive = psutil.wait_procs(alive, timeout=_PROCESS_KILL_TIMEOUT_S)
+    deadline = time.monotonic() + _PROCESS_KILL_TIMEOUT_S
+    alive = processes
+    while alive:
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            break
+        _, alive = psutil.wait_procs(
+            alive,
+            timeout=min(_PROCESS_WAIT_POLL_S, remaining_s),
+        )
+        alive = [item for item in alive if not _is_terminated_zombie(item)]
     if alive:
         pids = ", ".join(str(item.pid) for item in alive)
         raise RuntimeError(
@@ -549,6 +552,13 @@ def _terminate_process(process: subprocess.Popen[str]) -> None:
             f"processes still alive: {pids}."
         )
     process.wait(timeout=_PROCESS_KILL_TIMEOUT_S)
+
+
+def _is_terminated_zombie(process: psutil.Process) -> bool:
+    try:
+        return process.status() == psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return True
 
 
 def _collect_scenario_metrics(
