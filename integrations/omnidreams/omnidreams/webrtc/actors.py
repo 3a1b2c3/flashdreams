@@ -34,6 +34,9 @@ from scipy.spatial.transform import Rotation
 
 ## Spawn presets
 
+RIG_HEIGHT_M = 1.5
+"""Ego rig-origin height above the road plane; spawn z-correction."""
+
 ACTOR_PRESETS: dict[str, tuple[str, tuple[float, float, float]]] = {
     # preset -> (actor class, FLU bbox size (length, width, height) in meters)
     "car": ("CAR", (4.6, 2.0, 1.6)),
@@ -117,8 +120,12 @@ def spawn_actor_ahead(
         ego_pose[:3, 3]
         + distance_m * forward_xy
         + lateral_m * left_xy
-        # Bbox center sits half a height above the ego origin's ground plane.
-        + np.array([0.0, 0.0, size_xyz[2] / 2.0])
+        # Bbox center sits half a height above the road. The ego pose is the
+        # RIG origin (~camera height above ground, empirically ~1.5 m on the
+        # HDMap scenes — verified against the scene's own actor boxes);
+        # without the correction spawned boxes float at eye level and the
+        # model under-renders them.
+        + np.array([0.0, 0.0, size_xyz[2] / 2.0 - RIG_HEIGHT_M])
     )
     yaw = float(np.arctan2(forward_xy[1], forward_xy[0]))
     quat_xyzw = Rotation.from_euler("z", yaw).as_quat().astype(np.float32)

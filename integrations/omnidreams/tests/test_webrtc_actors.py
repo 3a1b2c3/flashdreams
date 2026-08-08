@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from omnidreams.webrtc.actors import (
     ACTOR_PRESETS,
+    RIG_HEIGHT_M,
     actors_to_cube_pool,
     spawn_actor_ahead,
 )
@@ -47,9 +48,12 @@ def test_spawn_ahead_places_actor_along_heading():
     # Heading +90deg: forward is +y, left is -x.
     np.testing.assert_allclose(actor.translation[0], 4.0, atol=1e-5)
     np.testing.assert_allclose(actor.translation[1], 12.0, atol=1e-5)
-    # Bbox center sits half its height above the ground plane.
+    # Bbox center sits half its height above the road plane (the ego pose is
+    # the rig origin, RIG_HEIGHT_M above the road).
     np.testing.assert_allclose(
-        actor.translation[2], ACTOR_PRESETS["car"][1][2] / 2.0, atol=1e-6
+        actor.translation[2],
+        ACTOR_PRESETS["car"][1][2] / 2.0 - RIG_HEIGHT_M,
+        atol=1e-6,
     )
     np.testing.assert_allclose(actor.velocity, np.zeros(3), atol=1e-6)
 
@@ -74,10 +78,12 @@ def test_spawn_heading_ignores_camera_pitch():
         preset="cone", ego_pose=pose, spawn_timestamp_us=0, distance_m=8.0
     )
     # Forward projected to the ground plane: full 8 m in x, none in z beyond
-    # the half-height offset.
+    # the half-height-minus-rig offset.
     np.testing.assert_allclose(actor.translation[0], 8.0, atol=1e-5)
     np.testing.assert_allclose(
-        actor.translation[2], ACTOR_PRESETS["cone"][1][2] / 2.0, atol=1e-6
+        actor.translation[2],
+        ACTOR_PRESETS["cone"][1][2] / 2.0 - RIG_HEIGHT_M,
+        atol=1e-6,
     )
 
 
