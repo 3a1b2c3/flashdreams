@@ -791,6 +791,7 @@ class OmnidreamsInferenceRuntime:
             distance_m = float(parts[2]) if len(parts) > 2 else 12.0
             speed_mps = float(parts[3]) if len(parts) > 3 else 0.0
             lateral_m = float(parts[4]) if len(parts) > 4 else 0.0
+            yaw_offset_deg = float(parts[5]) if len(parts) > 5 else 0.0
         except ValueError as exc:
             raise OmnidreamsRuntimeError(
                 f"Non-numeric spawn argument in {command!r}: {exc}"
@@ -811,6 +812,7 @@ class OmnidreamsInferenceRuntime:
             distance_m=distance_m,
             speed_mps=speed_mps,
             lateral_m=lateral_m,
+            yaw_offset_deg=yaw_offset_deg,
         )
         self._spawned_actors.append(actor)
         logger.info(

@@ -86,6 +86,7 @@ def spawn_actor_ahead(
     distance_m: float = 12.0,
     speed_mps: float = 0.0,
     lateral_m: float = 0.0,
+    yaw_offset_deg: float = 0.0,
 ) -> SpawnedActor:
     """Place a preset actor relative to the ego vehicle.
 
@@ -97,6 +98,10 @@ def spawn_actor_ahead(
         distance_m: Meters ahead of the ego along its heading.
         speed_mps: Actor speed along the ego heading (0 = parked).
         lateral_m: Meters to the left (+) / right (-) of the ego heading.
+        yaw_offset_deg: Box heading relative to the ego heading (0 = same
+            direction, 180 = oncoming). The rendered box's front/back face
+            colors encode heading, which the model reads as travel
+            direction.
 
     Raises:
         KeyError: Unknown preset.
@@ -127,7 +132,9 @@ def spawn_actor_ahead(
         # model under-renders them.
         + np.array([0.0, 0.0, size_xyz[2] / 2.0 - RIG_HEIGHT_M])
     )
-    yaw = float(np.arctan2(forward_xy[1], forward_xy[0]))
+    yaw = float(np.arctan2(forward_xy[1], forward_xy[0])) + float(
+        np.deg2rad(yaw_offset_deg)
+    )
     quat_xyzw = Rotation.from_euler("z", yaw).as_quat().astype(np.float32)
 
     return SpawnedActor(
