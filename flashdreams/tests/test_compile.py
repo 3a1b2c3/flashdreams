@@ -22,6 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch.nn as nn
+from torch._inductor.runtime.cache_dir_utils import default_cache_dir
 
 from flashdreams.infra import compile as compile_module_impl
 from flashdreams.infra.compile import (
@@ -53,6 +54,17 @@ def test_configure_inductor_cache_preserves_explicit_override(
     _configure_inductor_cache()
 
     assert os.environ["TORCHINDUCTOR_CACHE_DIR"] == str(override)
+
+
+def test_configure_inductor_cache_replaces_pytorch_default(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FLASHDREAMS_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("TORCHINDUCTOR_CACHE_DIR", default_cache_dir())
+
+    _configure_inductor_cache()
+
+    assert os.environ["TORCHINDUCTOR_CACHE_DIR"] == str(tmp_path / "torchinductor")
 
 
 def test_static_autotuner_cubins_are_retained_with_filtered_winners() -> None:

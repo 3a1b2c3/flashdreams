@@ -52,14 +52,18 @@ CompileMode = Literal[
 
 def _configure_inductor_cache() -> None:
     """Place Inductor artifacts in the persistent FlashDreams cache by default."""
+    from torch._inductor.runtime.cache_dir_utils import default_cache_dir
+
     cache_root = Path(
         os.path.expanduser(
             os.environ.get("FLASHDREAMS_CACHE_DIR", "~/.cache/flashdreams")
         )
     )
-    os.environ.setdefault(
-        "TORCHINDUCTOR_CACHE_DIR", str(cache_root / _INDUCTOR_CACHE_SUBDIR)
-    )
+    configured_cache = os.environ.get("TORCHINDUCTOR_CACHE_DIR")
+    if configured_cache is not None and configured_cache != default_cache_dir():
+        return
+
+    os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(cache_root / _INDUCTOR_CACHE_SUBDIR)
 
 
 def _add_static_autotuner_hashes_to_winners(
