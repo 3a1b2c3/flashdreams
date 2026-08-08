@@ -484,7 +484,7 @@ def _run_process(
             env=dict(env),
             stdout=log,
             stderr=subprocess.STDOUT,
-            text=True,
+            text=True
         )
         start = time.perf_counter()
         deadline = None if timeout_s is None else start + timeout_s
@@ -522,14 +522,11 @@ def _run_process(
 
 
 def _terminate_process(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
     try:
         root = psutil.Process(process.pid)
         processes = [root, *root.children(recursive=True)]
     except psutil.NoSuchProcess:
-        process.wait(timeout=_PROCESS_KILL_TIMEOUT_S)
-        return
+        processes = []
 
     for item in processes:
         try:
