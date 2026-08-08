@@ -102,3 +102,36 @@ def test_configure_and_build_delegates_freshness_to_cmake(
     assert commands[1][:2] == ["cmake", "--build"]
     assert "--target" in commands[1]
     assert _physx_native._MODULE_NAME in commands[1]
+
+
+def test_discard_relocated_cmake_build_removes_stale_checkout(
+    tmp_path: Path,
+) -> None:
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "CMakeCache.txt").write_text(
+        "CMAKE_HOME_DIRECTORY:INTERNAL=C:/old/flashdreams/ludus_renderer/_cpp/physx\n",
+        encoding="utf-8",
+    )
+
+    _physx_native._discard_relocated_cmake_build(
+        build_dir, tmp_path / "current" / "_cpp" / "physx"
+    )
+
+    assert not build_dir.exists()
+
+
+def test_discard_relocated_cmake_build_preserves_current_checkout(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "current" / "_cpp" / "physx"
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "CMakeCache.txt").write_text(
+        f"CMAKE_HOME_DIRECTORY:INTERNAL={source_dir.as_posix()}\n",
+        encoding="utf-8",
+    )
+
+    _physx_native._discard_relocated_cmake_build(build_dir, source_dir)
+
+    assert build_dir.exists()

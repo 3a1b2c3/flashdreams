@@ -144,6 +144,28 @@ def _module_path(output_dir: Path) -> Path | None:
     return max(candidates, key=lambda path: path.stat().st_mtime, default=None)
 
 
+def _discard_relocated_cmake_build(build_dir: Path, source_dir: Path) -> None:
+    """Remove generated CMake state that belongs to a different checkout."""
+    cache_path = build_dir / "CMakeCache.txt"
+    if not cache_path.is_file():
+        return
+    prefix = "CMAKE_HOME_DIRECTORY:INTERNAL="
+    try:
+        cached_source = next(
+            line.removeprefix(prefix)
+            for line in cache_path.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()
+            if line.startswith(prefix)
+        )
+    except StopIteration:
+        return
+    cached_normalized = os.path.normcase(os.path.abspath(cached_source))
+    current_normalized = os.path.normcase(os.path.abspath(source_dir))
+    if cached_normalized != current_normalized:
+        shutil.rmtree(build_dir)
+
+
 def _configure_and_build(cache_root: Path, physx_root: Path) -> Path:
     """Configure once for this process and let CMake decide what to rebuild."""
     cmake = shutil.which("cmake")
@@ -154,11 +176,13 @@ def _configure_and_build(cache_root: Path, physx_root: Path) -> Path:
     output_dir = cache_root / "module"
     build_dir = cache_root / f"build-{platform.system().lower()}-{platform.machine()}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    source_dir = _native_source_dir()
+    _discard_relocated_cmake_build(build_dir, source_dir)
     torch_include = Path(torch.__file__).resolve().parent / "include"
     configure = [
         cmake,
         "-S",
-        str(_native_source_dir()),
+        str(source_dir),
         "-B",
         str(build_dir),
         f"-DPHYSX_ROOT_DIR={physx_root.as_posix()}",
