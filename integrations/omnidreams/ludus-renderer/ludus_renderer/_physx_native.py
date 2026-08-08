@@ -126,7 +126,7 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
     """Serialize first-use builds that share the platform cache."""
     cache_root.mkdir(parents=True, exist_ok=True)
     lock_path = cache_root / "build.lock"
-    deadline = time.monotonic() + _BUILD_LOCK_TIMEOUT_SECONDS
+    deadline: float | None = None
     descriptor: int | None = None
     owner = f"{os.getpid()}:{uuid.uuid4().hex}\n"
     while descriptor is None:
@@ -138,9 +138,14 @@ def _build_lock(cache_root: Path) -> Iterator[None]:
             )
             os.write(descriptor, owner.encode())
         except FileExistsError:
+            if deadline is None:
+                # Start the wait timeout only after observing the competing lock.
+                # A lock created between entering this function and the first open
+                # attempt must get a full stale interval before we time out.
+                deadline = time.monotonic() + _BUILD_LOCK_TIMEOUT_SECONDS
             try:
                 stale = (
-                    time.time() - lock_path.stat().st_mtime > _BUILD_LOCK_STALE_SECONDS
+                    time.time() - lock_path.stat().st_mtime >= _BUILD_LOCK_STALE_SECONDS
                 )
             except FileNotFoundError:
                 continue

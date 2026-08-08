@@ -51,6 +51,43 @@ def test_build_lock_reclaims_abandoned_lock(tmp_path: Path) -> None:
     assert not lock_path.exists()
 
 
+def test_build_lock_recovers_lock_created_after_waiter_starts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    lock_path = tmp_path / "build.lock"
+    clock = 0.0
+    original_open = os.open
+    racing_process_created_lock = False
+
+    def racing_open(path: Path, flags: int, mode: int) -> int:
+        nonlocal clock, racing_process_created_lock
+        if not racing_process_created_lock:
+            racing_process_created_lock = True
+            clock = 1.0
+            descriptor = original_open(path, flags, mode)
+            os.write(descriptor, b"abandoned\n")
+            os.close(descriptor)
+            os.utime(path, (1_001.0, 1_001.0))
+            raise FileExistsError
+        return original_open(path, flags, mode)
+
+    def advance_clock(_seconds: float) -> None:
+        nonlocal clock
+        clock += 1.0
+
+    monkeypatch.setattr(_physx_native, "_BUILD_LOCK_TIMEOUT_SECONDS", 10.0)
+    monkeypatch.setattr(_physx_native, "_BUILD_LOCK_STALE_SECONDS", 10.0)
+    monkeypatch.setattr(_physx_native.os, "open", racing_open)
+    monkeypatch.setattr(_physx_native.time, "monotonic", lambda: clock)
+    monkeypatch.setattr(_physx_native.time, "time", lambda: 1_000.0 + clock)
+    monkeypatch.setattr(_physx_native.time, "sleep", advance_clock)
+
+    with _physx_native._build_lock(tmp_path):
+        assert lock_path.read_text(encoding="utf-8").startswith(f"{os.getpid()}:")
+
+    assert not lock_path.exists()
+
+
 def test_build_lock_heartbeat_refreshes_active_lock(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
