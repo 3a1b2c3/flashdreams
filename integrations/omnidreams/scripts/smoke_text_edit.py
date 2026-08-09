@@ -106,7 +106,18 @@ def _build_pipeline() -> OmnidreamsPipeline:
     )
     pipe = cfg.setup()
     assert isinstance(pipe, OmnidreamsPipeline)
-    return pipe.to("cuda")
+    pipe = pipe.to("cuda")
+    # EDIT_LORA=<ckpt>: deploy the pre-merged guidance-distillation LoRA, so
+    # the guided variants exercise the production use_lora window instead of
+    # the two-branch combine.
+    if os.environ.get("EDIT_LORA"):
+        from omnidreams._edit_lora import TextEditLoRA
+
+        transformer = pipe.diffusion_model.transformer
+        edit_lora = TextEditLoRA(transformer.network, os.environ["EDIT_LORA"])
+        transformer.set_text_edit_lora(edit_lora)
+        print(f"deployed {edit_lora.describe()}", flush=True)
+    return pipe
 
 
 @torch.no_grad()

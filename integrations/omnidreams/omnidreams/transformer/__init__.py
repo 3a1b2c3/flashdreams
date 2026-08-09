@@ -105,11 +105,18 @@ class TextEditGuidance:
     """Number of upcoming AR chunks to apply guidance to. Decremented by
     :meth:`CosmosTransformerCache.start`; the state clears itself after."""
 
-    kv_old: list[tuple[Tensor, Tensor]]
-    """Per-block (K, V) cross-attention contents of the pre-edit prompt."""
+    kv_old: list[tuple[Tensor, Tensor]] = field(default_factory=list)
+    """Per-block (K, V) cross-attention contents of the pre-edit prompt
+    (unused for ``use_lora`` windows)."""
 
-    kv_new: list[tuple[Tensor, Tensor]]
-    """Per-block (K, V) cross-attention contents of the post-edit prompt."""
+    kv_new: list[tuple[Tensor, Tensor]] = field(default_factory=list)
+    """Per-block (K, V) cross-attention contents of the post-edit prompt
+    (unused for ``use_lora`` windows)."""
+
+    use_lora: bool = False
+    """Realize the window with the pre-merged edit LoRA weights instead of
+    the two-branch guidance combine: single forward per denoise step at
+    guided strength (the LoRA distilled the combine; see ``_edit_lora``)."""
 
 
 @dataclass(kw_only=True)
@@ -399,6 +406,21 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         # under the (new) post-edit prompt.
         self._finalizing_kv_cache = False
 
+        # Optional pre-merged edit LoRA (omnidreams._edit_lora.TextEditLoRA):
+        # when attached, replace_text_embeddings builds use_lora windows and
+        # predict_flow toggles the merged weights instead of double-branching.
+        self._text_edit_lora: Any | None = None
+
+    def set_text_edit_lora(self, edit_lora: Any | None) -> None:
+        """Attach (or detach with ``None``) a pre-merged edit-LoRA hook.
+
+        The hook must expose ``set_active(bool)`` and ``active``
+        (:class:`omnidreams._edit_lora.TextEditLoRA`). While attached, edit
+        windows requested via :meth:`replace_text_embeddings` run at guided
+        strength through the merged weights — one forward per denoise step.
+        """
+        self._text_edit_lora = edit_lora
+
     def _configure_optimized_dit_from_config(self) -> None:
         from omnidreams.native import omnidreams_singleview
 
@@ -653,6 +675,11 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         mask_first_patched = self.patchify_and_maybe_split_cp(mask_first_block)
         mask_other_patched = self.patchify_and_maybe_split_cp(mask_other_blocks)
 
+        # A fresh rollout always starts on the base weights; a mid-window
+        # session teardown must not leak edit weights into the next session.
+        if self._text_edit_lora is not None:
+            self._text_edit_lora.set_active(False)
+
         if self._use_cuda_graph:
             self._cuda_graph_dispatch.reset()
 
@@ -720,6 +747,20 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             "(guidance_scale > 1.0 configs)."
         )
 
+        if use_guidance and self._text_edit_lora is not None:
+            # Distilled path: the pre-merged LoRA realizes the window at
+            # guided strength with a single branch — no KV snapshots needed.
+            self.network.replace_text_embeddings(
+                cache.network_cache, text_embeddings
+            )
+            self._text_edit_lora.set_active(True)
+            cache.text_edit_guidance = TextEditGuidance(
+                scale=guidance_scale,
+                chunks_remaining=guidance_chunks,
+                use_lora=True,
+            )
+            return
+
         block_caches = cache.network_cache.block_caches
         kv_old: list[tuple[Tensor, Tensor]] | None = None
         if use_guidance:
@@ -739,6 +780,8 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             # A plain swap supersedes any in-flight guidance (whose old/new
             # snapshots no longer match the buffers).
             cache.text_edit_guidance = None
+            if self._text_edit_lora is not None:
+                self._text_edit_lora.set_active(False)
 
     ## Mask-injection helpers
 
@@ -853,8 +896,19 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
                 input=input,
             )
         guidance = cache.text_edit_guidance
+        if guidance is not None and guidance.use_lora:
+            # Distilled edit window: merged weights, single branch. The
+            # KV-commit forwards inside the window also run merged (the
+            # LoRA was trained to match the guided context forward).
+            assert self._text_edit_lora is not None
+            self._text_edit_lora.set_active(True)
+        elif self._text_edit_lora is not None and self._text_edit_lora.active:
+            # Window expired (cache.start cleared the countdown): the first
+            # forward of the next chunk restores the base weights.
+            self._text_edit_lora.set_active(False)
         if (
             guidance is not None
+            and not guidance.use_lora
             and not self._finalizing_kv_cache
             and cache.network_cache_uncond is None
         ):

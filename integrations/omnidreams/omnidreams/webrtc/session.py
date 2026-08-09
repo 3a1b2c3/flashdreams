@@ -475,6 +475,10 @@ class OmnidreamsRuntimeConfig:
     text_edit_guidance_scale: float = 3.0
     text_edit_guidance_chunks: int = 6
     text_edit_recache: bool = True
+    # Optional guidance-distillation LoRA: edit windows run at guided
+    # strength through pre-merged weights (single forward per step) instead
+    # of the two-branch combine.
+    text_edit_lora_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -966,6 +970,7 @@ class OmnidreamsInferenceRuntime:
             text_edit_guidance_scale=cfg.text_edit_guidance_scale,
             text_edit_guidance_chunks=cfg.text_edit_guidance_chunks,
             text_edit_recache=cfg.text_edit_recache,
+            text_edit_lora_path=cfg.text_edit_lora_path,
         )
         logger.info(
             "Omnidreams pipeline setup complete in {:.1f}s.",

@@ -24,10 +24,12 @@ This module combines:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+from loguru import logger
 from ludus_renderer import CubePool
 from omnidreams.conditioning.renderer import LudusRenderer
 from omnidreams.conditioning.world_scenario.data_types import SceneData
@@ -101,6 +103,7 @@ class OmnidreamsConditioningWrapper(nn.Module):
         text_edit_guidance_scale: float = 1.0,
         text_edit_guidance_chunks: int = 0,
         text_edit_recache: bool = True,
+        text_edit_lora_path: "str | Path | None" = None,
     ) -> None:
         """Instantiate the pipeline from a registered Omnidreams config.
 
@@ -126,6 +129,11 @@ class OmnidreamsConditioningWrapper(nn.Module):
                 under the new prompt on every swap (one extra context
                 forward), so the attended window is consistent with the new
                 text.
+            text_edit_lora_path: Optional ``guidance_distill`` LoRA
+                checkpoint. When set, edit windows run through the
+                pre-merged distilled weights (guided strength, single
+                forward per denoise step) instead of the two-branch
+                guidance combine.
 
         Raises:
             KeyError: ``pipeline_config`` is omitted and ``pipeline_config_name``
@@ -170,6 +178,14 @@ class OmnidreamsConditioningWrapper(nn.Module):
         pipeline = pipeline_config.setup().to(device=device)
         assert isinstance(pipeline, OmnidreamsPipeline)  # for type checking
         self.pipeline: OmnidreamsPipeline = pipeline
+
+        if text_edit_lora_path is not None:
+            from omnidreams._edit_lora import TextEditLoRA
+
+            transformer = pipeline.diffusion_model.transformer
+            edit_lora = TextEditLoRA(transformer.network, text_edit_lora_path)
+            transformer.set_text_edit_lora(edit_lora)
+            logger.info("Deployed {}", edit_lora.describe())
 
     @property
     def V_group(self) -> torch.distributed.ProcessGroup | None:
