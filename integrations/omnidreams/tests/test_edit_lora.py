@@ -42,7 +42,7 @@ from test_text_edit import _init_cache, _tiny_transformer  # noqa: E402
 pytestmark = pytest.mark.ci_cpu
 
 
-def _fake_checkpoint(network, rank: int = 4, path=None):
+def _fake_checkpoint(network, *, rank: int = 4, path: Path):
     torch.manual_seed(3)
     linears = _target_linears(network)
     sd = {}
@@ -115,7 +115,7 @@ def test_replace_builds_lora_window_and_expiry_restores(tmp_path):
         calls.append(kwargs["network_cache"])
         return torch.zeros(4)
 
-    transformer._predict_branch = fake_branch
+    transformer._predict_branch = fake_branch  # ty: ignore[invalid-assignment]
     cache.start(0)
     transformer.predict_flow(
         noisy_latent=torch.zeros(4), timestep=torch.tensor(1000.0), cache=cache

@@ -40,14 +40,13 @@ from pathlib import Path
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch
-from einops import rearrange
 from omnidreams.config import (
     OMNIDREAMS_CONFIGS,
     SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE,
 )
-from omnidreams.runner import _write_video
 
 from flashdreams.infra.config import derive_config
+from flashdreams.infra.runner_io import write_video_tensor
 
 # Register an eager variant before the runtime resolves the name: probing
 # scripts skip compile / CUDA graphs to trade steady-state latency for
@@ -117,7 +116,7 @@ def main() -> None:
     video = torch.cat(chunks, dim=0).float() / 127.5 - 1.0
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     name = "hdmap.mp4" if HDMAP_ONLY else "drive.mp4"
-    _write_video(rearrange(video, "t c h w -> t h w c"), OUT_DIR / name, fps=FPS)
+    write_video_tensor(video, OUT_DIR / name, fps=FPS, layout="tchw")
     print(
         f"{video.shape[0]} frames -> {OUT_DIR / name} "
         f"(spawn at chunk {SPAWN_AT}: {SPAWN_CMD!r}; "

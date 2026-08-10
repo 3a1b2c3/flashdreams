@@ -48,19 +48,17 @@ from pathlib import Path
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch
-from einops import rearrange
 from omnidreams.config import SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE
 from omnidreams.pipeline import OmnidreamsPipeline
-from omnidreams.runner import (
-    DEFAULT_VIDEO_HEIGHT,
-    DEFAULT_VIDEO_WIDTH,
-    _load_first_frame,
-    _load_video,
-    _write_video,
-)
+from omnidreams.runner import DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH
 from torch import Tensor
 
 from flashdreams.infra.config import derive_config
+from flashdreams.infra.runner_io import (
+    load_first_frame_tensor,
+    load_video_tensor,
+    write_video_tensor,
+)
 
 SAMPLES_ROOT = (
     Path.home()
@@ -167,9 +165,7 @@ def _chunk_bounds() -> list[tuple[int, int]]:
 
 def _per_chunk_gap(a: Tensor, b: Tensor) -> list[float]:
     """Mean |a - b| per chunk in uint8 units (0..255)."""
-    return [
-        float((a[s:e] - b[s:e]).abs().mean() * 127.5) for s, e in _chunk_bounds()
-    ]
+    return [float((a[s:e] - b[s:e]).abs().mean() * 127.5) for s, e in _chunk_bounds()]
 
 
 def main() -> None:
@@ -179,14 +175,14 @@ def main() -> None:
     print(f"  chunks={N_CHUNKS} swap_at={SWAP_AT} frames={total_frames}")
 
     device = torch.device("cuda")
-    hdmap = _load_video(
+    hdmap = load_video_tensor(
         hdmap_path,
         pixel_height=DEFAULT_VIDEO_HEIGHT,
         pixel_width=DEFAULT_VIDEO_WIDTH,
         device=device,
         dtype=torch.bfloat16,
     )[:total_frames][None, None]
-    first = _load_first_frame(
+    first = load_first_frame_tensor(
         frame_path,
         pixel_height=DEFAULT_VIDEO_HEIGHT,
         pixel_width=DEFAULT_VIDEO_WIDTH,
@@ -215,11 +211,7 @@ def main() -> None:
         videos[name] = _rollout(
             pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=swap
         )
-        _write_video(
-            rearrange(videos[name], "t c h w -> t h w c"),
-            OUT_DIR / f"{name}.mp4",
-            fps=30,
-        )
+        write_video_tensor(videos[name], OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
 
     control = videos["control"]
     report: dict[str, list[float]] = {}
@@ -237,7 +229,7 @@ def main() -> None:
     sbs = torch.cat(
         [control, videos["swap"], videos["swap_guided"]], dim=3
     )  # widths concat
-    _write_video(rearrange(sbs, "t c h w -> t h w c"), OUT_DIR / "sbs.mp4", fps=30)
+    write_video_tensor(sbs, OUT_DIR / "sbs.mp4", fps=30, layout="tchw")
 
     meta = {
         "uuid": UUID,

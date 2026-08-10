@@ -750,9 +750,7 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         if use_guidance and self._text_edit_lora is not None:
             # Distilled path: the pre-merged LoRA realizes the window at
             # guided strength with a single branch — no KV snapshots needed.
-            self.network.replace_text_embeddings(
-                cache.network_cache, text_embeddings
-            )
+            self.network.replace_text_embeddings(cache.network_cache, text_embeddings)
             self._text_edit_lora.set_active(True)
             cache.text_edit_guidance = TextEditGuidance(
                 scale=guidance_scale,

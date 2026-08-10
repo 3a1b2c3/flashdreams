@@ -36,6 +36,7 @@ first forward after the countdown expires restores the base weights.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -92,7 +93,7 @@ class TextEditLoRA:
         scale: float = 1.0,
     ) -> None:
         if hasattr(network, "_orig_mod"):  # unwrap torch.compile
-            network = network._orig_mod
+            network = cast(nn.Module, network._orig_mod)
         linears = _target_linears(network)
         sd = torch.load(checkpoint, map_location="cpu", weights_only=False)["lora"]
         assert len(sd) == 2 * len(linears), (

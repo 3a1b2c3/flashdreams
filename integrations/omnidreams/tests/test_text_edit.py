@@ -280,7 +280,7 @@ def test_predict_flow_guidance_combines_and_lands_on_new_kv():
     def fake_branch(**kwargs):
         return block_caches[0].cross_attn.cached_k().mean() * torch.ones(4)
 
-    transformer._predict_branch = fake_branch
+    transformer._predict_branch = fake_branch  # ty: ignore[invalid-assignment]
 
     flow = transformer.predict_flow(
         noisy_latent=torch.zeros(4),

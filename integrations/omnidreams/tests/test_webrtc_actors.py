@@ -89,9 +89,7 @@ def test_spawn_heading_ignores_camera_pitch():
 
 def test_unknown_preset_raises():
     with pytest.raises(KeyError):
-        spawn_actor_ahead(
-            preset="dragon", ego_pose=_ego_pose(), spawn_timestamp_us=0
-        )
+        spawn_actor_ahead(preset="dragon", ego_pose=_ego_pose(), spawn_timestamp_us=0)
 
 
 def test_actors_to_cube_pool_respects_spawn_time():

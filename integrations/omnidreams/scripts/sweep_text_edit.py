@@ -38,19 +38,17 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import mediapy as media
 import numpy as np
 import torch
-from einops import rearrange
 from omnidreams.config import SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE
 from omnidreams.pipeline import OmnidreamsPipeline
-from omnidreams.runner import (
-    DEFAULT_VIDEO_HEIGHT,
-    DEFAULT_VIDEO_WIDTH,
-    _load_first_frame,
-    _load_video,
-    _write_video,
-)
+from omnidreams.runner import DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH
 from torch import Tensor
 
 from flashdreams.infra.config import derive_config
+from flashdreams.infra.runner_io import (
+    load_first_frame_tensor,
+    load_video_tensor,
+    write_video_tensor,
+)
 
 SAMPLES_ROOT = (
     Path.home()
@@ -155,7 +153,9 @@ def _rollout(
                 guidance_chunks=guide_chunks,
             )
         num_frames = pipe.get_num_frames(ar_idx)
-        chunk = pipe.generate(ar_idx, cache, hdmap=hdmap[:, :, start : start + num_frames])
+        chunk = pipe.generate(
+            ar_idx, cache, hdmap=hdmap[:, :, start : start + num_frames]
+        )
         pipe.finalize(ar_idx, cache)
         chunks.append(chunk[0, 0].float().cpu())
         start += num_frames
@@ -168,7 +168,9 @@ def _per_chunk_gap(a: Tensor, b: Tensor) -> list[float]:
     gaps, start = [], 0
     for ar_idx in range(N_CHUNKS):
         n = 5 if ar_idx == 0 else 8
-        gaps.append(float((a[start : start + n] - b[start : start + n]).abs().mean() * 127.5))
+        gaps.append(
+            float((a[start : start + n] - b[start : start + n]).abs().mean() * 127.5)
+        )
         start += n
     return gaps
 
@@ -177,14 +179,14 @@ def main() -> None:
     hdmap_path, frame_path, clip_prompt = _sample_paths(UUID)
     total_frames = 5 + (N_CHUNKS - 1) * 8
     device = torch.device("cuda")
-    hdmap = _load_video(
+    hdmap = load_video_tensor(
         hdmap_path,
         pixel_height=DEFAULT_VIDEO_HEIGHT,
         pixel_width=DEFAULT_VIDEO_WIDTH,
         device=device,
         dtype=torch.bfloat16,
     )[:total_frames][None, None]
-    first = _load_first_frame(
+    first = load_first_frame_tensor(
         frame_path,
         pixel_height=DEFAULT_VIDEO_HEIGHT,
         pixel_width=DEFAULT_VIDEO_WIDTH,
@@ -207,8 +209,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"clip {UUID}: {clip_prompt[:100]}...")
     print("rolling out control ...", flush=True)
-    control = _rollout(pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, edit=None)
-    _write_video(rearrange(control, "t c h w -> t h w c"), OUT_DIR / "control.mp4", fps=30)
+    control = _rollout(
+        pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, edit=None
+    )
+    write_video_tensor(control, OUT_DIR / "control.mp4", fps=30, layout="tchw")
 
     report: dict[str, dict] = {}
     videos: dict[str, Tensor] = {"control": control}
@@ -222,7 +226,7 @@ def main() -> None:
             edit=(prompt, scale, guide_chunks),
         )
         videos[name] = video
-        _write_video(rearrange(video, "t c h w -> t h w c"), OUT_DIR / f"{name}.mp4", fps=30)
+        write_video_tensor(video, OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
         gaps = _per_chunk_gap(video, control)
         report[name] = {
             "prompt": prompt,
@@ -243,7 +247,9 @@ def main() -> None:
     rows = []
     for name in row_names:
         arr = ((videos[name].numpy() + 1.0) * 127.5).clip(0, 255).astype("uint8")
-        rows.append(np.concatenate([arr[c].transpose(1, 2, 0) for c in frame_cols], axis=1))
+        rows.append(
+            np.concatenate([arr[c].transpose(1, 2, 0) for c in frame_cols], axis=1)
+        )
     grid = np.concatenate(rows, axis=0)[::2, ::2]
     media.write_image(OUT_DIR / "grid.png", grid)
 
