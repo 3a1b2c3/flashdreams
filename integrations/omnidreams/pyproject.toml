@@ -22,7 +22,7 @@ name = "flashdreams-omnidreams"
 version = "0.1.0"
 description = "Omnidreams inference with flashdreams (webrtc / gRPC servers + the interactive-drive desktop demo)"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     # Core inference / serving deps (consumed by ``omnidreams.webrtc``,
     # ``omnidreams.grpc``, and the ``omnidreams.interactive_drive`` desktop
@@ -55,8 +55,10 @@ dependencies = [
     # NVENC hardware H.264 encoding for the WebRTC path via
     # ``flashdreams.serving.webrtc.encoders.PyNvHardwareEncoder``. Not
     # optional: omnidreams already requires CUDA at runtime, so the
-    # PyNvVideoCodec install adds no extra platform surface. Hosts
-    # without an NVENC ASIC fall back to aiortc's software encoder
+    # PyNvVideoCodec install adds no extra platform surface. Upstream
+    # currently publishes wheels for CPython 3.10-3.12 only (including
+    # Linux ARM64), so this package's ``requires-python`` excludes 3.13.
+    # Hosts without an NVENC ASIC fall back to aiortc's software encoder
     # automatically at session initialization (Stage-1 ``GetEncoderCaps``
     # probe returns unsupported, ``select_encoder`` logs the reason and
     # constructs ``DefaultRTCEncoder``).
@@ -68,10 +70,10 @@ flashdreams = { workspace = true }
 ludus-renderer = { workspace = true }
 
 [project.optional-dependencies]
-# Slangpy + Vulkan runtime, only needed by the ``interactive-drive``
+# Slangpy runtime, only needed by the ``interactive-drive``
 # desktop demo (``omnidreams.interactive_drive``). Server users
 # (``omnidreams.webrtc`` / ``omnidreams.grpc``) don't need this and
-# shouldn't pay the slangpy install cost in their containers. Named
+# shouldn't pay the desktop presentation install cost in their containers. Named
 # after the consumer (the ``interactive-drive`` script) rather than
 # the abstract capability so the install command is self-documenting.
 interactive-drive = [

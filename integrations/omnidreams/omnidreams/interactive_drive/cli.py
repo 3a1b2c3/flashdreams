@@ -166,13 +166,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="SlangPy device used for raster compute; presenter still uses Vulkan for swapchain",
     )
     parser.add_argument(
-        "--ludus-backend",
-        choices=("cuda", "vulkan"),
-        default="cuda",
-        help="HD-map renderer backend: 'cuda' (default, software rasterizer) or "
-        "'vulkan' (VK_EXT_mesh_shader). Independent of --compute-device.",
-    )
-    parser.add_argument(
         "--sync-gpu-timing",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -247,13 +240,30 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--game-mode",
+        action="store_true",
+        help=(
+            "Enable game-style actor and static-world collisions, along with "
+            "the vehicle speed limit and collision visual flare. By default, "
+            "collisions, the speed limit, and their visual effect are disabled."
+        ),
+    )
+    parser.add_argument(
+        "--disable-visual-flare",
+        action="store_true",
+        help=(
+            "Disable the strong full-screen dark fade that signals a collision "
+            "when --game-mode is enabled."
+        ),
+    )
+    parser.add_argument(
         "--bev",
         action=argparse.BooleanOptionalAction,
         default=True,
         help=(
             "Render a synthetic top-down BEV map alongside the main camera and"
-            " publish it on /bev_stream. Mirrors AlpaSim's BEV camera (a"
-            " pinhole projection looking straight down). Disable to skip the"
+            " publish it on /bev_stream. The default is a straight-down,"
+            " orthographic-style view of the HD-map plane. Disable to skip the"
             " extra rasterizer dispatch when running without the GTC HUD."
         ),
     )
@@ -285,10 +295,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=BevConfig().tilt_deg,
         help=(
-            "Forward pitch of the BEV camera in degrees. ``0`` is pure"
-            " top-down; positive values tilt forward for a Google-Maps"
-            " navigation-mode look. Should stay below ``bev-fov-deg / 2``"
-            " so the bottom of the image doesn't cross the horizon."
+            "Advanced override for the BEV camera pitch in degrees. The"
+            " default ``0`` keeps the mini-map straight down; positive values"
+            " re-enable the older perspective navigation view and should stay"
+            " below ``bev-fov-deg / 2``."
         ),
     )
     parser.add_argument(
@@ -465,7 +475,6 @@ def prepare_config_and_backend(
         manifest_path=manifest_path,
         raster=RasterConfig(
             compute_device=args.compute_device,
-            ludus_backend=args.ludus_backend,
             sync_gpu_timing=args.sync_gpu_timing,
         ),
         world_model_profile=WorldModelProfileConfig(
@@ -474,8 +483,10 @@ def prepare_config_and_backend(
         world_model_offload_text_encoder=bool(args.offload_text_encoder),
         postprocess=VideoPostprocessChainConfig(preset=args.postprocess_preset),
         bev=bev_config,
+        game_mode=bool(args.game_mode),
         stream_mjpeg_bind=args.stream_mjpeg,
         stop_after_consumed_chunks=args.stop_after_chunks,
+        visual_flare_enabled=False if args.disable_visual_flare else None,
         **_oob_kwargs(args),
     )
 
