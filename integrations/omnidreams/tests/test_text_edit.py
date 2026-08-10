@@ -354,3 +354,59 @@ def test_replace_rejects_native_dit_and_cfg_guidance_combination():
     # A plain swap (no guidance) is still fine with CFG configs.
     cache.network_cache_uncond = None
     transformer.replace_text_embeddings(cache, torch.randn(1, 1, 10, 32))
+
+
+## ReCache RNG neutrality
+
+
+def test_recache_uses_dedicated_rng_and_restores_model_stream():
+    """ReCache draws its context noise from a per-index seeded generator and
+    leaves the model RNG stream exactly where it was."""
+    from omnidreams.pipeline import OmnidreamsPipeline
+
+    pipe = OmnidreamsPipeline.__new__(OmnidreamsPipeline)
+
+    class FakeCache:
+        autoregressive_index = 7
+        started = None
+
+        def start(self, idx):
+            self.started = idx
+
+    class FakeFinalState:
+        autoregressive_index = 7
+        cache = FakeCache()
+
+    class FakeDM:
+        device = torch.device("cpu")
+
+        def __init__(self):
+            self._rng = torch.Generator().manual_seed(42)
+            self.seen_seed = None
+
+        @property
+        def rng(self):
+            return self._rng
+
+        def finalize(self, final_state):
+            self.seen_seed = self._rng.initial_seed()
+
+    dm = FakeDM()
+    rollout_rng = dm._rng
+    state_before = rollout_rng.get_state().clone()
+    pipe.diffusion_model = dm
+
+    class FakePipelineCache:
+        final_state = FakeFinalState()
+
+    pipe.recache_last_chunk(FakePipelineCache())
+    assert dm.seen_seed == OmnidreamsPipeline._RECACHE_NOISE_SEED + 7
+    assert dm._rng is rollout_rng  # restored, same object
+    assert torch.equal(rollout_rng.get_state(), state_before)  # untouched
+    assert FakeFinalState.cache.started == 7
+
+    # No final state -> no-op.
+    class EmptyCache:
+        final_state = None
+
+    pipe.recache_last_chunk(EmptyCache())

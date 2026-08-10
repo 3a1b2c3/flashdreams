@@ -440,6 +440,9 @@ class OmnidreamsPipeline(
         if recache_last_chunk:
             self.recache_last_chunk(cache)
 
+    _RECACHE_NOISE_SEED = 118_000
+    """Base seed for the ReCache context-noise draw (offset by AR index)."""
+
     @torch.no_grad()
     def recache_last_chunk(self, cache: OmnidreamsPipelineCache) -> None:
         """Re-commit the previous chunk's KV history under the current text.
@@ -450,12 +453,34 @@ class OmnidreamsPipeline(
         cached history becomes consistent with a freshly swapped prompt.
         Requires the step's ``finalize`` to have completed; a no-op before
         the first ``generate``.
+
+        The context-noise draw comes from a dedicated generator seeded by
+        the AR index, not the model RNG — every noise rendition of the same
+        clean latent is in-distribution for the context forward (each
+        chunk's original commit already uses an independent draw), and
+        keeping the model RNG untouched means the rollout's subsequent
+        noise stream is identical with or without ReCache. Seedless
+        configurations (``DiffusionModelConfig.seed is None``) fall back to
+        the global RNG, matching their existing no-reproducibility
+        contract.
         """
         final_state = cache.final_state
         if final_state is None:
             return
-        final_state.cache.start(final_state.autoregressive_index)
-        self.diffusion_model.finalize(final_state=final_state)
+        diffusion_model = self.diffusion_model
+        # Materialize the lazy model generator BEFORE snapshotting, so the
+        # restore never resets the rollout's noise stream to its seed.
+        seeded = diffusion_model.rng is not None
+        saved_rng = diffusion_model._rng
+        if seeded:
+            diffusion_model._rng = torch.Generator(device=self.device).manual_seed(
+                self._RECACHE_NOISE_SEED + final_state.autoregressive_index
+            )
+        try:
+            final_state.cache.start(final_state.autoregressive_index)
+            diffusion_model.finalize(final_state=final_state)
+        finally:
+            diffusion_model._rng = saved_rng
 
     def _validate_image_resolution(self, image: Tensor) -> None:
         transformer = self.diffusion_model.transformer
