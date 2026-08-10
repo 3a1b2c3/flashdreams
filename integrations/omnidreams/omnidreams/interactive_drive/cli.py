@@ -241,7 +241,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--game-mode",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=False,
         help=(
             "Enable game-style actor and static-world collisions, along with "
             "the vehicle speed limit and collision visual flare. By default, "
@@ -255,6 +256,17 @@ def build_parser() -> argparse.ArgumentParser:
             "Disable the strong full-screen dark fade that signals a collision "
             "when --game-mode is enabled."
         ),
+    )
+    parser.add_argument(
+        "--skip-model-warmup",
+        action="store_true",
+        help="Skip model warmup/compilation (for debugging hangs).",
+    )
+    parser.add_argument(
+        "--native-dit-acceleration",
+        choices=("disabled", "triton_sageattention", "sageattention", "torchcompile", "disabled"),
+        default="disabled",
+        help="Native DIT acceleration mode (default: disabled to avoid hangs).",
     )
     parser.add_argument(
         "--bev",
@@ -490,15 +502,26 @@ def prepare_config_and_backend(
         **_oob_kwargs(args),
     )
 
+    import sys
     backend: RenderBackend
     if config.backend == "raster":
+        print(f"[prepare_config_and_backend] Building raster backend...", flush=True)
+        sys.stdout.flush()
         backend = RasterRenderBackend(
             chunk=config.chunk, raster=config.raster, bev=config.bev
         )
+        print(f"[prepare_config_and_backend] Raster backend ready", flush=True)
+        sys.stdout.flush()
     else:
+        print(f"[prepare_config_and_backend] Building omnidreams backend...", flush=True)
+        sys.stdout.flush()
         if config.manifest_path is None:
             raise SystemExit("--manifest is required for the omnidreams backend")
+        print(f"[prepare_config_and_backend] Loading manifest...", flush=True)
+        sys.stdout.flush()
         manifest = load_world_model_manifest(config.manifest_path)
+        print(f"[prepare_config_and_backend] Manifest loaded", flush=True)
+        sys.stdout.flush()
         if args.synthetic_model is not None:
             manifest = replace(manifest, synthetic_model=bool(args.synthetic_model))
         if args.official_hdmap_dir is not None:
@@ -514,6 +537,8 @@ def prepare_config_and_backend(
                     height=manifest.resolution_wh[1],
                 ),
             )
+        print(f"[prepare_config_and_backend] Creating WorldModelRenderBackend...", flush=True)
+        sys.stdout.flush()
         backend = WorldModelRenderBackend(
             manifest=manifest,
             chunk=config.chunk,
@@ -522,7 +547,10 @@ def prepare_config_and_backend(
             bev=config.bev,
             offload_text_encoder=config.world_model_offload_text_encoder,
             postprocess=config.postprocess,
+            skip_warmup=getattr(args, 'skip_model_warmup', False),
         )
+        print(f"[prepare_config_and_backend] WorldModelRenderBackend ready", flush=True)
+        sys.stdout.flush()
     return config, backend
 
 
@@ -532,7 +560,18 @@ def run(args: argparse.Namespace, trace_sink: TraceSink | None = None) -> None:
     The HUD / streaming paths instead build one long-lived
     :class:`InteractiveDriveApp` and call ``load_scene`` / ``run_scene`` per scene.
     """
+    import sys
+    print(f"[CLI.run] Starting...", flush=True)
+    sys.stdout.flush()
     configure_logging()
+    print(f"[CLI.run] About to prepare_config_and_backend...", flush=True)
+    sys.stdout.flush()
     config, backend = prepare_config_and_backend(args)
+    print(f"[CLI.run] Config and backend ready, creating app...", flush=True)
+    sys.stdout.flush()
     app = InteractiveDriveApp(config=config, backend=backend, trace_sink=trace_sink)
+    print(f"[CLI.run] App created, calling app.run()...", flush=True)
+    sys.stdout.flush()
     app.run()
+    print(f"[CLI.run] app.run() returned", flush=True)
+    sys.stdout.flush()

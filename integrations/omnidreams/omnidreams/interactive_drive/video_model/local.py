@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
+from loguru import logger
+
 from omnidreams.interactive_drive.backends.base import RenderBackend
 from omnidreams.interactive_drive.types import FrameChunk, SceneBundle, TrajectoryChunk
 
@@ -24,9 +26,12 @@ class LocalVideoModelAdapter:
         return self._backend.can_prewarm
 
     def warmup_model(self) -> None:
+        logger.info("[adapter] calling backend.warmup_model()...")
         self._backend.warmup_model()
+        logger.info("[adapter] backend.warmup_model() complete")
 
     def load_scene(self, scene: SceneBundle) -> None:
+        logger.info(f"[adapter] loading scene...")
         # Scene/variant switches must not carry over rollout cache, text/image
         # embeddings, or first-chunk state from the previous selection.
         self._backend.reset_scene_conditioning()
@@ -35,6 +40,7 @@ class LocalVideoModelAdapter:
         # first chunk so the world-model session re-initialises its cache
         # from the new scene's initial frame and prompt.
         self._is_first_chunk = True
+        logger.info(f"[adapter] scene loaded")
 
     def render_chunk(self, trajectory: TrajectoryChunk) -> FrameChunk:
         if self._is_first_chunk:

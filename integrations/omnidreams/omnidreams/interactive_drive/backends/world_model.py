@@ -47,16 +47,27 @@ class WorldModelRenderBackend(RenderBackend):
         bev: BevConfig | None = None,
         offload_text_encoder: bool = False,
         postprocess: VideoPostprocessChainConfig | None = None,
+        skip_warmup: bool = False,
     ) -> None:
+        import sys
+        print(f"[WorldModelRenderBackend.__init__] Starting...", flush=True)
+        sys.stdout.flush()
         super().__init__(chunk=chunk, raster=raster)
         self._manifest = manifest
+        print(f"[WorldModelRenderBackend.__init__] Creating rasterizer...", flush=True)
+        sys.stdout.flush()
         self._rasterizer = LudusConditionRasterizer(raster, bev=bev)
+        print(f"[WorldModelRenderBackend.__init__] Rasterizer ready, creating FlashdreamsWorldModelSession...", flush=True)
+        sys.stdout.flush()
         self._session = FlashdreamsWorldModelSession(
             manifest,
             profile=profile,
             offload_text_encoder=offload_text_encoder,
             postprocess=postprocess,
+            skip_warmup=skip_warmup,
         )
+        print(f"[WorldModelRenderBackend.__init__] Session ready", flush=True)
+        sys.stdout.flush()
         self._scene: SceneBundle | None = None
         self._next_chunk_count = 0
         self._debug_first_chunk_condition_frames: tuple[np.ndarray, ...] | None = None
@@ -90,12 +101,13 @@ class WorldModelRenderBackend(RenderBackend):
             raise ValueError(
                 "The flashdreams world-model path is locked to a 5-frame first chunk."
             )
+        logger.info("[world-model] loading models to GPU...")
         warmup_timing = run_timed_prewarm(
             self._session.warmup_model,
             label="world-model.session",
         )
         logger.info(
-            f"[world-model] model warmup session_ms={warmup_timing.elapsed_ms:.1f}",
+            f"[world-model] model warmup done session_ms={warmup_timing.elapsed_ms:.1f}",
         )
 
     def load_scene(self, scene: SceneBundle) -> None:

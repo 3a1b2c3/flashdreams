@@ -219,6 +219,7 @@ def _configure_and_build(cache_root: Path, physx_root: Path) -> Path:
     source_dir = _native_source_dir()
     _discard_relocated_cmake_build(build_dir, source_dir)
     torch_include = Path(torch.__file__).resolve().parent / "include"
+    python_executable = Path(sys.executable).as_posix()
     configure = [
         cmake,
         "-S",
@@ -228,6 +229,7 @@ def _configure_and_build(cache_root: Path, physx_root: Path) -> Path:
         f"-DPHYSX_ROOT_DIR={physx_root.as_posix()}",
         f"-DPYBIND11_INCLUDE_DIR={torch_include.as_posix()}",
         f"-DLUDUS_MODULE_OUTPUT_DIR={output_dir.as_posix()}",
+        f"-DPython_EXECUTABLE={python_executable}",
     ]
     if os.name == "nt":
         dummy_freeglut = cache_root / "dummy-freeglut" / "win64"
@@ -287,7 +289,19 @@ def load_native_physx() -> ModuleType:
             raise RuntimeError(f"could not load native PhysX module at {module_path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[_MODULE_NAME] = module
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+            print(f"[PhysX] ✓ Successfully loaded {module_path}", flush=True)
+        except ImportError as e:
+            py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+            error_msg = f"[PhysX] FAILED TO LOAD\n"
+            error_msg += f"  Python version: {py_ver}\n"
+            error_msg += f"  Module path: {module_path}\n"
+            error_msg += f"  Import error: {e}\n"
+            error_msg += f"  Likely cause: Wrong Python version (check .pyd filename for cp3X)\n"
+            error_msg += f"  Solution: Run rebuild_physx_python311.bat to rebuild for your Python version\n"
+            print(error_msg, flush=True)
+            raise RuntimeError(error_msg) from e
         _CACHED_MODULE = module
     return module
 

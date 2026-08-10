@@ -524,7 +524,10 @@ def _download_checkpoint_from_huggingface_url(
             settings=settings,
         )
         raise
+    import sys
     logger.info(f"Checkpoint downloaded to local HF cache: {local_path}")
+    print(f"[CHECKPOINT] Downloaded: {local_path}", flush=True)
+    sys.stdout.flush()
     return local_path
 
 
@@ -698,7 +701,13 @@ def load_single_checkpoint(
             checkpoint_path,
             checkpoint_min_free_gb=checkpoint_min_free_gb,
         )
-        return _load_checkpoint_from_local(local_path, ext, map_location)
+        import sys
+        print(f"[CHECKPOINT] About to load from local: {local_path}", flush=True)
+        sys.stdout.flush()
+        state_dict = _load_checkpoint_from_local(local_path, ext, map_location)
+        print(f"[CHECKPOINT] Loaded from local successfully", flush=True)
+        sys.stdout.flush()
+        return state_dict
 
     # For S3 paths, check local cache first
     local_cache_path = None
@@ -736,11 +745,24 @@ def _load_checkpoint_from_local(
     map_location: str | torch.device = "cpu",
 ) -> dict[str, torch.Tensor]:
     """Load checkpoint from local filesystem."""
+    import sys
+    print(f"[_load_checkpoint_from_local] Loading {ext} from: {path}", flush=True)
+    sys.stdout.flush()
     if ext == ".safetensors":
+        print(f"[_load_checkpoint_from_local] Using safetensors...", flush=True)
+        sys.stdout.flush()
         with open(path, "rb") as f:
-            return load_safetensors(f.read())
+            result = load_safetensors(f.read())
+        print(f"[_load_checkpoint_from_local] Safetensors load complete", flush=True)
+        sys.stdout.flush()
+        return result
     else:
-        return torch.load(path, map_location=map_location, weights_only=False)
+        print(f"[_load_checkpoint_from_local] Using torch.load...", flush=True)
+        sys.stdout.flush()
+        result = torch.load(path, map_location=map_location, weights_only=False)
+        print(f"[_load_checkpoint_from_local] torch.load complete", flush=True)
+        sys.stdout.flush()
+        return result
 
 
 def _load_checkpoint_from_s3(

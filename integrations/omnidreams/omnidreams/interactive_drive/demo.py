@@ -698,17 +698,69 @@ def _maybe_autostage_scene(scene: Path, *, scene_dir: Path, allow_skip: bool) ->
 
 
 def main() -> None:
-    configure_logging()
-    args = build_parser().parse_args()
+    import sys
+    # Debug to file (bypasses stdout buffering)
+    with open("C:\\tmp\\demo_debug.log", "a") as f:
+        f.write(f"[DEMO.main] Starting...\n")
+        f.flush()
+    print(f"[DEMO.main] Starting...", flush=True)
+    sys.stdout.flush()
+
+    try:
+        with open("C:\\tmp\\demo_debug.log", "a") as f:
+            f.write(f"[DEMO.main] Before configure_logging\n")
+            f.flush()
+        configure_logging()
+        with open("C:\\tmp\\demo_debug.log", "a") as f:
+            f.write(f"[DEMO.main] After configure_logging\n")
+            f.flush()
+    except Exception as e:
+        print(f"[ERROR] configure_logging failed: {e}", flush=True)
+        raise
+
+    try:
+        with open("C:\\tmp\\demo_debug.log", "a") as f:
+            f.write(f"[DEMO.main] About to build_parser\n")
+            f.flush()
+        print(f"[DEMO.main] Logging configured, parsing args...", flush=True)
+        sys.stdout.flush()
+        args = build_parser().parse_args()
+        with open("C:\\tmp\\demo_debug.log", "a") as f:
+            f.write(f"[DEMO.main] Args parsed\n")
+            f.flush()
+    except Exception as e:
+        print(f"[ERROR] Argument parsing failed: {e}", flush=True)
+        raise
+    with open("C:\\tmp\\demo_debug.log", "a") as f:
+        f.write(f"[DEMO.main] Checking synthetic_scene\n")
+        f.flush()
+    print(f"[DEMO.main] Args parsed, checking synthetic_scene...", flush=True)
+    sys.stdout.flush()
     if not args.synthetic_scene:
         # Only the bare ``--no-hud`` backend has no scene picker; the HUD
         # and MJPEG paths both let the user pick from ``--scene-dir``, so a
         # missing default scene there is fine as long as the directory
         # already has other scenes staged (see _maybe_autostage_scene).
         uses_scene_picker = args.stream_mjpeg is not None or not args.no_hud
-        args.scene = _maybe_autostage_scene(
-            args.scene, scene_dir=args.scene_dir, allow_skip=uses_scene_picker
-        )
+        with open("C:\\tmp\\demo_debug.log", "a") as f:
+            f.write(f"[DEMO.main] Staging scene...\n")
+            f.flush()
+        print(f"[DEMO.main] Auto-staging scene...", flush=True)
+        sys.stdout.flush()
+        try:
+            args.scene = _maybe_autostage_scene(
+                args.scene, scene_dir=args.scene_dir, allow_skip=uses_scene_picker
+            )
+            with open("C:\\tmp\\demo_debug.log", "a") as f:
+                f.write(f"[DEMO.main] Scene staged: {args.scene}\n")
+                f.flush()
+        except Exception as e:
+            with open("C:\\tmp\\demo_debug.log", "a") as f:
+                f.write(f"[DEMO.main] ERROR staging scene: {e}\n")
+                f.flush()
+            raise
+        print(f"[DEMO.main] Scene staged: {args.scene}", flush=True)
+        sys.stdout.flush()
     # ``--stream-mjpeg`` runs through ``_run_streaming`` so the long-lived
     # MJPEG presenter (HTTP server, browser session) survives across
     # scene-change requests posted by the in-page picker. ``--no-hud``
@@ -716,12 +768,18 @@ def main() -> None:
     # window, which has no scene picker UI of its own. The default path
     # is the slangpy HUD with full chrome.
     if args.stream_mjpeg is not None:
+        print(f"[DEMO.main] Running streaming mode...", flush=True)
+        sys.stdout.flush()
         _run_streaming(args)
         return
     if args.no_hud:
+        print(f"[DEMO.main] Running CLI mode...", flush=True)
+        sys.stdout.flush()
         _cli.run(args)
         return
 
+    print(f"[DEMO.main] Running SlangPy HUD mode...", flush=True)
+    sys.stdout.flush()
     _run_slangpy_hud(args)
 
 
@@ -863,14 +921,41 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
                 presenter.acknowledge_scene_change(scene_path, variant)
                 need_selection = False
 
-            presenter.set_engine_active(True)
+            import sys
+            try:
+                print(f"[DEMO] About to set_engine_active(True)...", flush=True)
+                sys.stdout.flush()
+                presenter.set_engine_active(True)
+                print(f"[DEMO] set_engine_active(True) succeeded", flush=True)
+            except Exception as e:
+                print(f"[DEMO] ERROR in set_engine_active(True): {type(e).__name__}: {e}", flush=True)
+                import traceback
+                traceback.print_exc(file=sys.stdout)
+                sys.stdout.flush()
+                raise
             # load_scene parses the USDZ on a background thread while keeping
             # the window responsive; it returns False if the window closed
             # (or a new scene was requested) before the parse finished, so
             # we skip run_scene and let the pending checks below decide
             # whether to exit the scene, switch scenes, or quit.
+            print(f"[DEMO] Loading scene...", flush=True)
+            sys.stdout.flush()
             if app.load_scene(scene_path, variant, args.prompt):
-                app.run_scene()
+                print(f"[DEMO] Scene loaded, calling run_scene()...", flush=True)
+                sys.stdout.flush()
+                try:
+                    app.run_scene()
+                    print(f"[DEMO] run_scene() returned", flush=True)
+                    sys.stdout.flush()
+                except Exception as e:
+                    print(f"[DEMO] ERROR in run_scene(): {type(e).__name__}: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc(file=sys.stdout)
+                    sys.stdout.flush()
+                    raise
+            else:
+                print(f"[DEMO] load_scene() returned False", flush=True)
+                sys.stdout.flush()
             presenter.set_engine_active(False)
             if presenter.pending_exit_scene:
                 # ``x`` / bound exit button: tear down the rollout and go

@@ -146,4 +146,4 @@ def compile_module(
     """
     _configure_inductor_cache()
     _patch_triton_bundle_collection()
-    return cast(M, torch.compile(module, mode=mode))
+    return cast(M, torch.compile(module))

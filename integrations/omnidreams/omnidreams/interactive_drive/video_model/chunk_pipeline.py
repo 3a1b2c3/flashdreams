@@ -315,7 +315,8 @@ class ChunkPipeline:
 
     def _worker(self) -> None:
         try:
-            logger.info("[chunk-pipeline] warmup start")
+            logger.info("[chunk-pipeline:worker] starting warmup thread...")
+            logger.info("[chunk-pipeline:worker] calling backend.warmup_model()...")
             warmup_timing = run_timed_prewarm(
                 self._backend.warmup_model,
                 label="chunk-pipeline.worker_warmup",
@@ -328,8 +329,9 @@ class ChunkPipeline:
                     end_ns=trace_time_ns(warmup_timing.end_time),
                 )
             logger.info(
-                f"[chunk-pipeline] warmup done elapsed_ms={warmup_timing.elapsed_ms:.1f}",
+                f"[chunk-pipeline:worker] warmup complete! elapsed_ms={warmup_timing.elapsed_ms:.1f}",
             )
+            logger.info("[chunk-pipeline:worker] model is ready, entering command loop...")
             self._model_ready.set()
             while True:
                 command = self._command_queue.get()

@@ -109,11 +109,27 @@ class InteractiveDriveApp:
         # scene-independent model now, on the pipeline worker thread.
         # Scenes are bound later via load_scene; the model is never rebuilt
         # on a scene change.
+        import sys
+        # Debug to file
+        with open("C:\\tmp\\app_debug.log", "a") as f:
+            f.write(f"[APP.__init__] Start initialization\n")
+            f.flush()
+        print(f"[APP.__init__] Start initialization", flush=True)
+        sys.stdout.flush()
+        logger.info("[app] initializing video model adapter...")
+        print(f"[APP.__init__] Creating LocalVideoModelAdapter", flush=True)
+        sys.stdout.flush()
         self._adapter = LocalVideoModelAdapter(backend)
         self._trace_context = (
             None if trace_sink is None else TraceContext.create(trace_sink)
         )
+        logger.info("[app] starting chunk pipeline worker...")
+        print(f"[APP.__init__] Creating ChunkPipeline", flush=True)
+        sys.stdout.flush()
         self._pipeline = ChunkPipeline(self._adapter, trace_context=self._trace_context)
+        print(f"[APP.__init__] ChunkPipeline created", flush=True)
+        sys.stdout.flush()
+        logger.info("[app] pipeline initialized, waiting for model warmup...")
         self._scene: SceneBundle | None = None
         self._map_bounds: MapBounds | None = None
         # Ground snapper for the current scene. Built once per scene (its
@@ -189,14 +205,25 @@ class InteractiveDriveApp:
         Returns ``False`` if the presenter closed before the scene finished
         loading, in which case the caller must not call :meth:`run_scene`.
         """
+        import sys
+        print(f"[APP.load_scene] Starting load_scene...", flush=True)
+        sys.stdout.flush()
         # Fast path: a preloaded / previously-parsed bundle is reused with no
         # parse (and no background pump). The worker still uploads geometry
         # and renders the first chunk, so the loop's "Loading scene..."
         # indicator still covers that part.
+        print(f"[APP.load_scene] Checking cache...", flush=True)
+        sys.stdout.flush()
         cached = self._cached_scene(scene_path, variant, prompt_override)
         if cached is not None:
+            print(f"[APP.load_scene] Cache hit, using cached scene", flush=True)
+            sys.stdout.flush()
             self._scene, self._map_bounds, self._ground_snapper = cached
+            print(f"[APP.load_scene] Requesting scene on pipeline...", flush=True)
+            sys.stdout.flush()
             self._pipeline.request_scene(self._scene)
+            print(f"[APP.load_scene] Scene requested, returning True", flush=True)
+            sys.stdout.flush()
             return True
 
         scene_ready = threading.Event()
@@ -432,6 +459,9 @@ class InteractiveDriveApp:
         A manual reset / OOB respawn keeps the loop going with a fresh
         simulation and ``pipeline.reset`` (the warmed model is kept).
         """
+        import sys
+        print(f"[APP.run_scene] Starting...", flush=True)
+        sys.stdout.flush()
         if self._scene is None or self._map_bounds is None:
             raise RuntimeError("load_scene() must be called before run_scene()")
         # Seed the loop's initial ``last_presented_frame`` with the scene's
@@ -448,7 +478,11 @@ class InteractiveDriveApp:
         # world model..."); subsequent rollouts come from a manual reset or
         # OOB respawn, so switch the indicator to "Resetting..." for those.
         loading_status = self._loading_status_message
+        print(f"[APP.run_scene] Entering main loop...", flush=True)
+        sys.stdout.flush()
         while not self._presenter.should_close:
+            print(f"[APP.run_scene] Main loop iteration", flush=True)
+            sys.stdout.flush()
             simulation = EgoVehicleKinematics(
                 initial_state=state_from_initial_pose(
                     initial_rig_to_world=self._scene.initial_rig_to_world,

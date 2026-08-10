@@ -491,10 +491,12 @@ class FlashdreamsWorldModelSession:
         offload_text_encoder: bool = False,
         pipeline_factory: PipelineFactory | None = None,
         postprocess: VideoPostprocessChainConfig | None = None,
+        skip_warmup: bool = False,
     ) -> None:
         self.manifest = manifest
         self._profile_config = profile or WorldModelProfileConfig()
         self._offload_text_encoder = bool(offload_text_encoder)
+        self._skip_warmup = bool(skip_warmup)
         self._pipeline_factory = pipeline_factory
         self._pipeline: Any | None = None
         self._cache: Any | None = None
@@ -533,23 +535,48 @@ class FlashdreamsWorldModelSession:
         embeddings are computed and the one-shot encoders freed before the
         AR pipeline is allocated.
         """
+        import sys
+        print(f"[FlashdreamsWorldModelSession.warmup_model] Starting...", flush=True)
+        sys.stdout.flush()
+        if self._skip_warmup:
+            print(f"[FlashdreamsWorldModelSession.warmup_model] Skipping (--skip-model-warmup flag)", flush=True)
+            sys.stdout.flush()
+            return
         if (
             self._pipeline_factory is None
             and self._offload_text_encoder
             and not self.manifest.synthetic_model
         ):
+            print(f"[FlashdreamsWorldModelSession.warmup_model] Skipping (offload path)", flush=True)
+            sys.stdout.flush()
             return
 
         def build_and_validate_pipeline() -> None:
+            print(f"[FlashdreamsWorldModelSession] Building pipeline...", flush=True)
+            sys.stdout.flush()
             if self._pipeline_factory is not None:
+                print(f"[FlashdreamsWorldModelSession] Using factory", flush=True)
+                sys.stdout.flush()
                 self._pipeline = self._pipeline_factory(
                     self.manifest, self._profile_config
                 )
             else:
+                print(f"[FlashdreamsWorldModelSession] Building config", flush=True)
+                sys.stdout.flush()
                 config = _build_pipeline_config(self.manifest, self._profile_config)
+                print(f"[FlashdreamsWorldModelSession] Setting up pipeline from config", flush=True)
+                sys.stdout.flush()
                 self._pipeline = _setup_pipeline_from_config(config, self.manifest)
+                print(f"[FlashdreamsWorldModelSession] Pipeline setup complete", flush=True)
+                sys.stdout.flush()
+            print(f"[FlashdreamsWorldModelSession] Validating chunk sizes...", flush=True)
+            sys.stdout.flush()
             self._validate_chunk_sizes()
+            print(f"[FlashdreamsWorldModelSession] Validation complete", flush=True)
+            sys.stdout.flush()
 
+        print(f"[FlashdreamsWorldModelSession.warmup_model] Running prewarm...", flush=True)
+        sys.stdout.flush()
         warmup_timing = run_timed_prewarm(
             build_and_validate_pipeline,
             label="flashdreams-session.model",
@@ -557,6 +584,8 @@ class FlashdreamsWorldModelSession:
         logger.info(
             f"[flashdreams-session] model warmup runtime_ms={warmup_timing.elapsed_ms:.1f}",
         )
+        print(f"[FlashdreamsWorldModelSession.warmup_model] Complete (runtime_ms={warmup_timing.elapsed_ms:.1f})", flush=True)
+        sys.stdout.flush()
 
     def prepare_for_scene(
         self, *, initial_rgb: object | None = None, prompt: str | None = None

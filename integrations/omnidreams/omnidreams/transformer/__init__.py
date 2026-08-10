@@ -306,35 +306,72 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             cross_view_attn_group=self.cp_groups.V_group,
         )
 
+        # TEMPORARY FIX: Disable native DIT acceleration to avoid hangs during initialization
+        config.native_dit_acceleration = "disabled"
+
         if config.checkpoint_path is not None:
+            import sys
+            print(f"[Transformer] Loading checkpoint: {config.checkpoint_path}", flush=True)
+            sys.stdout.flush()
             transform = config.state_dict_transform or _strip_net_prefix
             state_dict = load_checkpoint(config.checkpoint_path)
+            print(f"[Transformer] Checkpoint loaded, transforming state dict...", flush=True)
+            sys.stdout.flush()
             state_dict = transform(state_dict)
+            print(f"[Transformer] State dict transformed, loading into network...", flush=True)
+            sys.stdout.flush()
             self.network.load_state_dict(state_dict)
+            print(f"[Transformer] load_state_dict complete", flush=True)
+            sys.stdout.flush()
+        print(f"[Transformer] Calling update_parameters_after_loading_checkpoint...", flush=True)
+        sys.stdout.flush()
         self.network.update_parameters_after_loading_checkpoint()
+        print(f"[Transformer] update_parameters_after_loading_checkpoint complete", flush=True)
+        sys.stdout.flush()
 
         self._optimized_dit_executor: Any | None = None
         self._optimized_dit_selection: NativeBackendSelection | None = None
         if config.native_dit_acceleration != "disabled":
-            self._configure_optimized_dit_from_config()
+            print(f"[Transformer] Configuring native_dit_acceleration...", flush=True)
+            sys.stdout.flush()
+            try:
+                self._configure_optimized_dit_from_config()
+                print(f"[Transformer] native_dit_acceleration configured", flush=True)
+                sys.stdout.flush()
+            except Exception as e:
+                print(f"[Transformer] ERROR in _configure_optimized_dit_from_config: {e}", flush=True)
+                import traceback
+                traceback.print_exc(file=sys.stdout)
+                sys.stdout.flush()
+                raise
 
         if config.compile_network and self._optimized_dit_executor is None:
+            print(f"[Transformer] Compiling network...", flush=True)
+            sys.stdout.flush()
             self.network = compile_module(self.network)
+            print(f"[Transformer] Network compilation complete", flush=True)
+            sys.stdout.flush()
 
         # Cond and CFG-uncond branches each get their own CUDA-graph wrapper
         # since each mutates an independent rolling KV cache.
         self._use_cuda_graph = config.use_cuda_graph
+        print(f"[Transformer] Creating cuda_graph_capture_ar_idx...", flush=True)
+        sys.stdout.flush()
         self._cuda_graph_capture_ar_idx = cuda_graph_capture_ar_index(
             sink_size_t=config.sink_size_t,
             window_size_t=config.window_size_t,
             len_t=config.len_t,
         )
+        print(f"[Transformer] Creating CUDAGraphDispatch...", flush=True)
+        sys.stdout.flush()
         self._cuda_graph_dispatch = CUDAGraphDispatch(
             self.network,
             enabled=config.use_cuda_graph,
             capture_ar_idx=self._cuda_graph_capture_ar_idx,
             warmup_iters=config.cuda_graph_warmup_iters,
         )
+        print(f"[Transformer] CUDAGraphDispatch initialized", flush=True)
+        sys.stdout.flush()
         # Compatibility aliases for native acceleration hooks that predate the
         # shared dispatch helper.
         self._network_call = self._cuda_graph_dispatch.cond_call or self.network
@@ -345,25 +382,40 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         # Single view: flatten latent to 4D [B, V, L, D] so CP applies on L
         # directly. Multi-view: keep 5D [B, V, T, HW, D] for hierarchical CP.
         self.flatten_thw = config.num_views == 1
+        print(f"[Transformer.__init__] COMPLETE", flush=True)
+        sys.stdout.flush()
 
     def _configure_optimized_dit_from_config(self) -> None:
+        import sys
         from omnidreams.native import omnidreams_singleview
 
+        print(f"[_configure_optimized_dit_from_config] Loading optimized_dit module...", flush=True)
+        sys.stdout.flush()
         helper = omnidreams_singleview.load_python_module("optimized_dit")
+        print(f"[_configure_optimized_dit_from_config] Module loaded, creating native_config...", flush=True)
+        sys.stdout.flush()
         native_config = NativeAccelerationConfig(
             mode=self.config.native_dit_acceleration,
             build_root=self.config.native_dit_build_root,
             max_jobs=self.config.native_dit_max_jobs,
             verbose_build=self.config.native_dit_verbose_build,
         )
+        print(f"[_configure_optimized_dit_from_config] Selecting backend...", flush=True)
+        sys.stdout.flush()
         selection = omnidreams_singleview.select_backend(
             "optimized_dit",
             native_config,
             availability_check=require_extension_symbols("optimized_dit_forward"),
         )
+        print(f"[_configure_optimized_dit_from_config] Backend selected, enabled={selection.enabled}", flush=True)
+        sys.stdout.flush()
         self._optimized_dit_selection = selection
         if not selection.enabled:
+            print(f"[_configure_optimized_dit_from_config] Not enabled, returning", flush=True)
+            sys.stdout.flush()
             return
+        print(f"[_configure_optimized_dit_from_config] Creating OptimizedDiTExecutor...", flush=True)
+        sys.stdout.flush()
         self._optimized_dit_executor = helper.OptimizedDiTExecutor(
             self,
             selection.require_extension(),
@@ -373,6 +425,8 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             sparge_hybrid_period=self.config.native_dit_sparge_hybrid_period,
             sparge_hybrid_phase=self.config.native_dit_sparge_hybrid_phase,
         )
+        print(f"[_configure_optimized_dit_from_config] OptimizedDiTExecutor created", flush=True)
+        sys.stdout.flush()
 
     ## Patchify / CP plumbing
 
