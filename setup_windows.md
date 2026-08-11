@@ -1,0 +1,235 @@
+# FlashDreams Interactive-Drive Setup Guide
+
+Complete setup workflow for `flashdream_public` on Windows with RTX 5090.
+
+## Prerequisites
+
+### Hardware
+- **GPU:** RTX 5090 (32 GB VRAM)
+- **Disk:** 100+ GB free (models + cache)
+- **RAM:** 32+ GB
+
+### Software
+- **Python:** 3.11 (NOT 3.12 — causes torch segfaults)
+- **CUDA:** 13.0 (cu130)
+- **uv:** installed at `C:\Users\kschmid\.local\bin\uv.exe`
+- **Git:** configured with `core.longpaths = true`
+
+### Disk Space
+- **Minimum:** 20 GB free for HF cache downloads
+- **Check first:** `Get-Volume | Select-Object DriveLetter, SizeRemaining`
+- **⚠️ Critical:** If < 20 GB free, run `download_models.bat` on a different machine first
+
+## Setup Workflow
+
+### Step 1: Verify Environment
+
+```powershell
+cd C:\workspace\world\flashdream_public
+python --version  # Should be 3.11.x
+Get-Volume       # Check free space (need 20+ GB)
+```
+
+### Step 2: Create venv (Python 3.11 only)
+
+```powershell
+Remove-Item .venv -Recurse -Force -ErrorAction SilentlyContinue
+uv venv --python 3.11
+uv sync --package flashdreams-omnidreams --extra interactive-drive
+```
+
+### Step 3: Pre-download Models (Optional but Recommended)
+
+If disk space is tight or on slow connection:
+
+```powershell
+.\download_models.bat
+```
+
+This downloads all HF models to `~/.cache/huggingface` (~50-100 GB, takes 1-2 hours).
+
+### Step 4: Run Full Setup
+
+```powershell
+.\setup.bat
+```
+
+This script:
+1. Syncs dependencies
+2. Syncs third-party sources (CUTLASS, SageAttention, etc.)
+3. Runs `omnidreams-prepare --perf` (downloads scenes, builds extensions)
+4. **Optionally precompiles torch.compile cache** (speeds up first chunk by 1-2 min)
+
+**Duration:** 10-20 minutes (first run includes extension builds)
+
+### Step 5: Launch Interactive-Drive
+
+```powershell
+.\run_interactive_drive_perf.bat --game-mode
+```
+
+**First launch:** ~1-2 min (torch.compile warmup)  
+**Subsequent launches:** ~30 sec (uses cached compiles)
+
+## Helper Scripts
+
+### `setup.bat`
+Full setup: dependencies → third-party sync → omnidreams-prepare → optional torch.compile precompile.
+
+### `download_models.bat`
+Pre-download all HuggingFace models to `~/.cache/huggingface`. Use when disk is tight.
+
+### `precompile_cache.bat`
+Pre-warm torch.compile cache. Called automatically by `setup.bat` (optional).
+
+### `run_interactive_drive_perf.bat --game-mode`
+Launch the app with game-mode physics enabled by default.
+
+## Controls & Features
+
+### Driving
+- **WASD** — move forward/back/left/right
+- **Mouse** — look around
+- **C** — place obstacle
+- **R** — restart session (clears KV cache)
+- **Esc** — quit
+
+### Live Prompt Editing (PR #431)
+While driving:
+- **Scene Prompt panel** — type new scene description, press Enter to swap prompts mid-stream
+- **/spawn car 30 5** — spawn a vehicle at 30m ahead, 5 m/s speed
+- **/clear-actors** — remove all spawned actors
+- **Two-prompt guidance** (optional) — amplify edits by comparing old/new prompt flows
+
+### Performance
+- **Resolution:** 1168×640 (perf-tuned)
+- **Denoising steps:** [1000, 100] (few-step)
+- **Native FP8 acceleration:** auto-fallback (requires extension build)
+- **Compiled network:** enabled (speeds up subsequent chunks)
+- **Current FPS:** ~13.5 (PyTorch); ~23+ (with native FP8, if built)
+
+## Troubleshooting
+
+### Python 3.12 Crash
+```
+Error: Segfault in c10.dll::Allocator / python312.dll
+```
+**Fix:** Recreate venv with Python 3.11
+```powershell
+Remove-Item .venv -Recurse -Force
+uv venv --python 3.11
+uv sync --package flashdreams-omnidreams --extra interactive-drive
+```
+
+### Disk Space Error
+```
+DiskSpaceError: Not enough free disk for HuggingFace cache (need 20 GB)
+```
+**Options:**
+1. Free up 6+ GB on C: drive
+2. Run `download_models.bat` on a machine with more space first
+3. Set `HF_HOME` to a drive with more space:
+   ```powershell
+   $env:HF_HOME = 'D:\.cache\huggingface'
+   .\setup.bat
+   ```
+
+### CUDA Mismatch Error
+```
+Cannot find include file: 'crtdbg.h'
+```
+**Fix:** Run from `run_interactive_drive_perf.bat` environment (sets CUDA_HOME + Windows SDK paths)
+
+### Native FP8 Not Available
+PR #431 supports live prompt editing. FP8 acceleration is optional:
+- **Required:** Full native extension build (complex, see [[reference_omnidreams_singleview_windows_build]])
+- **Current:** Falls back to PyTorch (~13.5 FPS)
+
+## Configuration
+
+### Perf Config
+Located at: `integrations/omnidreams/omnidreams/interactive_drive/configs/example_world_model_perf.yaml`
+
+Key settings:
+- `resolution_wh: [1168, 640]` — lower resolution for speed
+- `denoising_steps: [1000, 100]` — few-step inference
+- `compile_net: true` — torch.compile optimization
+- `native_dit_acceleration: required` — FP8 (auto-fallback to PyTorch)
+
+## Merging PR #431 (Live Prompt Editing)
+
+```powershell
+cd C:\workspace\world\flashdream_public
+git fetch origin
+git merge origin/main
+git checkout --theirs integrations/omnidreams
+git add .
+git commit -m "Merge PR #431: live prompt editing and actor spawning"
+.\setup.bat
+.\run_interactive_drive_perf.bat --game-mode
+```
+
+**New features:**
+- Swap scene prompt mid-stream (full continuity)
+- Spawn/despawn actors with `/spawn` and `/clear-actors`
+- Two-prompt guidance for amplified edits
+- All opt-in; zero overhead if not used
+
+## Performance Tips
+
+### Speed Up First Chunk
+Pre-compile torch.compile cache:
+```powershell
+.\precompile_cache.bat  # ~2-3 min one-time cost
+```
+
+### Sustained FPS
+Current: **13.5 FPS** (PyTorch backend, perf config)
+
+To reach 20+ FPS:
+1. Build native FP8 extension (complex, see build guide)
+2. Or reduce resolution: `[896, 496]` (~20 FPS)
+3. Or reduce steps: `[1000, 50]` (~18 FPS)
+
+### GPU Memory
+- Default: ~28 GB used
+- With offload_text_encoder: ~25 GB
+- Spare headroom: 4 GB (for compile operations)
+
+## References
+
+- **Ludus renderer build:** [[reference_ludus_windows_build]]
+- **OmniDreams single-view native FP8:** [[reference_omnidreams_singleview_windows_build]]
+- **Windows torch gotchas:** [[feedback_no_cpu_torch_windows]], [[feedback_never_use_python_312]]
+- **CUDA + cuDNN setup:** [[reference_windows_blackwell_arch_cudnn]]
+- **Disk space:** [[reference_disk_cleanup]] (C:\recordings is protected)
+
+## Common Commands
+
+```powershell
+# Full setup
+.\setup.bat
+
+# Launch app
+.\run_interactive_drive_perf.bat --game-mode
+
+# Check Python version
+python --version
+
+# Check free disk
+Get-Volume
+
+# Pre-download models
+.\download_models.bat
+
+# Pre-compile torch.compile
+.\precompile_cache.bat
+
+# Rebuild extensions only
+uv run --package flashdreams-omnidreams omnidreams-prepare --perf
+```
+
+---
+
+**Last updated:** 2026-08-11  
+**Status:** Setup complete, PR #431 ready to merge
