@@ -537,6 +537,7 @@ def prepare_config_and_backend(
                     height=manifest.resolution_wh[1],
                 ),
             )
+        manifest = replace(manifest, native_dit_acceleration="auto")
         print(f"[prepare_config_and_backend] Creating WorldModelRenderBackend...", flush=True)
         sys.stdout.flush()
         backend = WorldModelRenderBackend(
