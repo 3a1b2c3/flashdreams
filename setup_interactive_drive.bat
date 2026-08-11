@@ -1,97 +1,91 @@
 @echo off
-setlocal enableextensions
-
-echo.
-echo ===================================================================
-echo FLASHDREAM INTERACTIVE-DRIVE: COMPLETE SETUP
-echo ===================================================================
-echo This script downloads all models and precompiles C++ extensions (Ludus + PhysX).
-echo Run this ONCE. Then just use: .\run_interactive_drive_perf.bat
-echo.
-echo ===================================================================
-echo.
+setlocal enableextensions enabledelayedexpansion
 
 cd /d C:\workspace\world\flashdream_public
 
 set "VENV=C:\workspace\world\flashdream_public\.venv"
 set "PYEXE=%VENV%\Scripts\python.exe"
+if not exist "%PYEXE%" ( echo ERROR: flashdream .venv not found at %VENV% & exit /b 1 )
 
-if not exist "%PYEXE%" (
-    echo ERROR: .venv not found at %VENV%
-    exit /b 1
-)
+REM Setup CUDA and environment (same as run_interactive_drive_perf.bat)
+set "PATH=%VENV%\Scripts;%PATH%"
+set "CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
+set "CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
+set "PATH=%CUDA_HOME%\bin;%CUDA_HOME%\lib\x64;%PATH%"
+set "TORCH_CUDA_ARCH_LIST=12.0a"
 
+set "INCLUDE=C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um;C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt;C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include;%INCLUDE%"
+set "LIB=C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\um\x64;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.22621.0\ucrt\x64;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\lib\x64;%LIB%"
+
+set "PATH=C:\Users\kschmid\AppData\Local\ludus-renderer\physx-5.9.0\build-windows-AMD64\physx-lib\bin\win.x86_64.vc143.md\release;%PATH%"
+set "PATH=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\x64\Microsoft.VC143.CRT;%PATH%"
+
+set "HF_HUB_DISABLE_SYMLINKS_WARNING=1"
 set "VIRTUAL_ENV="
 set "PYTHONHOME="
 set "PYTHONPATH="
 set "PYTHONIOENCODING=utf-8"
 set "PYTHONUNBUFFERED=1"
-set "FLASHDREAMS_MIN_CACHE_FREE_GB=0"
-set "TORCHINDUCTOR_COMPILE_THREADS=1"
 
-echo [1/3] Checking Python version...
-"%PYEXE%" --version
+echo.
+echo ===================================================================
+echo OMNIDREAMS INTERACTIVE-DRIVE SETUP
+echo ===================================================================
 echo.
 
-echo [2/3] Downloading all models (Cosmos-Reason1, LightWave, OmniDreams)...
-"%PYEXE%" -B -c "from transformers import AutoModel; AutoModel.from_pretrained('nvidia/Cosmos-Reason1-7B')" >nul 2>&1 && echo [OK] Cosmos-Reason1 || (echo [ERROR] Cosmos-Reason1 failed & "%PYEXE%" -B -c "from transformers import AutoModel; AutoModel.from_pretrained('nvidia/Cosmos-Reason1-7B')" & exit /b 1)
-"%PYEXE%" -B -c "import torch; torch.hub.load_state_dict_from_url('https://huggingface.co/lightx2v/Autoencoders/resolve/main/lightvaew2_1.pth')" >nul 2>&1 && echo [OK] LightWave VAE || (echo [ERROR] LightWave VAE failed & "%PYEXE%" -B -c "import torch; torch.hub.load_state_dict_from_url('https://huggingface.co/lightx2v/Autoencoders/resolve/main/lightvaew2_1.pth')" & exit /b 1)
-"%PYEXE%" -B -c "import torch; torch.hub.load_state_dict_from_url('https://huggingface.co/lightx2v/Autoencoders/resolve/main/lighttaew2_1.pth')" >nul 2>&1 && echo [OK] LightWave TAE || (echo [ERROR] LightWave TAE failed & "%PYEXE%" -B -c "import torch; torch.hub.load_state_dict_from_url('https://huggingface.co/lightx2v/Autoencoders/resolve/main/lighttaew2_1.pth')" & exit /b 1)
-"%PYEXE%" -B -c "from huggingface_hub import hf_hub_download; hf_hub_download('nvidia/omni-dreams-models', 'single_view/2b_res720p_30fps_i2v_hdmap_distilled.pt')" >nul 2>&1 && echo [OK] OmniDreams I2V || (echo [ERROR] OmniDreams I2V failed - set HF_TOKEN or login with: huggingface-cli login & exit /b 1)
+REM Check HF_TOKEN
+if "%HF_TOKEN%"=="" (
+  if exist "C:\Users\kschmid\.cache\omni-dreams\huggingface\token" (
+    set /p HF_TOKEN=<"C:\Users\kschmid\.cache\omni-dreams\huggingface\token"
+    echo [SETUP] ✓ Loaded HF_TOKEN from cache
+  ) else (
+    echo [SETUP] ⚠ HF_TOKEN not set. Set it manually or the setup will fail:
+    echo   set HF_TOKEN=your-token-here
+    echo.
+  )
+)
+
+REM Step 1: Sync dependencies (narrow sync preserves pinned torch version)
+echo [SETUP] 1. Syncing dependencies...
+uv sync --package flashdreams-omnidreams --extra dev --extra interactive-drive
+if %ERRORLEVEL% neq 0 ( echo [ERROR] uv sync failed & exit /b %ERRORLEVEL% )
+
+REM Step 1b: Install SageAttention (optimized attention backend for inference)
 echo.
+echo [SETUP] 1b. Installing SageAttention (optional, for faster inference)...
+uv pip install sageattention --no-deps
+if %ERRORLEVEL% neq 0 ( echo [WARN] SageAttention install failed, continuing without it )
 
-echo [3/3] Precompiling Ludus C++ extension with MSVC...
-echo Calling vcvarsall.bat x64...
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
-
-set "CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
-set "PATH=%CUDA_HOME%\bin;%CUDA_HOME%\lib\x64;%PATH%"
-set "TORCH_CUDA_ARCH_LIST=12.0a"
-
-echo Clearing old Ludus build cache...
-if exist "%LocalAppData%\torch_extensions\torch_extensions\Cache\py311_cu128\ludus_renderer_plugin" (
-    rmdir /s /q "%LocalAppData%\torch_extensions\torch_extensions\Cache\py311_cu128\ludus_renderer_plugin"
-    echo Cache cleared.
-)
-
-echo Ensuring build directory exists...
-if not exist "%LocalAppData%\torch_extensions\torch_extensions\Cache\py311_cu128" (
-    mkdir "%LocalAppData%\torch_extensions\torch_extensions\Cache\py311_cu128"
-)
-
-echo Building Ludus C++ extension (this may take 2-5 minutes)...
-"%PYEXE%" -B -c "import sys; sys.path.insert(0, 'integrations/omnidreams'); from ludus_renderer._ops._plugin import _get_plugin; _get_plugin(); print('[OK] Ludus precompiled')" || (
-    echo.
-    echo ===================================================================
-    echo Ludus precompile FAILED
-    echo ===================================================================
-    echo Check the error above for details (likely MSVC/CUDA/compiler issue).
-    exit /b 1
-)
+REM Step 2: Sync third-party sources
 echo.
+echo [SETUP] 2. Syncing third-party sources...
+uv run --package flashdreams-omnidreams python integrations/omnidreams/omnidreams_singleview/tools/sync_thirdparty.py sync
+if %ERRORLEVEL% neq 0 ( echo [ERROR] sync_thirdparty failed & exit /b %ERRORLEVEL% )
 
-echo [4/4] Rebuilding PhysX...
-"%PYEXE%" -B -c "import sys; sys.path.insert(0, 'integrations/omnidreams'); from ludus_renderer.physx import load_native_physx; m = load_native_physx(); print('[OK] PhysX loaded')" && (
-    echo.
-    echo ===================================================================
-    echo SETUP COMPLETE!
-    echo ===================================================================
-    echo.
-    echo ✓ Models downloaded
-    echo ✓ Ludus C++ extension precompiled
-    echo ✓ PhysX rebuilt for your Python version
-    echo.
-    echo Next step:
-    echo   .\run_interactive_drive_perf.bat
-    echo.
-    echo ===================================================================
-) || (
-    echo.
-    echo ===================================================================
-    echo SETUP FAILED at PhysX rebuild
-    echo ===================================================================
-    echo Try running: .\rebuild_physx_python311.bat
-    exit /b 1
+REM Step 3: Prepare for perf
+echo.
+echo [SETUP] 3. Preparing for perf (downloads models, builds extensions)...
+uv run --package flashdreams-omnidreams omnidreams-prepare --perf
+if %ERRORLEVEL% neq 0 ( echo [ERROR] omnidreams-prepare failed & exit /b %ERRORLEVEL% )
+
+REM Step 4: Optional precompile torch.compile cache
+echo.
+echo [SETUP] 4. Precompiling torch.compile cache (optional)...
+choice /C YN /M "Warmup torch.compile cache? (faster first chunk, takes 2-3 min) [Y/N]: "
+if %ERRORLEVEL%==1 (
+  call .\precompile_cache.bat
+  if %ERRORLEVEL% neq 0 ( echo [WARN] Precompile failed, continuing anyway )
 )
 
+echo.
+echo ===================================================================
+echo ✓ SETUP COMPLETE
+echo ===================================================================
+echo.
+echo Next: Run the interactive-drive app
+echo   .\run_interactive_drive_perf.bat --game-mode
+echo.
+echo Controls: WASD=drive Mouse=look C=obstacle R=restart Esc=quit
+echo Editing: Type in Scene Prompt field, /spawn car 30 5, /clear-actors
+echo.
 endlocal

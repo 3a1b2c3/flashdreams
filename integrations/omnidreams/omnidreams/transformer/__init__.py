@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from omnidreams.native.acceleration import (
     NativeAccelerationConfig,
     NativeAccelerationMode,
@@ -362,16 +363,30 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         )
 
         if config.checkpoint_path is not None:
+            import time
             transform = config.state_dict_transform or _strip_net_prefix
             state_dict = load_checkpoint(config.checkpoint_path)
+            logger.info(f"[STATE-DICT-TRANSFORM-START] Transforming {len(state_dict)} keys")
+            start = time.perf_counter()
             state_dict = transform(state_dict)
+            elapsed = time.perf_counter() - start
+            logger.info(f"[STATE-DICT-TRANSFORM-DONE] Transform completed in {elapsed:.1f}s")
+            logger.info(f"[LOAD-STATE-DICT-START] Loading {len(state_dict)} tensors into network")
+            start = time.perf_counter()
             self.network.load_state_dict(state_dict)
+            elapsed = time.perf_counter() - start
+            logger.info(f"[LOAD-STATE-DICT-DONE] load_state_dict completed in {elapsed:.1f}s")
         self.network.update_parameters_after_loading_checkpoint()
 
         self._optimized_dit_executor: Any | None = None
         self._optimized_dit_selection: NativeBackendSelection | None = None
         if config.native_dit_acceleration != "disabled":
+            import time
+            logger.info(f"[NATIVE-DIT-CONFIG-START] Loading native DIT acceleration (mode={config.native_dit_acceleration})")
+            start = time.perf_counter()
             self._configure_optimized_dit_from_config()
+            elapsed = time.perf_counter() - start
+            logger.info(f"[NATIVE-DIT-CONFIG-DONE] Native DIT setup completed in {elapsed:.1f}s")
 
         if config.compile_network and self._optimized_dit_executor is None:
             self.network = compile_module(self.network)

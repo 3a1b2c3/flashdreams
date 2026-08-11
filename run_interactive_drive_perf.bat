@@ -35,7 +35,7 @@ set "CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
 set "CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
 set "PATH=%CUDA_HOME%\bin;%CUDA_HOME%\lib\x64;%PATH%"
 REM RTX 5090 (sm_120): force the arch for any torch JIT (overrides stale machine value).
-set "TORCH_CUDA_ARCH_LIST=12.0a"
+set "TORCH_CUDA_ARCH_LIST=12.0"
 
 REM Windows SDK include paths for MSVC cl.exe (windows.h, assert.h, etc).
 set "INCLUDE=C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um;C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt;C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include;%INCLUDE%"
