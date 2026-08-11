@@ -65,7 +65,14 @@ This script:
 ### Step 5: Launch Interactive-Drive
 
 ```powershell
-.\run_interactive_drive_perf.bat --game-mode
+.\run_interactive_drive_perf.bat
+```
+
+**Game-mode is ON by default** (physics, collisions, speed limits, visual flare on impact).
+
+To disable game-mode:
+```powershell
+.\run_interactive_drive_perf.bat --no-game-mode
 ```
 
 **First launch:** ~1-2 min (torch.compile warmup)  
@@ -82,8 +89,9 @@ Pre-download all HuggingFace models to `~/.cache/huggingface`. Use when disk is 
 ### `precompile_cache.bat`
 Pre-warm torch.compile cache. Called automatically by `setup.bat` (optional).
 
-### `run_interactive_drive_perf.bat --game-mode`
-Launch the app with game-mode physics enabled by default.
+### `run_interactive_drive_perf.bat`
+Launch the app. **Game-mode is ON by default** (physics, collisions, speed limits, visual flare).
+Pass `--no-game-mode` to disable physics.
 
 ## Controls & Features
 
@@ -94,12 +102,54 @@ Launch the app with game-mode physics enabled by default.
 - **R** — restart session (clears KV cache)
 - **Esc** — quit
 
-### Live Prompt Editing (PR #431)
+### Live Prompt Editing (PR #431 / omnidreams-live-edit-pr)
 While driving:
 - **Scene Prompt panel** — type new scene description, press Enter to swap prompts mid-stream
 - **/spawn car 30 5** — spawn a vehicle at 30m ahead, 5 m/s speed
 - **/clear-actors** — remove all spawned actors
 - **Two-prompt guidance** (optional) — amplify edits by comparing old/new prompt flows
+
+#### Testing Live Prompt Editing
+1. **Start the app:**
+   ```powershell
+   .\run_interactive_drive_perf.bat
+   ```
+
+2. **Drive forward** for 10-20 seconds to warm up (get past first chunk compile)
+
+3. **Swap the scene prompt mid-stream:**
+   - Locate "Scene Prompt" text input panel on the left side of the UI
+   - Type a new scene: `"rainy highway with traffic, dark clouds, wet pavement"`
+   - Press **Enter** to apply
+   - Watch the scene transition smoothly mid-drive (no restart needed, KV cache preserved)
+
+4. **Spawn actors:**
+   - In the **Scene Prompt panel** (same text input area where you edit prompts), type:
+     ```
+     /spawn car 50 10 0
+     ```
+   - **Parameters:** `/spawn <type> <distance_m> <speed_mps> <lateral_m>`
+     - `car` = vehicle type
+     - `50` = distance ahead (meters, world-frame, relative to initial vehicle)
+     - `10` = forward speed (m/s)
+     - `0` = lateral offset (0 = same lane, -5 = left, +5 = right)
+   - Press **Enter** to spawn
+   - Vehicle appears in the HDMap conditioning immediately
+   - Can spawn multiple actors at different distances/speeds
+
+5. **Test two-prompt guidance** (if enabled in config):
+   - Swap prompt while guidance is active
+   - Compare strength of the edit (should be more pronounced than without guidance)
+
+6. **Clear all actors:**
+   - Type: `/clear-actors`
+   - All spawned vehicles disappear, scene background continues
+
+**Expected behavior:**
+- Prompt swaps take effect at the next chunk boundary (seamless, no frame drops)
+- Scene background updates with new prompt
+- KV cache (past attention history) carries forward → continuity preserved
+- Actors appear/disappear instantly in the HDMap conditioning
 
 ### Performance
 - **Resolution:** 1168×640 (perf-tuned)

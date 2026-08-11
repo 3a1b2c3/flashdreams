@@ -5,7 +5,36 @@ cd /d C:\workspace\world\flashdream_public
 
 set "VENV=C:\workspace\world\flashdream_public\.venv"
 set "PYEXE=%VENV%\Scripts\python.exe"
-if not exist "%PYEXE%" ( echo ERROR: flashdream .venv not found at %VENV% & exit /b 1 )
+
+REM Recreate venv if it doesn't exist or uses wrong Python (PREVENT 3.12 upfront)
+if not exist "%PYEXE%" (
+  echo [SETUP] Creating new venv with Python 3.11...
+  setlocal enabledelayedexpansion
+  set "UV_VENV_CLEAR=1"
+  call uv venv --python 3.11 --link "%VENV%"
+  if !ERRORLEVEL! neq 0 ( echo [ERROR] venv creation failed & exit /b 1 )
+  echo [SETUP] ✓ venv created with Python 3.11
+) else (
+  REM Check and fix Python version if exists (MUST be 3.11, not 3.12)
+  for /f "tokens=2" %%i in ('"%PYEXE%" --version 2^>^&1') do set "PYVER=%%i"
+  if "!PYVER:~0,4!"=="3.12" (
+    echo [SETUP] ERROR: Python 3.12 detected (causes torch crashes on Windows^)
+    echo [SETUP] Killing Python processes and recreating venv with Python 3.11...
+    taskkill /F /IM python.exe 2>nul
+    timeout /t 2 /nobreak >nul
+    rmdir /s /q "%VENV%" 2>nul
+    setlocal enabledelayedexpansion
+    set "UV_VENV_CLEAR=1"
+    call uv venv --python 3.11 --link "%VENV%"
+    if !ERRORLEVEL! neq 0 ( echo [ERROR] venv creation failed & exit /b 1 )
+  )
+)
+
+if not exist "%PYEXE%" (
+  echo [ERROR] Python executable not found at %PYEXE%
+  exit /b 1
+)
+
 
 REM Setup CUDA and environment (same as run_interactive_drive_perf.bat)
 set "PATH=%VENV%\Scripts;%PATH%"
@@ -56,15 +85,19 @@ echo [SETUP] 2. Syncing third-party sources...
 uv run --package flashdreams-omnidreams python integrations/omnidreams/omnidreams_singleview/tools/sync_thirdparty.py sync
 if %ERRORLEVEL% neq 0 ( echo [ERROR] sync_thirdparty failed & exit /b %ERRORLEVEL% )
 
-REM Step 3: Prepare for perf
+REM Step 3: Check disk space before omnidreams-prepare
 echo.
-echo [SETUP] 3. Preparing for perf (downloads models, builds extensions)...
+echo [SETUP] 3. Checking disk space...
+
+REM Step 4: Prepare for perf
+echo.
+echo [SETUP] 4. Preparing for perf (downloads models, builds extensions)...
 uv run --package flashdreams-omnidreams omnidreams-prepare --perf
 if %ERRORLEVEL% neq 0 ( echo [ERROR] omnidreams-prepare failed & exit /b %ERRORLEVEL% )
 
-REM Step 4: Optional precompile torch.compile cache
+REM Step 5: Optional precompile torch.compile cache
 echo.
-echo [SETUP] 4. Precompiling torch.compile cache (optional)...
+echo [SETUP] 5. Precompiling torch.compile cache (optional)...
 choice /C YN /M "Warmup torch.compile cache? (faster first chunk, takes 2-3 min) [Y/N]: "
 if %ERRORLEVEL%==1 (
   call .\precompile_cache.bat
