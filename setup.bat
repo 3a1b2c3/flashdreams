@@ -79,6 +79,12 @@ echo [SETUP] 1. Syncing dependencies...
 uv sync --package flashdreams-omnidreams --extra interactive-drive
 if %ERRORLEVEL% neq 0 ( echo [ERROR] uv sync failed & exit /b %ERRORLEVEL% )
 
+REM Install ninja (required for torch.compile)
+echo [SETUP] 1b. Installing ninja (torch.compile build system)...
+"%PYEXE%" -m pip install ninja --quiet
+if %ERRORLEVEL% neq 0 ( echo [WARN] ninja install failed, but continuing )
+echo [SETUP] ✓ ninja installed
+
 REM Step 2: Sync third-party sources
 echo.
 echo [SETUP] 2. Syncing third-party sources...

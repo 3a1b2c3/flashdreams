@@ -14,6 +14,7 @@ Complete setup workflow for `flashdream_public` on Windows with RTX 5090.
 - **CUDA:** 13.0 (cu130)
 - **uv:** installed at `C:\Users\kschmid\.local\bin\uv.exe`
 - **Git:** configured with `core.longpaths = true`
+- **Ninja:** build system for torch.compile (auto-installed by setup.bat)
 
 ### Disk Space
 - **Minimum:** 20 GB free for HF cache downloads
@@ -65,6 +66,7 @@ This script:
 ### Step 5: Launch Interactive-Drive
 
 ```powershell
+$env:FLASHDREAMS_MIN_CACHE_FREE_GB = '0'
 .\run_interactive_drive_perf.bat
 ```
 
@@ -75,8 +77,13 @@ To disable game-mode:
 .\run_interactive_drive_perf.bat --no-game-mode
 ```
 
-**First launch:** ~1-2 min (torch.compile warmup)  
-**Subsequent launches:** ~30 sec (uses cached compiles)
+**Important: torch.compile on first launch**
+- **First launch:** You'll see "Optimizing world model..." with a black screen (~1-2 min)
+  - This is torch.compile building CUDA kernels (normal, one-time cost)
+  - **Do NOT kill it** — wait for HUD to appear
+  - Requires `ninja` to be installed (see Troubleshooting)
+- **After compilation:** ~30 sec per launch (uses cached compiles)
+- Once HUD appears, you can drive immediately
 
 ## Helper Scripts
 
@@ -159,6 +166,26 @@ While driving:
 - **Current FPS:** ~13.5 (PyTorch); ~23+ (with native FP8, if built)
 
 ## Troubleshooting
+
+### Torch.compile Hangs (Black Screen "Optimizing world model...")
+
+**Symptom:** App starts but gets stuck at "Optimizing world model..." with a black screen for >5 min.
+
+**Cause:** Missing `ninja` build system (required for torch.compile on Windows).
+
+**Fix:**
+```powershell
+.\.venv\Scripts\python.exe -m pip install ninja
+.\run_interactive_drive_perf.bat
+```
+
+**Or:** Let `setup.bat` auto-install ninja:
+```powershell
+.\setup.bat  # Installs ninja automatically
+.\run_interactive_drive_perf.bat
+```
+
+**Why:** torch.compile needs Ninja to compile CUDA kernels. Without it, compilation hangs indefinitely. Installation is one-time; subsequent runs reuse cached compiled kernels.
 
 ### Python 3.12 Crash
 ```
