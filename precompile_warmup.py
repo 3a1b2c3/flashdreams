@@ -15,7 +15,7 @@ from omnidreams.interactive_drive.config import ChunkConfig, RasterConfig
 
 chunk = ChunkConfig(chunk_frames=8, initial_chunk_frames=5, fps=30)
 raster = RasterConfig(width=1168, height=640)
-backend = WorldModelRenderBackend(manifest=manifest, chunk=chunk, raster=raster, skip_warmup=False)
+backend = WorldModelRenderBackend(manifest=manifest, chunk=chunk, raster=raster)
 
 print('[PRECOMPILE] Warming up model (this triggers torch.compile)...', flush=True)
 backend.warmup_model()
