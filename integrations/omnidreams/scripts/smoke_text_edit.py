@@ -18,20 +18,105 @@
 Rolls the same seed / HDMap / first frame several ways and reports how
 strongly the video diverges after the swap chunk:
 
-    A  control       original clip prompt throughout
-    B  swap          hot-swap to ``EDIT_PROMPT`` at chunk ``SWAP_AT``
-    C  swap+guide    same swap with two-prompt edit guidance
-    D  swap+recache  same swap plus previous-chunk KV re-commit
+    A  control           original clip prompt throughout
+    B  swap              hot-swap to ``EDIT_PROMPT`` at chunk ``SWAP_AT``
+    C  swap+guide        same swap with two-prompt edit guidance
+    D  swap+recache      same swap plus previous-chunk KV re-commit
+    E  sequential        multiple prompts: A→B→C in sequence
+    F  determinism       verify bit-clean determinism (run twice)
 
-B and C consume the identical RNG stream as A (the swap itself draws no
-noise), so the per-chunk ``|B - A|`` pixel gap is a pure measure of prompt
+B and C consume the identical RNG stream as A (the swap itself draws no noise),
+so the per-chunk ``|B - A|`` pixel gap is a pure measure of prompt
 responsiveness: ~0 before the swap (sanity check), and the post-swap
 magnitude/growth is the signal. D draws one extra context-noise sample at
 the recache, so its pre-swap sanity still holds but its post-swap gap is
 noise-shifted — judge D visually against B.
 
-Env knobs: ``UUID``, ``EDIT_PROMPT``, ``N_CHUNKS``, ``SWAP_AT``,
-``GUIDE_SCALE``, ``GUIDE_CHUNKS``, ``SEED``, ``OUT_DIR``.
+**Env knobs:**
+    UUID                    Sample ID (default: 23599139-948f-4681-b7f4-74794113086d)
+    EDIT_PROMPT             Text to swap to (default: snowstorm prompt)
+    N_CHUNKS                Total chunks to generate (default: 16)
+    SWAP_AT                 Comma-separated chunk positions for timing variation
+                            (default: 8; e.g., "4,8,12" tests swaps at three times)
+    GUIDE_SCALES            Comma-separated guidance scales for strength sweep
+                            (default: 2.5; e.g., "1.0,2.5,5.0" tests three strengths)
+    GUIDE_CHUNKS            Guidance window duration (default: 4 chunks)
+    SEQUENTIAL_PROMPTS      Comma-separated prompts for A→B→C edits
+                            (e.g., "rain,night,snow" edits to rain at chunk 8, night at 12, snow at 16)
+    CHECK_DETERMINISM       Enable determinism verification (run each variant twice)
+                            (default: off; set to 1/true/yes to enable)
+    SEED                    RNG seed (default: 42)
+    OUT_DIR                 Output directory (default: integrations/omnidreams/scripts/outputs/text_edit_smoke)
+
+**Prompt Design Guide:**
+
+Effective EDIT_PROMPT and SEQUENTIAL_PROMPTS should:
+
+1. **Be specific & visual** — describe what the camera sees, not abstract concepts
+   - ✓ "Heavy rain on the road with wet reflections and windshield droplets"
+   - ✗ "It's raining" (too vague)
+
+2. **Match distribution** — use phrasing similar to training captions
+   - ✓ "Driving scene from a front-facing car camera at night under streetlights"
+   - ✗ "Nighttime photography, neon signs, cyberpunk aesthetic"
+
+3. **Vary in semantics, not style** — test content changes, not art direction
+   - ✓ "Rain" vs "Snow" (weather change, same road)
+   - ✗ "Photorealistic" vs "oil painting" (style, not scene)
+
+4. **Keep length reasonable** — 15-30 words per prompt
+   - Longer: more control but slower convergence
+   - Shorter: faster response but less specificity
+
+5. **For sequential edits, ensure orthogonal changes** — test transitions
+   - ✓ "Sunny day" → "Heavy rain" → "Snowstorm" (clear progression)
+   - ✗ "Day" → "Day at noon" → "Day in afternoon" (too similar)
+
+**Example prompts for testing:**
+
+Weather/Lighting:
+    "Driving scene in heavy rain with wet road and windshield droplets"
+    "Driving scene at night with streetlights and vehicle lights"
+    "Driving scene in a heavy snowstorm with snow covering the road"
+    "Driving scene at sunset with golden hour lighting and long shadows"
+    "Driving scene in thick fog with limited visibility"
+
+Dynamic events (good for responsiveness testing):
+    "Driving scene with a pedestrian crossing the road ahead"
+    "Driving scene following a truck on the highway"
+    "Driving scene in heavy traffic with cars around"
+    "Driving scene passing a construction zone with barriers"
+
+Challenging transitions (good for sequential testing):
+    "Sunny highway" → "Heavy downpour" → "Clear skies after storm"
+    "Daytime city" → "Evening dusk" → "Night with lights"
+    "Empty road" → "Heavy traffic" → "Empty road again"
+
+**Examples:**
+
+Baseline (single swap, single guidance scale):
+
+    python integrations/omnidreams/scripts/smoke_text_edit.py
+
+Guidance strength sweep (test s=1.0, 2.5, 5.0):
+
+    GUIDE_SCALES=1.0,2.5,5.0 python integrations/omnidreams/scripts/smoke_text_edit.py
+
+Swap timing variation (test chunks 4, 8, 12):
+
+    SWAP_AT=4,8,12 python integrations/omnidreams/scripts/smoke_text_edit.py
+
+Sequential edits (rain → night → snow):
+
+    SEQUENTIAL_PROMPTS="Driving scene in heavy rain with wet road,Driving scene at night with streetlights,Driving scene in heavy snowstorm" python integrations/omnidreams/scripts/smoke_text_edit.py
+
+Determinism check (run each variant twice):
+
+    CHECK_DETERMINISM=1 python integrations/omnidreams/scripts/smoke_text_edit.py
+
+Full suite (all above):
+
+    SWAP_AT=4,8,12 GUIDE_SCALES=1.0,2.5,5.0 SEQUENTIAL_PROMPTS="rain,night,snow" CHECK_DETERMINISM=1 python integrations/omnidreams/scripts/smoke_text_edit.py
 
 Run from the repo root::
 
@@ -67,9 +152,6 @@ SAMPLES_ROOT = (
 
 UUID = os.environ.get("UUID", "23599139-948f-4681-b7f4-74794113086d")
 N_CHUNKS = int(os.environ.get("N_CHUNKS", "16"))
-SWAP_AT = int(os.environ.get("SWAP_AT", "8"))
-GUIDE_SCALE = float(os.environ.get("GUIDE_SCALE", "2.5"))
-GUIDE_CHUNKS = int(os.environ.get("GUIDE_CHUNKS", "4"))
 SEED = int(os.environ.get("SEED", "42"))
 OUT_DIR = Path(
     os.environ.get("OUT_DIR", "integrations/omnidreams/scripts/outputs/text_edit_smoke")
@@ -81,6 +163,15 @@ EDIT_PROMPT = os.environ.get(
     "headlights and streetlights glowing through the snow. Photorealistic "
     "dashcam footage.",
 )
+
+_parse_list = lambda s, cast: [cast(x.strip()) for x in s.split(",") if x.strip()]
+
+SWAP_AT_VALUES = _parse_list(os.environ.get("SWAP_AT", "8"), int)
+GUIDE_SCALES = _parse_list(os.environ.get("GUIDE_SCALES", "2.5"), float)
+GUIDE_CHUNKS = int(os.environ.get("GUIDE_CHUNKS", "4"))
+
+SEQUENTIAL_PROMPTS = _parse_list(os.environ.get("SEQUENTIAL_PROMPTS", ""), str)
+CHECK_DETERMINISM = os.environ.get("CHECK_DETERMINISM", "").lower() in ("1", "true", "yes")
 
 
 def _sample_paths(uuid: str) -> tuple[Path, Path, str]:
@@ -168,11 +259,37 @@ def _per_chunk_gap(a: Tensor, b: Tensor) -> list[float]:
     return [float((a[s:e] - b[s:e]).abs().mean() * 127.5) for s, e in _chunk_bounds()]
 
 
+def _rollout_determinism(
+    pipe: OmnidreamsPipeline,
+    *,
+    hdmap: Tensor,
+    first: Tensor,
+    base_prompt: str,
+    swap: dict | None = None,
+    runs: int = 2,
+) -> tuple[Tensor, bool]:
+    """Verify determinism by running twice with same seed; return video + is_deterministic."""
+    result = None
+    for run in range(runs):
+        video = _rollout(pipe, hdmap=hdmap, first=first, base_prompt=base_prompt, swap=swap)
+        if result is None:
+            result = video
+        elif not torch.allclose(result, video, atol=1e-6):
+            print(f"    ⚠ determinism check FAILED (runs differ)", flush=True)
+            return video, False
+    return result, True
+
+
 def main() -> None:
     hdmap_path, frame_path, clip_prompt = _sample_paths(UUID)
     total_frames = 5 + (N_CHUNKS - 1) * 8
     print(f"clip {UUID}\n  prompt: {clip_prompt}\n  edit:   {EDIT_PROMPT}")
-    print(f"  chunks={N_CHUNKS} swap_at={SWAP_AT} frames={total_frames}")
+    print(f"  chunks={N_CHUNKS} swap_at_values={SWAP_AT_VALUES} guide_scales={GUIDE_SCALES}")
+    print(f"  guide_chunks={GUIDE_CHUNKS} frames={total_frames}")
+    if SEQUENTIAL_PROMPTS:
+        print(f"  sequential_prompts={SEQUENTIAL_PROMPTS}")
+    if CHECK_DETERMINISM:
+        print(f"  determinism_check=enabled (runs each variant twice)")
 
     device = torch.device("cuda")
     hdmap = load_video_tensor(
@@ -191,59 +308,136 @@ def main() -> None:
     )[None, None]  # [B=1, V=1, 1, C, H, W]
 
     pipe = _build_pipeline()
-
-    variants: dict[str, dict | None] = {
-        "control": None,
-        "swap": {"at": SWAP_AT, "prompt": EDIT_PROMPT},
-        "swap_guided": {
-            "at": SWAP_AT,
-            "prompt": EDIT_PROMPT,
-            "scale": GUIDE_SCALE,
-            "chunks": GUIDE_CHUNKS,
-        },
-        "swap_recache": {"at": SWAP_AT, "prompt": EDIT_PROMPT, "recache": True},
-    }
-
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    videos: dict[str, Tensor] = {}
-    for name, swap in variants.items():
-        print(f"rolling out {name} ...", flush=True)
-        videos[name] = _rollout(
-            pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=swap
-        )
-        write_video_tensor(videos[name], OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
 
-    control = videos["control"]
-    report: dict[str, list[float]] = {}
-    for name in ("swap", "swap_guided", "swap_recache"):
-        gaps = _per_chunk_gap(videos[name], control)
-        report[name] = gaps
-        pre = max(gaps[:SWAP_AT])
-        post = gaps[SWAP_AT:]
-        print(
-            f"{name:>13}: pre-swap max gap {pre:6.3f}  "
-            f"post-swap per-chunk {' '.join(f'{g:6.2f}' for g in post)}"
+    print("\n=== baseline control ===", flush=True)
+    if CHECK_DETERMINISM:
+        control, is_det = _rollout_determinism(
+            pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=None
         )
+        print(f"  deterministic: {is_det}", flush=True)
+    else:
+        control = _rollout(pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=None)
+    write_video_tensor(control, OUT_DIR / "control.mp4", fps=30, layout="tchw")
 
-    # Side-by-side [control | swap | swap_guided] for eyeballing.
-    sbs = torch.cat(
-        [control, videos["swap"], videos["swap_guided"]], dim=3
-    )  # widths concat
-    write_video_tensor(sbs, OUT_DIR / "sbs.mp4", fps=30, layout="tchw")
+    report: dict[str, dict] = {"control": {"per_chunk_gap_uint8": []}}
+
+    print("\n=== timing variation ===", flush=True)
+    for swap_at in SWAP_AT_VALUES:
+        print(f"  swap_at={swap_at}", flush=True)
+        for scale in GUIDE_SCALES:
+            is_guided = scale > 1.0
+            if is_guided:
+                name = f"swap_at{swap_at}_s{scale:.1f}"
+                swap_spec = {
+                    "at": swap_at,
+                    "prompt": EDIT_PROMPT,
+                    "scale": scale,
+                    "chunks": GUIDE_CHUNKS,
+                }
+            else:
+                name = f"swap_at{swap_at}"
+                swap_spec = {"at": swap_at, "prompt": EDIT_PROMPT}
+
+            print(f"    rolling {name} ...", end=" ", flush=True)
+            if CHECK_DETERMINISM:
+                video, is_det = _rollout_determinism(
+                    pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=swap_spec
+                )
+                print(f"deterministic={is_det}", flush=True)
+            else:
+                video = _rollout(pipe, hdmap=hdmap, first=first, base_prompt=clip_prompt, swap=swap_spec)
+                print("done", flush=True)
+
+            write_video_tensor(video, OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
+            gaps = _per_chunk_gap(video, control)
+            report[name] = {
+                "swap_at": swap_at,
+                "guide_scale": scale,
+                "guide_chunks": GUIDE_CHUNKS if is_guided else 0,
+                "per_chunk_gap_uint8": gaps,
+                "pre_swap_max": float(max(gaps[:swap_at]) if swap_at > 0 else 0),
+                "post_swap_mean": float(sum(gaps[swap_at:]) / len(gaps[swap_at:]) if swap_at < len(gaps) else 0),
+            }
+
+    print("\n=== recache variant (bit-level semantics) ===", flush=True)
+    for swap_at in SWAP_AT_VALUES[:1]:
+        name = f"swap_at{swap_at}_recache"
+        print(f"  rolling {name} ...", end=" ", flush=True)
+        video = _rollout(
+            pipe,
+            hdmap=hdmap,
+            first=first,
+            base_prompt=clip_prompt,
+            swap={"at": swap_at, "prompt": EDIT_PROMPT, "recache": True},
+        )
+        print("done", flush=True)
+        write_video_tensor(video, OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
+        gaps = _per_chunk_gap(video, control)
+        report[name] = {
+            "swap_at": swap_at,
+            "recache": True,
+            "per_chunk_gap_uint8": gaps,
+            "note": "ReCache uses dedicated seeded generator; noise-shifted relative to swap",
+        }
+
+    if SEQUENTIAL_PROMPTS:
+        print(f"\n=== sequential edits: {' → '.join(SEQUENTIAL_PROMPTS)} ===", flush=True)
+        seq_name = "sequential_" + "_".join(p[:3].lower() for p in SEQUENTIAL_PROMPTS)
+        current_video = control.clone()
+        seq_report = {"edits": []}
+
+        for i, prompt in enumerate(SEQUENTIAL_PROMPTS):
+            swap_chunk = SWAP_AT_VALUES[0] + (i * 4)
+            if swap_chunk >= N_CHUNKS:
+                print(f"  skipping edit {i+1} (chunk {swap_chunk} ≥ {N_CHUNKS})", flush=True)
+                break
+            print(f"  edit {i+1} → '{prompt[:40]}...' at chunk {swap_chunk}", end=" ", flush=True)
+            video = _rollout(
+                pipe,
+                hdmap=hdmap,
+                first=first,
+                base_prompt=clip_prompt,
+                swap={"at": swap_chunk, "prompt": prompt, "scale": GUIDE_SCALES[0], "chunks": GUIDE_CHUNKS},
+            )
+            print("done", flush=True)
+            gaps = _per_chunk_gap(video, control)
+            seq_report["edits"].append(
+                {
+                    "edit_number": i + 1,
+                    "prompt": prompt,
+                    "swap_at": swap_chunk,
+                    "post_swap_mean": float(sum(gaps[swap_chunk:]) / len(gaps[swap_chunk:]) if swap_chunk < len(gaps) else 0),
+                }
+            )
+
+        report[seq_name] = seq_report
 
     meta = {
         "uuid": UUID,
         "clip_prompt": clip_prompt,
-        "edit_prompt": EDIT_PROMPT,
+        "edit_prompts": {
+            "single": EDIT_PROMPT,
+            "sequential": SEQUENTIAL_PROMPTS,
+        },
         "n_chunks": N_CHUNKS,
-        "swap_at": SWAP_AT,
-        "guide_scale": GUIDE_SCALE,
+        "swap_at_values": SWAP_AT_VALUES,
+        "guide_scales": GUIDE_SCALES,
         "guide_chunks": GUIDE_CHUNKS,
         "seed": SEED,
-        "per_chunk_gap_uint8": report,
+        "determinism_checked": CHECK_DETERMINISM,
+        "variants": report,
     }
     (OUT_DIR / "report.json").write_text(json.dumps(meta, indent=2))
-    print(f"videos + report under {OUT_DIR}/")
+
+    print(f"\n=== summary ===", flush=True)
+    for name, data in report.items():
+        if isinstance(data, dict) and "per_chunk_gap_uint8" in data:
+            pre = data.get("pre_swap_max", 0)
+            post = data.get("post_swap_mean", 0)
+            print(f"  {name:30s}: pre-swap={pre:6.2f}, post-swap={post:6.2f}", flush=True)
+
+    print(f"\nvideos + report under {OUT_DIR}/", flush=True)
 
 
 if __name__ == "__main__":

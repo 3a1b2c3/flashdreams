@@ -825,6 +825,61 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
         callback=app.set_postprocess_enabled,
     )
 
+    # Wire Scene Prompt input (P key in HUD) to live prompt editing in pipeline.
+    # Uses same apply_text_prompts path as WebRTC for consistency.
+    # Runs asynchronously in presenter's background thread, non-blocking to driving.
+    def handle_scene_prompt(prompt: str) -> None:
+        """Callback for scene prompt edits from the HUD (runs in background thread).
+
+        Delegates to the backend's omnidreams session, which handles:
+        - Staging the prompt if no chunk has been generated yet
+        - Live swapping via apply_text_prompts() if streaming is active
+        Returns immediately (fire-and-forget); any errors are logged.
+        """
+        try:
+            # Access the session through the backend's local adapter.
+            # This mirrors the WebRTC path: datachannel events → trigger_event() → apply_text_prompts().
+            if hasattr(app, "_backend") and app._backend is not None:
+                backend = app._backend
+                if hasattr(backend, "_adapter") and backend._adapter is not None:
+                    adapter = backend._adapter
+                    if hasattr(adapter, "_session") and adapter._session is not None:
+                        session = adapter._session
+                        # Non-blocking: fire-and-forget on the session's executor
+                        # (trigger_event_sync wraps apply_text_prompts in a distributed_op)
+                        # For immediate sync path, call apply_text_prompts directly on wrapper
+                        if hasattr(session, "_wrapper") and session._wrapper is not None:
+                            from omnidreams.webrtc.types import TextPrompt
+                            text_prompts = [TextPrompt(positive=prompt)]
+                            if session._state is not None and session._state.pipeline_cache is not None:
+                                session._wrapper.apply_text_prompts(session._state, text_prompts)
+                                session._active_prompt = prompt
+                                logger.info(
+                                    f"[demo] scene prompt updated (native UI, async): {prompt[:60]}..."
+                                )
+                            else:
+                                session._text_prompts = text_prompts
+                                session._active_prompt = prompt
+                                logger.info(
+                                    f"[demo] scene prompt staged for start (native UI): {prompt[:60]}..."
+                                )
+                                return
+                        else:
+                            logger.warning("[demo] session wrapper not available for prompt update")
+                            return
+                    else:
+                        logger.warning("[demo] session not available for prompt update")
+                        return
+                else:
+                    logger.warning("[demo] adapter not available for prompt update")
+                    return
+            else:
+                logger.warning("[demo] backend not available for prompt update")
+        except Exception as e:
+            logger.error(f"[demo] failed to apply scene prompt: {e}", exc_info=True)
+
+    presenter.set_prompt_callback(handle_scene_prompt)
+
     # Attach the wheel up front, bound to the app's long-lived keyboard, so
     # the HUD's steering / pedal chrome reacts to the physical device during
     # the initial scene-selection wait -- not only once a scene is running.

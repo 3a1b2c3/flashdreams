@@ -15,6 +15,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import math as _math
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -541,6 +542,16 @@ class SlangPyHudPresenter:
         self._postprocess_preset = ""
         self._postprocess_enabled = False
         self._postprocess_callback: Callable[[bool], None] = lambda enabled: None
+
+        # Scene Prompt editing: P to enter, type text, Enter to send, Escape to cancel
+        self._prompt_edit_mode = False
+        self._prompt_text = ""
+        self._current_scene_prompt = ""
+        self._prompt_send_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="interactive-drive-prompt-send"
+        )
+        self._prompt_send_future: concurrent.futures.Future[None] | None = None
+        self._prompt_callback: Callable[[str], None] = lambda prompt: None
 
         # Scene-change request set by the dropdown click handlers. The
         # outer demo loop checks this after each ``app.run_scene`` returns:
@@ -1391,6 +1402,9 @@ class SlangPyHudPresenter:
         if status_message:
             self._draw_status_overlay(canvas, draw, camera_area, status_message)
 
+        # Draw Scene Prompt overlay (always visible when prompt is set or editing)
+        self._draw_scene_prompt_overlay(canvas, draw, camera_area)
+
     # -- Camera area -------------------------------------------------
 
     def _draw_camera(
@@ -1504,6 +1518,74 @@ class SlangPyHudPresenter:
             fill=TEXT_COLOR,
             font=self._font_large,
         )
+
+    def _draw_scene_prompt_overlay(
+        self,
+        canvas: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        area: tuple[int, int, int, int],
+    ) -> None:
+        """Draw Scene Prompt input field at top-left of camera area (always visible, large)."""
+        ax, ay, ar, ab = area
+        x, y = ax + 20, ay + 20
+        box_width = 600  # Increased from 400
+        box_height = 80 if self._prompt_edit_mode else 70  # Increased from 50/35
+
+        # Background box
+        draw.rectangle(
+            (x, y, x + box_width, y + box_height),
+            fill=(30, 30, 40, 240),
+            outline=NVIDIA_GREEN if self._prompt_edit_mode else (100, 100, 120),
+            width=2,
+        )
+
+        if self._prompt_edit_mode:
+            # Edit mode: show input field with text (larger, more prominent)
+            display_text = self._prompt_text if self._prompt_text else "Type prompt..."
+            cursor = "|" if len(self._prompt_text) % 2 == 0 else " "
+            text = display_text + cursor
+            text_color = NVIDIA_GREEN
+
+            # Main input text (large, prominent)
+            draw.text(
+                (x + 15, y + 12),
+                text,
+                fill=text_color,
+                font=self._font_medium,  # Larger font
+            )
+            # Instructions below input
+            draw.text(
+                (x + 15, y + 50),
+                "Press Enter to send, Esc to cancel",
+                fill=(150, 150, 150),
+                font=self._font_small,
+            )
+        else:
+            # Display mode: show current prompt (truncated) or placeholder if none set
+            if self._current_scene_prompt:
+                # Truncate to fit in larger box
+                display = self._current_scene_prompt[:80]
+                if len(self._current_scene_prompt) > 80:
+                    display += "..."
+                text_color = (200, 200, 200)
+            else:
+                display = "(no prompt)"
+                text_color = (120, 120, 120)
+
+            # Main prompt text (large, prominent)
+            draw.text(
+                (x + 15, y + 15),
+                display,
+                fill=text_color,
+                font=self._font_medium,  # Larger font
+            )
+            # "Press P to edit" hint
+            draw.text(
+                (x + 15, y + 48),
+                "Press P to edit",
+                fill=(150, 150, 150),
+                font=self._font_small,
+            )
 
     # -- Panel chrome ------------------------------------------------
 
@@ -2338,8 +2420,34 @@ class SlangPyHudPresenter:
         if not (is_press or is_release or is_repeat):
             return
         key = event.key
+
+        # Handle Scene Prompt editing (non-blocking, async sends)
+        if self._prompt_edit_mode:
+            if self._key_matches(key, "escape") and is_press:
+                self._prompt_edit_mode = False
+                self._prompt_text = ""
+                return
+            if self._key_matches(key, "return") and is_press:
+                if self._prompt_text.strip():
+                    self._send_scene_prompt_async(self._prompt_text)
+                self._prompt_edit_mode = False
+                self._prompt_text = ""
+                return
+            if self._key_matches(key, "backspace") and (is_press or is_repeat):
+                self._prompt_text = self._prompt_text[:-1]
+                return
+            if is_press or is_repeat:
+                char = self._extract_char_from_key(key)
+                if char is not None:
+                    self._prompt_text += char
+                    return
+
         if self._key_matches(key, "escape") and is_press:
             self._should_close_flag = True
+            return
+        if self._key_matches(key, "p") and is_press:
+            self._prompt_edit_mode = True
+            self._prompt_text = ""
             return
         # Drive keys flow through ``_keyboard_drive`` so the smoothed
         # steer / throttle / brake the wheel + speed-digit chrome reads
@@ -2431,6 +2539,33 @@ class SlangPyHudPresenter:
     def _key_matches(self, event_key: Any, name: str) -> bool:
         code = self._key_codes.get(name)
         return code is not None and event_key == code
+
+    def _extract_char_from_key(self, key: Any) -> str | None:
+        """Extract single character from KeyCode for text input (A-Z, 0-9, space)."""
+        if not hasattr(key, "name"):
+            return None
+        name = key.name.lower()
+        if len(name) == 1 and name.isalnum():
+            return name
+        if name == "space":
+            return " "
+        if name.startswith("digit") and len(name) == 6:
+            return name[5]
+        return None
+
+    def _send_scene_prompt_async(self, prompt: str) -> None:
+        """Send prompt to model in background thread (non-blocking)."""
+        if self._prompt_send_future is not None and not self._prompt_send_future.done():
+            return
+        self._current_scene_prompt = prompt
+        self._prompt_send_future = self._prompt_send_executor.submit(
+            self._prompt_callback, prompt
+        )
+        logger.info(f"[presenter] scene prompt sent (async): {prompt[:60]}...")
+
+    def set_prompt_callback(self, callback: Callable[[str], None]) -> None:
+        """Wire the callback that receives scene prompts from the UI (called in background)."""
+        self._prompt_callback = callback
 
     def _on_mouse_event(self, event: Any) -> None:
         spy = self._spy
