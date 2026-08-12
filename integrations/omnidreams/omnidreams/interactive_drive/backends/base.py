@@ -89,6 +89,10 @@ class RenderBackend(ABC):
         """
         self.reset()
 
+    def replace_prompt(self, prompt: str) -> None:
+        """Queue a mid-stream text prompt swap. No-op for backends without a
+        text path (pure raster); the world-model backend overrides this."""
+
     def set_postprocess_enabled(self, enabled: bool) -> None:
         """Enable or disable generated-video post-processing.
 

@@ -46,5 +46,8 @@ class LocalVideoModelAdapter:
         self._backend.reset()
         self._is_first_chunk = True
 
+    def replace_prompt(self, prompt: str) -> None:
+        self._backend.replace_prompt(prompt)
+
     def set_postprocess_enabled(self, enabled: bool) -> None:
         self._backend.set_postprocess_enabled(enabled)

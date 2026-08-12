@@ -193,6 +193,13 @@ class ChunkPipeline:
 
         self._command_queue.put(load_scene_command)
 
+    def request_prompt_swap(self, prompt: str) -> None:
+        """Queue a mid-stream prompt swap. ``replace_prompt`` only sets an atomic
+        pending flag the worker reads at the next finalize->generate boundary, so
+        this is thread-safe to call directly (no worker command needed)."""
+        self._raise_worker_error_if_any()
+        self._backend.replace_prompt(prompt)
+
     def request_pose_chunk(self, request: ChunkRequest) -> None:
         self._raise_worker_error_if_any()
 

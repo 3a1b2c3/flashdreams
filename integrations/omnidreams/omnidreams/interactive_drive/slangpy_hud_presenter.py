@@ -87,6 +87,38 @@ MPS_TO_MPH = 2.2369362920544
 # :class:`SlangPyHudPresenter`.
 DRIVE_KEY_RELEASE_DEBOUNCE_S = 0.08
 
+# Punctuation the prompt/command syntax needs (e.g. "/spawn car 16", "/spawnt 20 -4").
+# KeyCode.name.lower() -> character.
+_PROMPT_PUNCT = {
+    "slash": "/", "minus": "-", "period": ".", "comma": ",", "semicolon": ";",
+    "apostrophe": "'", "equal": "=", "backslash": "\\",
+    "leftbracket": "[", "rightbracket": "]", "grave": "`",
+}
+
+
+def _event_has_ctrl(event) -> bool:
+    """True if Ctrl is held for this key event (for Ctrl+V paste)."""
+    try:
+        import slangpy as spy
+        return bool(event.has_modifier(spy.KeyModifier.ctrl))
+    except Exception:
+        return False
+
+
+def _read_clipboard() -> str:
+    """Clipboard text for Ctrl+V into the prompt (tkinter is the only clipboard
+    lib in this venv). Returns '' if empty/non-text."""
+    try:
+        import tkinter
+        root = tkinter.Tk()
+        root.withdraw()
+        try:
+            return root.clipboard_get()
+        finally:
+            root.destroy()
+    except Exception:
+        return ""
+
 _BevPanelKey = tuple[int, int, int, int]
 
 _DEFAULT_VEHICLE_CONFIG = VehicleConfig()
@@ -449,6 +481,7 @@ class SlangPyHudPresenter:
         self._prompt_edit_mode = False
         self._prompt_text = ""
         self._current_scene_prompt = ""  # Display current prompt
+        self._reset_button_rect: tuple[int, int, int, int] | None = None  # For mouse click detection
         self._wheel_rotation_cache: _LRUCache = _LRUCache(maxsize=480)
         self._pedal_cache: _LRUCache = _LRUCache(maxsize=16)
         self._scene_thumb_cache: dict[Any, Image.Image | None] = {}
@@ -1562,6 +1595,36 @@ class SlangPyHudPresenter:
                 fill=(200, 200, 200, 255),
             )
 
+        # Draw reset button below prompt field
+        self._draw_reset_button(canvas, draw, prompt_x, prompt_y + prompt_h + 10)
+
+    def _draw_reset_button(
+        self, canvas: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int
+    ) -> None:
+        """Draw Reset Session button (press R or click)."""
+        btn_w = 120
+        btn_h = 32
+        btn_x1, btn_y1 = x, y
+        btn_x2, btn_y2 = x + btn_w, y + btn_h
+        self._reset_button_rect = (btn_x1, btn_y1, btn_x2, btn_y2)
+
+        # Button background
+        draw.rectangle(
+            (btn_x1, btn_y1, btn_x2, btn_y2),
+            fill=(60, 60, 60, 220),
+            outline=(180, 80, 80, 255),
+            width=2,
+        )
+
+        # Button text
+        text = "Reset (R)"
+        bbox = _measure_text(self._font_small, text)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        text_x = btn_x1 + (btn_w - text_w) // 2 - bbox[0]
+        text_y = btn_y1 + (btn_h - text_h) // 2 - bbox[1]
+        draw.text((text_x, text_y), text, font=self._font_small, fill=(220, 100, 100, 255))
+
     def _draw_status_overlay(
         self,
         canvas: Image.Image,
@@ -2438,8 +2501,10 @@ class SlangPyHudPresenter:
                 char = key_name  # Single letter
             elif key_name == "space":
                 char = " "
-            elif key_name.startswith("digit") and len(key_name) == 6:
-                char = key_name[5]  # "digit1" -> "1"
+            elif key_name.startswith("key") and len(key_name) == 4 and key_name[3].isdigit():
+                char = key_name[3]  # slangpy names digits "key0".."key9" -> "0".."9"
+            elif key_name in _PROMPT_PUNCT:
+                char = _PROMPT_PUNCT[key_name]  # / - . , etc. -- needed for command syntax
 
         # [PROMPT-EDIT] Handle Escape in prompt edit mode or close window
         if self._key_matches(key, "escape") and is_press:
@@ -2469,6 +2534,11 @@ class SlangPyHudPresenter:
                     self._send_scene_prompt(self._prompt_text)
                     self._prompt_edit_mode = False
                     self._prompt_text = ""
+                elif is_press and char == "v" and _event_has_ctrl(event):
+                    pasted = _read_clipboard().replace("\r", "").replace("\n", " ")
+                    if pasted:
+                        self._prompt_text = (self._prompt_text + pasted)[:500]
+                        logger.debug(f"[PROMPT-EDIT] Pasted; text: {self._prompt_text!r}")
                 elif char and len(char) == 1 and len(self._prompt_text) < 500:
                     self._prompt_text += char
                     logger.debug(f"[PROMPT-EDIT] Text: {self._prompt_text!r}")
@@ -2600,6 +2670,17 @@ class SlangPyHudPresenter:
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         dropdown_open = self._scene_dropdown_open or self._variant_dropdown_open
+
+        # Check reset button click
+        if (
+            not dropdown_open
+            and self._reset_button_rect
+            and _rect_contains(self._reset_button_rect, pos)
+        ):
+            logger.info("[RESET-BTN] Clicked reset button")
+            self.request_reset()  # same rollout reset as the R key (restart_session didn't exist)
+            return
+
         if (
             not dropdown_open
             and self._postprocess_rect
@@ -2910,9 +2991,17 @@ class SlangPyHudPresenter:
         self._current_scene_prompt = prompt.strip()
         logger.info(f"[PROMPT-EDIT-SEND] Scene prompt: {self._current_scene_prompt!r}")
 
-        # TODO: Wire to world model conditioning system (trigger_event equivalent)
-        # This should call the backend's prompt-swap mechanism once integrated
-        # For now, just log and store the prompt for display
+        # Route the prompt to the world-model backend for a mid-stream hot-swap.
+        app = getattr(self, "_app", None)
+        if app is not None and hasattr(app, "request_prompt_swap"):
+            app.request_prompt_swap(self._current_scene_prompt)
+        else:
+            logger.warning("[PROMPT-EDIT] No app bound; prompt not applied to model")
+
+    def set_app(self, app: Any) -> None:
+        """Attach the InteractiveDriveApp so the prompt field can hot-swap the
+        world-model prompt mid-stream via ``app.request_prompt_swap``."""
+        self._app = app
 
     def set_wheel(self, wheel: Any | None) -> None:
         """Attach (or detach) a :class:`WheelBridge` after construction.

@@ -733,7 +733,7 @@ def load_single_checkpoint(
 def _load_checkpoint_from_local(
     path: str,
     ext: str,
-    map_location: str | torch.device = "cpu",
+    map_location: str | torch.device = "cuda",
 ) -> dict[str, torch.Tensor]:
     """Load checkpoint from local filesystem."""
     if ext == ".safetensors":
@@ -754,7 +754,7 @@ def _load_checkpoint_from_s3(
     s3_path: str,
     ext: str,
     credential_path: str,
-    map_location: str | torch.device = "cpu",
+    map_location: str | torch.device = "cuda",
 ) -> dict[str, torch.Tensor]:
     """Load checkpoint from S3."""
     logger.info(f"Downloading checkpoint from S3: {s3_path}")
@@ -806,7 +806,7 @@ def load_checkpoint(
     checkpoint_type: Literal["auto", "single", "distributed"] = "auto",
     local_cache_dir: str = _OMNIDREAMS_CHECKPOINT_LOCAL_CACHE_DIR,
     credential_path: str = _OMNIDREAMS_CHECKPOINT_CREDENTIAL_PATH,
-    map_location: str | torch.device = "cpu",
+    map_location: str | torch.device = "cuda",
     check_success: bool = False,
     checkpoint_min_free_gb: float | None = None,
 ) -> dict[str, torch.Tensor]: ...
@@ -819,7 +819,7 @@ def load_checkpoint(
     checkpoint_type: Literal["auto", "single", "distributed"] = "auto",
     local_cache_dir: str = _OMNIDREAMS_CHECKPOINT_LOCAL_CACHE_DIR,
     credential_path: str = _OMNIDREAMS_CHECKPOINT_CREDENTIAL_PATH,
-    map_location: str | torch.device = "cpu",
+    map_location: str | torch.device = "cuda",
     check_success: bool = False,
     checkpoint_min_free_gb: float | None = None,
 ) -> torch.nn.Module: ...
@@ -831,7 +831,7 @@ def load_checkpoint(
     checkpoint_type: Literal["auto", "single", "distributed"] = "auto",
     local_cache_dir: str = _OMNIDREAMS_CHECKPOINT_LOCAL_CACHE_DIR,
     credential_path: str = _OMNIDREAMS_CHECKPOINT_CREDENTIAL_PATH,
-    map_location: str | torch.device = "cpu",
+    map_location: str | torch.device = "cuda",
     check_success: bool = False,
     checkpoint_min_free_gb: float | None = None,
 ) -> dict[str, torch.Tensor] | torch.nn.Module:

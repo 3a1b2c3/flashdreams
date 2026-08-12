@@ -94,7 +94,7 @@ echo LAUNCHING INTERACTIVE-DRIVE PERF WITH PHYSICS
 echo ===================================================================
 echo Manifest: %MANIFEST%
 echo Game mode: ENABLED ^(collisions + physics^)
-echo Offload text encoder: enabled
+echo Offload text encoder: DISABLED ^(resident for instant, freeze-free prompt swaps^)
 echo Resolution: 1168x640 (perf tuned)
 echo Denoising steps: [1000, 100]
 echo Native acceleration: auto-fallback to PyTorch
@@ -115,7 +115,7 @@ REM   collision-friction: 0.3 (slippery) vs 0.65 (default) vs 1.5 (grippy)
 REM   tire-grip: 2.5 (extra grip) vs 1.35 (default) vs 0.5 (slippery)
 
 echo [INIT] Starting event loop...
-"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode --suspension-stiffness 100 --suspension-damping 2 --collision-restitution 0.8 --collision-friction 0.3 --tire-grip 2.5 %*
+"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode --suspension-stiffness 100 --suspension-damping 2 --collision-restitution 0.8 --collision-friction 0.3 --tire-grip 2.5 %*
 echo [EXIT] interactive-drive closed
 set EXIT_CODE=%ERRORLEVEL%
 

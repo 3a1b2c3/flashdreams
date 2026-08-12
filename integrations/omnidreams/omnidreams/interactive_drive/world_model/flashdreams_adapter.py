@@ -422,6 +422,15 @@ def _precompute_embeddings_from_config(
     return embeddings
 
 
+# Mid-stream text-edit guidance (mirrors the WebRTC session defaults): push the
+# flow along the new-minus-old text direction for a few chunks so the swap lands
+# convincingly, and re-commit the last chunk's KV under the new prompt so the
+# scene reacts faster. See OmnidreamsPipeline.replace_text.
+_TEXT_EDIT_GUIDANCE_SCALE = 3.0
+_TEXT_EDIT_GUIDANCE_CHUNKS = 6
+_TEXT_EDIT_RECACHE = True
+
+
 def _default_pipeline_factory(
     manifest: WorldModelManifest, profile: WorldModelProfileConfig
 ) -> Any:
@@ -522,6 +531,11 @@ class FlashdreamsWorldModelSession:
         self._cache: Any | None = None
         self._precomputed_embeddings: dict[str, torch.Tensor | None] | None = None
         self._pending_finalization_index: int | None = None
+        # Mid-stream prompt swap: the UI thread sets self._pending_prompt; the
+        # worker applies it at the next finalize->generate boundary (the only
+        # point pipeline.replace_text is valid). Single-assignment attr is
+        # GIL-atomic, so no lock is needed for this producer/consumer.
+        self._pending_prompt: str | None = None
         self._next_block_index = 0
         self._postprocess = postprocess or VideoPostprocessChainConfig()
         self._postprocess_enabled = self._postprocess.is_enabled()
@@ -688,6 +702,89 @@ class FlashdreamsWorldModelSession:
         logger.info(f"[flashdreams-session] start total_ms={elapsed_ms:.1f}")
         return model_frames
 
+    def set_pending_prompt(self, prompt: str) -> None:
+        """Queue a mid-stream prompt swap. Applied by the worker at the next
+        chunk boundary in continue_generation. Safe to call from any thread."""
+        self._pending_prompt = prompt.strip() or None
+
+    def _apply_prompt_swap(self, prompt: str) -> None:
+        """Rebuild the cross-attention text KV in place for ``prompt``.
+
+        Runs on the worker thread between finalize and generate. A failed swap
+        (e.g. a transient OOM while re-loading the offloaded encoder) must never
+        abort the rollout, so it is caught and logged; the video simply
+        continues under the previous prompt.
+        """
+        logger.info(f"[prompt-swap] replacing text mid-stream: {prompt!r}")
+        try:
+            if getattr(self.pipeline, "text_encoder", None) is not None:
+                # Encoder resident (default path): encode + swap in one call.
+                self.pipeline.replace_text(
+                    self._cache,
+                    [[prompt]],
+                    guidance_scale=_TEXT_EDIT_GUIDANCE_SCALE,
+                    guidance_chunks=_TEXT_EDIT_GUIDANCE_CHUNKS,
+                    recache_last_chunk=_TEXT_EDIT_RECACHE,
+                )
+            else:
+                # --offload-text-encoder: the encoder was freed after the scene's
+                # embeddings were precomputed. Re-build a one-shot encoder just to
+                # embed the new prompt, free it, then swap from embeddings.
+                text_embeddings = self._encode_text_embeddings(prompt)
+                self.pipeline.replace_text_from_embeddings(
+                    self._cache,
+                    text_embeddings,
+                    guidance_scale=_TEXT_EDIT_GUIDANCE_SCALE,
+                    guidance_chunks=_TEXT_EDIT_GUIDANCE_CHUNKS,
+                    recache_last_chunk=_TEXT_EDIT_RECACHE,
+                )
+        except Exception:
+            logger.exception(
+                f"[prompt-swap] failed to apply prompt {prompt!r}; "
+                "continuing with the previous text"
+            )
+
+    def _encode_text_embeddings(self, prompt: str) -> torch.Tensor:
+        """Embed a single prompt with a transient one-shot text encoder.
+
+        Used only on the offload path, where the resident encoder was freed.
+        Builds the encoder, embeds ``[[prompt]]`` -> ``[B=1, V, L, D]``, and
+        releases the encoder before returning (peak-VRAM hygiene).
+        """
+        config = _build_pipeline_config(self.manifest, self._profile_config)
+        text_encoder_config = getattr(config, "text_encoder", None)
+        if text_encoder_config is None:
+            raise RuntimeError(
+                "mid-stream prompt swap under --offload-text-encoder requires a "
+                "flashdreams text_encoder config, but that slot is None."
+            )
+        device = torch.device(self.manifest.device)
+        encoders = SimpleNamespace(
+            text_encoder=setup_one_shot_encoder(
+                text_encoder_config,
+                device=device,
+                torch_module=torch,
+            ),
+        )
+
+        def compute_text_embeddings() -> torch.Tensor:
+            return torch.stack(
+                [encoders.text_encoder(prompt_row) for prompt_row in [[prompt]]],
+                dim=0,
+            )  # [B, V, L, D]
+
+        return run_one_shot_encoder_stage(
+            compute_text_embeddings,
+            release=lambda: release_one_shot_encoder_references(
+                encoders,
+                "text_encoder",
+                device=device,
+                synchronize_cuda=device.type == "cuda",
+                torch_module=torch,
+            ),
+            torch_module=torch,
+        )
+
     def continue_generation(self, condition_frames: list[object]) -> list[object]:
         if self._cache is None:
             raise RuntimeError("start() must be called before continue_generation()")
@@ -703,6 +800,13 @@ class FlashdreamsWorldModelSession:
             if self._pending_finalization_index is not None:
                 self.pipeline.finalize(self._pending_finalization_index, self._cache)
                 self._pending_finalization_index = None
+            # Apply a queued mid-stream prompt swap here: after finalize, before
+            # generate -- exactly where replace_text rebuilds the text cross-attn
+            # KV while keeping the self-attn scene history.
+            pending_prompt = self._pending_prompt
+            if pending_prompt is not None:
+                self._pending_prompt = None
+                self._apply_prompt_swap(pending_prompt)
             video = self.pipeline.generate(
                 autoregressive_index=self._next_block_index,
                 cache=self._cache,

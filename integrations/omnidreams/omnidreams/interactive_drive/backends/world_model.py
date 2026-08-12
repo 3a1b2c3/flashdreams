@@ -327,6 +327,11 @@ class WorldModelRenderBackend(RenderBackend):
     def set_postprocess_enabled(self, enabled: bool) -> None:
         self._session.set_postprocess_enabled(enabled)
 
+    def replace_prompt(self, prompt: str) -> None:
+        # Mid-stream prompt hot-swap: queue it on the session; the worker applies
+        # it at the next finalize->generate boundary via pipeline.replace_text.
+        self._session.set_pending_prompt(prompt)
+
     def close(self) -> None:
         self._session.close()
         self._rasterizer.cleanup()

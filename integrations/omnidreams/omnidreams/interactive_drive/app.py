@@ -172,6 +172,11 @@ class InteractiveDriveApp:
         """Queue a local-display post-process toggle on the model worker."""
         self._pipeline.set_postprocess_enabled(enabled)
 
+    def request_prompt_swap(self, prompt: str) -> None:
+        """Hot-swap the world-model text prompt mid-stream; applied by the worker
+        at the next chunk boundary (no-op on backends without a text path)."""
+        self._pipeline.request_prompt_swap(prompt)
+
     def load_scene(
         self, scene_path: object, variant: str, prompt_override: str | None
     ) -> bool:
