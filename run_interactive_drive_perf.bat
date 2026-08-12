@@ -106,8 +106,16 @@ echo.
 REM Overview minimap: fixed map-centre camera; --bev-fov-deg used for the fit,
 REM --bev-height-m / --bev-tilt-deg ignored in overview. --no-bev-overview for
 REM the old ego-centred/heading-up minimap.
+REM [PHYSICS] Extreme bouncy defaults (very stiff suspension, no damping, high restitution)
+REM Uncomment or modify these to tune the "feel" of the vehicle:
+REM   suspension-stiffness: 100 (extreme bouncy) vs 42 (default) vs 20 (soft)
+REM   suspension-damping: 2 (springs forever) vs 9 (default) vs 15 (settled)
+REM   collision-restitution: 0.8 (bounces everywhere) vs 0.22 (default) vs 0 (dead)
+REM   collision-friction: 0.3 (slippery) vs 0.65 (default) vs 1.5 (grippy)
+REM   tire-grip: 2.5 (extra grip) vs 1.35 (default) vs 0.5 (slippery)
+
 echo [INIT] Starting event loop...
-"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode %*
+"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode --suspension-stiffness 100 --suspension-damping 2 --collision-restitution 0.8 --collision-friction 0.3 --tire-grip 2.5 %*
 echo [EXIT] interactive-drive closed
 set EXIT_CODE=%ERRORLEVEL%
 

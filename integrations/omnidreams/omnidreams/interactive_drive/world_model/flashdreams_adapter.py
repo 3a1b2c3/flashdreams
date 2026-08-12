@@ -531,8 +531,12 @@ class FlashdreamsWorldModelSession:
     @property
     def pipeline(self) -> Any:
         if self._pipeline is None:
+            logger.error("[PIPELINE-DEBUG] Pipeline is None - initialization may have failed")
+            logger.error(f"[PIPELINE-DEBUG] Scene loaded: {self._scene is not None}")
+            logger.error(f"[PIPELINE-DEBUG] Precomputed embeddings: {self._precomputed_embeddings is not None}")
             raise RuntimeError(
-                "warmup() must be called before rendering world-model chunks"
+                "Pipeline not initialized. warmup() must be called before rendering world-model chunks. "
+                "This usually means prepare_for_scene() failed silently."
             )
         return self._pipeline
 
@@ -653,6 +657,13 @@ class FlashdreamsWorldModelSession:
         condition_frames: list[object],
         prompt: str,
     ) -> list[object]:
+        # [PIPELINE-INIT] Ensure pipeline is initialized before use
+        if self._pipeline is None:
+            logger.info("[PIPELINE-INIT] Pipeline is None, initializing now")
+            config = _build_pipeline_config(self.manifest, self._profile_config)
+            self._pipeline = _setup_pipeline_from_config(config, self.manifest)
+            logger.info("[PIPELINE-INIT] Pipeline initialized")
+
         expected_frames = self.pipeline.get_num_frames(0)
         if len(condition_frames) != expected_frames:
             raise ValueError(

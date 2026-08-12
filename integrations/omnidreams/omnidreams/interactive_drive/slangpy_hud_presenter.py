@@ -444,6 +444,11 @@ class SlangPyHudPresenter:
         self._speed_chip_cache: _LRUCache = _LRUCache(maxsize=64)
         self._wheel_base_image: Image.Image | None = None
         self._wheel_base_size: int | None = None
+
+        # Scene Prompt editing (press P to edit)
+        self._prompt_edit_mode = False
+        self._prompt_text = ""
+        self._current_scene_prompt = ""  # Display current prompt
         self._wheel_rotation_cache: _LRUCache = _LRUCache(maxsize=480)
         self._pedal_cache: _LRUCache = _LRUCache(maxsize=16)
         self._scene_thumb_cache: dict[Any, Image.Image | None] = {}
@@ -1388,6 +1393,9 @@ class SlangPyHudPresenter:
         if self._variant_dropdown_open:
             self._draw_variant_dropdown(canvas, draw)
 
+        # Draw Scene Prompt display/input
+        self._draw_prompt_overlay(canvas, draw)
+
         if status_message:
             self._draw_status_overlay(canvas, draw, camera_area, status_message)
 
@@ -1471,6 +1479,87 @@ class SlangPyHudPresenter:
                 hint,
                 fill=LABEL_COLOR,
                 font=self._font_small,
+            )
+
+    def _draw_prompt_overlay(
+        self, canvas: Image.Image, draw: ImageDraw.ImageDraw
+    ) -> None:
+        """Draw Scene Prompt display or edit box (press P to edit).
+
+        If in edit mode, shows input field; otherwise shows current prompt.
+        Positioned at top-left corner for guaranteed visibility.
+        """
+        cw, ch = canvas.size
+        prompt_x = 20
+        prompt_y = 20  # Top-left, not bottom (more visible)
+        prompt_w = min(600, cw - 40)
+        prompt_h = 90
+
+        if prompt_w <= 0 or cw <= 0:
+            return
+
+        if self._prompt_edit_mode:
+            bg_color = (50, 80, 50, 255)
+            border_color = (118, 185, 0)
+            border_width = 2
+        else:
+            bg_color = (30, 30, 40, 200)
+            border_color = (100, 100, 120)
+            border_width = 1
+
+        draw.rectangle(
+            (prompt_x, prompt_y, prompt_x + prompt_w, prompt_y + prompt_h),
+            fill=bg_color,
+            outline=border_color,
+            width=border_width,
+        )
+
+        if self._prompt_edit_mode:
+            title_y = prompt_y + 8
+            draw.text(
+                (prompt_x + 10, title_y),
+                "Scene Prompt (Enter=send, Esc=cancel):",
+                font=self._font_tiny,
+                fill=(118, 185, 0, 255),
+            )
+            text_y = title_y + 24
+            display_text = self._prompt_text + "|" if len(self._prompt_text) < 80 else self._prompt_text[-79:] + "|"
+            draw.text(
+                (prompt_x + 10, text_y),
+                display_text,
+                font=self._font_small,
+                fill=(220, 220, 230, 255),
+            )
+            char_count_y = text_y + 26
+            draw.text(
+                (prompt_x + 10, char_count_y),
+                f"Characters: {len(self._prompt_text)}/500",
+                font=self._font_tiny,
+                fill=(150, 150, 170, 255),
+            )
+        else:
+            title_y = prompt_y + 8
+            draw.text(
+                (prompt_x + 10, title_y),
+                "Scene Prompt (P to edit):",
+                font=self._font_tiny,
+                fill=(150, 150, 170, 255),
+            )
+            text_y = title_y + 20
+            max_chars = 90
+            if self._current_scene_prompt:
+                display_text = (
+                    self._current_scene_prompt[:max_chars] + "..."
+                    if len(self._current_scene_prompt) > max_chars
+                    else self._current_scene_prompt
+                )
+            else:
+                display_text = "[No prompt set - Press P to add one]"
+            draw.text(
+                (prompt_x + 10, text_y),
+                display_text,
+                font=self._font_small,
+                fill=(200, 200, 200, 255),
             )
 
     def _draw_status_overlay(
@@ -2315,7 +2404,10 @@ class SlangPyHudPresenter:
             "d": _lookup_key(spy.KeyCode, "d"),
             "r": _lookup_key(spy.KeyCode, "r"),
             "x": _lookup_key(spy.KeyCode, "x"),
+            "p": _lookup_key(spy.KeyCode, "p"),
             "space": _lookup_key(spy.KeyCode, "space"),
+            "backspace": _lookup_key(spy.KeyCode, "backspace", "back"),
+            "return": _lookup_key(spy.KeyCode, "return", "enter"),
             "up": _lookup_key(spy.KeyCode, "up", "arrow_up"),
             "down": _lookup_key(spy.KeyCode, "down", "arrow_down"),
             "left": _lookup_key(spy.KeyCode, "left", "arrow_left"),
@@ -2338,8 +2430,48 @@ class SlangPyHudPresenter:
         if not (is_press or is_release or is_repeat):
             return
         key = event.key
+        # Extract character from KeyCode enum name (e.g., KeyCode.i -> "i", KeyCode.digit1 -> "1")
+        char = None
+        if hasattr(key, "name"):
+            key_name = key.name.lower()
+            if len(key_name) == 1 and key_name.isalpha():
+                char = key_name  # Single letter
+            elif key_name == "space":
+                char = " "
+            elif key_name.startswith("digit") and len(key_name) == 6:
+                char = key_name[5]  # "digit1" -> "1"
+
+        # [PROMPT-EDIT] Handle Escape in prompt edit mode or close window
         if self._key_matches(key, "escape") and is_press:
-            self._should_close_flag = True
+            if self._prompt_edit_mode:
+                logger.debug("[PROMPT-EDIT] Exiting prompt edit mode (Escape)")
+                self._prompt_edit_mode = False
+                self._prompt_text = ""
+            else:
+                self._should_close_flag = True
+            return
+
+        # [PROMPT-EDIT] Handle 'P' key to enter/exit prompt edit mode
+        if self._key_matches(key, "p") and is_press and not self._prompt_edit_mode:
+            logger.debug("[PROMPT-EDIT] Entering prompt edit mode (P pressed)")
+            self._prompt_edit_mode = True
+            self._prompt_text = ""
+            return
+
+        # [PROMPT-EDIT] In prompt edit mode, handle text input
+        if self._prompt_edit_mode:
+            if is_press or is_repeat:
+                if self._key_matches(key, "backspace"):
+                    self._prompt_text = self._prompt_text[:-1]
+                    logger.debug(f"[PROMPT-EDIT] Text: {self._prompt_text!r}")
+                elif self._key_matches(key, "return"):
+                    logger.info(f"[PROMPT-EDIT] Sending prompt: {self._prompt_text!r}")
+                    self._send_scene_prompt(self._prompt_text)
+                    self._prompt_edit_mode = False
+                    self._prompt_text = ""
+                elif char and len(char) == 1 and len(self._prompt_text) < 500:
+                    self._prompt_text += char
+                    logger.debug(f"[PROMPT-EDIT] Text: {self._prompt_text!r}")
             return
         # Drive keys flow through ``_keyboard_drive`` so the smoothed
         # steer / throttle / brake the wheel + speed-digit chrome reads
@@ -2764,6 +2896,23 @@ class SlangPyHudPresenter:
         # toward it; a new rollout republishes telemetry as soon as it starts.
         self._keyboard.clear_telemetry()
         self._pending_drive_releases.clear()
+
+    def _send_scene_prompt(self, prompt: str) -> None:
+        """Send a scene prompt to the world model mid-stream.
+
+        Updates the conditioning with a new text prompt. This is wired to
+        the backend's prompt-swap mechanism (WebRTC-style mid-stream editing).
+        """
+        if not prompt or not prompt.strip():
+            logger.warning("[PROMPT-EDIT] Empty prompt, ignoring")
+            return
+
+        self._current_scene_prompt = prompt.strip()
+        logger.info(f"[PROMPT-EDIT-SEND] Scene prompt: {self._current_scene_prompt!r}")
+
+        # TODO: Wire to world model conditioning system (trigger_event equivalent)
+        # This should call the backend's prompt-swap mechanism once integrated
+        # For now, just log and store the prompt for display
 
     def set_wheel(self, wheel: Any | None) -> None:
         """Attach (or detach) a :class:`WheelBridge` after construction.

@@ -1,7 +1,14 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+console.log("[WEBRTC-INIT] Script starting, document.readyState:", document.readyState)
+console.log("[WEBRTC-INIT] DOM tree check:")
+console.log("  document:", typeof document)
+console.log("  document.body:", document.body ? "✓ found" : "✗ NOT FOUND")
+console.log("  document.getElementById:", typeof document.getElementById)
+
 const connectButton = document.getElementById("connectButton")
+console.log("[WEBRTC-INIT] connectButton:", connectButton ? "✓ found" : "✗ NOT FOUND")
 const statusText = document.getElementById("statusText")
 const flowText = document.getElementById("flowText")
 const eventLog = document.getElementById("eventLog")
@@ -22,6 +29,28 @@ const promptResetButton = document.getElementById("promptResetButton")
 const spawnCarButton = document.getElementById("spawnCarButton")
 const spawnConeButton = document.getElementById("spawnConeButton")
 const clearActorsButton = document.getElementById("clearActorsButton")
+
+// Debug: Check if prompt elements exist
+console.log("[WEBRTC-DEBUG] Element check:")
+console.log("  promptInput:", promptInput ? "✓ found" : "✗ NOT FOUND")
+console.log("  promptApplyButton:", promptApplyButton ? "✓ found" : "✗ NOT FOUND")
+console.log("  promptResetButton:", promptResetButton ? "✓ found" : "✗ NOT FOUND")
+console.log("  spawnCarButton:", spawnCarButton ? "✓ found" : "✗ NOT FOUND")
+console.log("  spawnConeButton:", spawnConeButton ? "✓ found" : "✗ NOT FOUND")
+console.log("  clearActorsButton:", clearActorsButton ? "✓ found" : "✗ NOT FOUND")
+
+if (promptInput) {
+  console.log("  promptInput visibility:", getComputedStyle(promptInput).display !== "none" ? "visible" : "HIDDEN")
+}
+const promptCard = document.querySelector(".promptCard")
+if (promptCard) {
+  console.log("  .promptCard visibility:", getComputedStyle(promptCard).display !== "none" ? "visible" : "HIDDEN")
+  console.log("  .promptCard position:", getComputedStyle(promptCard).position)
+  console.log("  .promptCard bottom:", getComputedStyle(promptCard).bottom)
+  console.log("  .promptCard left:", getComputedStyle(promptCard).left)
+} else {
+  console.log("  .promptCard: ✗ NOT FOUND in DOM")
+}
 
 const allowedKeys = new Set(["w", "a", "s", "d"])
 const keyAliases = new Map([
@@ -444,10 +473,15 @@ function enqueueAction(action) {
 }
 
 function sendPromptEvent(prompt, state) {
+  console.log("[WEBRTC-DEBUG] sendPromptEvent called:", { prompt, state, connected, channelReady: controlChannel?.readyState })
+
   if (!connected || !controlChannel || controlChannel.readyState !== "open") {
+    console.log("[WEBRTC-DEBUG] ✗ Cannot send: not connected or channel not open")
     logEvent("prompt not sent: connect session first", { level: "error" })
     return false
   }
+
+  console.log("[WEBRTC-DEBUG] ✓ Sending prompt via datachannel")
   controlChannel.send(
     JSON.stringify({
       type: "event",
@@ -463,13 +497,25 @@ function sendPromptEvent(prompt, state) {
 }
 
 function applyPromptFromInput() {
+  console.log("[WEBRTC-DEBUG] applyPromptFromInput called")
+
+  if (!promptInput) {
+    console.log("[WEBRTC-DEBUG] ✗ promptInput element not found!")
+    return
+  }
+
   const prompt = (promptInput.value || "").trim()
+  console.log("[WEBRTC-DEBUG] Prompt text:", { raw: promptInput.value, trimmed: prompt })
+
   if (!prompt) {
+    console.log("[WEBRTC-DEBUG] ✗ Prompt is empty")
     logEvent("prompt is empty; use Reset to restore the scene prompt", {
       level: "error",
     })
     return
   }
+
+  console.log("[WEBRTC-DEBUG] ✓ Sending prompt:", prompt)
   sendPromptEvent(prompt, "trigger")
 }
 
@@ -965,24 +1011,32 @@ function startVideoFrameMonitor() {
 }
 
 function initialize() {
+  console.log("[WEBRTC-INIT] initialize() called")
   document.body.dataset.status = "idle"
   logEvent("viewer ready", { source: "client" })
   setFlow("waiting")
   renderMetrics()
   attachPointerControls()
+  console.log("[WEBRTC-INIT] pointerControls attached")
   window.requestAnimationFrame(drawIdleScene)
   startVideoFrameMonitor()
+  console.log("[WEBRTC-INIT] videoFrameMonitor started")
   void loadPostprocessOptions().catch((error) => {
     logEvent(`post-process options unavailable: ${error.message}`, {
       source: "client",
       level: "error",
     })
   })
+  console.log("[WEBRTC-INIT] initialize() complete")
 }
+
+console.log("[WEBRTC-INIT] Attaching event listeners...")
 
 connectButton.addEventListener("click", () => {
   void connectSession()
 })
+console.log("[WEBRTC-INIT] connectButton listener attached")
+
 remoteVideo.addEventListener("loadedmetadata", updateMetricsFromVideo)
 remoteVideo.addEventListener("playing", () => {
   setVideoVisible(true)
@@ -991,10 +1045,24 @@ remoteVideo.addEventListener("playing", () => {
 remoteVideo.addEventListener("emptied", () => {
   setVideoVisible(false)
 })
-promptApplyButton.addEventListener("click", applyPromptFromInput)
-promptResetButton.addEventListener("click", () => {
-  sendPromptEvent("", "clear")
-})
+console.log("[WEBRTC-INIT] remoteVideo listeners attached")
+if (promptApplyButton) {
+  promptApplyButton.addEventListener("click", () => {
+    console.log("[WEBRTC-DEBUG] Apply button clicked")
+    applyPromptFromInput()
+  })
+} else {
+  console.log("[WEBRTC-DEBUG] ✗ Apply button not attached (element not found)")
+}
+
+if (promptResetButton) {
+  promptResetButton.addEventListener("click", () => {
+    console.log("[WEBRTC-DEBUG] Reset button clicked")
+    sendPromptEvent("", "clear")
+  })
+} else {
+  console.log("[WEBRTC-DEBUG] ✗ Reset button not attached (element not found)")
+}
 spawnCarButton.addEventListener("click", () => {
   sendPromptEvent("/spawn car 12", "trigger")
 })
@@ -1021,4 +1089,6 @@ window.addEventListener("beforeunload", () => {
   disconnectSession()
 })
 
+console.log("[WEBRTC-INIT] ===== Script fully loaded, calling initialize() =====")
 initialize()
+console.log("[WEBRTC-INIT] ===== Script execution complete =====")

@@ -19,6 +19,7 @@ from omnidreams.interactive_drive.config import (
     AppConfig,
     BevConfig,
     RasterConfig,
+    VehicleConfig,
     WorldModelProfileConfig,
 )
 from omnidreams.interactive_drive.log import configure_logging
@@ -369,6 +370,44 @@ def build_parser() -> argparse.ArgumentParser:
             "ramp and only ever show the binary on/off respawn signal."
         ),
     )
+
+    # Physics tuning knobs (bouncy/springy behavior)
+    parser.add_argument(
+        "--suspension-stiffness",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help="Suspension spring stiffness (default 42.0). Higher = bouncier.",
+    )
+    parser.add_argument(
+        "--suspension-damping",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help="Suspension damping (default 9.0). Higher = less bouncy, more settled.",
+    )
+    parser.add_argument(
+        "--collision-restitution",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help="Collision bounce (0-1, default 0.22). Higher = bouncier on impact.",
+    )
+    parser.add_argument(
+        "--collision-friction",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help="Collision friction (default 0.65). Lower = more slippery.",
+    )
+    parser.add_argument(
+        "--tire-grip",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help="Tire grip on surface (default 1.35). Higher = more grip.",
+    )
+
     return parser
 
 
@@ -466,6 +505,26 @@ def prepare_config_and_backend(
         resolve_manifest_path(args.manifest) if args.manifest is not None else None
     )
 
+    # Build VehicleConfig with physics tuning parameters
+    vehicle_kwargs = {}
+    if args.suspension_stiffness is not None:
+        vehicle_kwargs["suspension_stiffness"] = args.suspension_stiffness
+        logger.info(f"[physics] suspension_stiffness = {args.suspension_stiffness}")
+    if args.suspension_damping is not None:
+        vehicle_kwargs["suspension_damping"] = args.suspension_damping
+        logger.info(f"[physics] suspension_damping = {args.suspension_damping}")
+    if args.collision_restitution is not None:
+        vehicle_kwargs["collision_restitution"] = args.collision_restitution
+        logger.info(f"[physics] collision_restitution = {args.collision_restitution}")
+    if args.collision_friction is not None:
+        vehicle_kwargs["collision_friction"] = args.collision_friction
+        logger.info(f"[physics] collision_friction = {args.collision_friction}")
+    if args.tire_grip is not None:
+        vehicle_kwargs["tire_grip"] = args.tire_grip
+        logger.info(f"[physics] tire_grip = {args.tire_grip}")
+
+    vehicle_config = VehicleConfig(**vehicle_kwargs) if vehicle_kwargs else VehicleConfig()
+
     config = AppConfig(
         scene_path=scene_path,
         backend=args.backend,
@@ -477,6 +536,7 @@ def prepare_config_and_backend(
             compute_device=args.compute_device,
             sync_gpu_timing=args.sync_gpu_timing,
         ),
+        vehicle=vehicle_config,
         world_model_profile=WorldModelProfileConfig(
             enabled=bool(args.profile_world_model),
         ),

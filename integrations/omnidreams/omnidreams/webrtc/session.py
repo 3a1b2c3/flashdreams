@@ -731,7 +731,10 @@ class OmnidreamsInferenceRuntime:
         if self._wrapper is None:
             raise OmnidreamsRuntimeError("Runtime is not initialized.")
 
+        logger.debug(f"[PROMPT-EVENT-RECV] event_id={event_id!r}, state={state!r}")
+
         if event_id.strip().startswith("/"):
+            logger.debug(f"[PROMPT-EVENT] Actor command detected: {event_id.strip()}")
             return self._handle_actor_command_sync(event_id.strip())
 
         prompt = event_id.strip()
@@ -739,24 +742,30 @@ class OmnidreamsInferenceRuntime:
             if self._initial_prompt is None:
                 raise OmnidreamsRuntimeError("No scene prompt available to restore.")
             prompt = self._initial_prompt
+            logger.debug(f"[PROMPT-EVENT] Clearing prompt, restored to scene default: {prompt!r}")
 
         if prompt == self._active_prompt:
+            logger.debug(f"[PROMPT-EVENT] Prompt unchanged: {prompt!r}")
             return {"prompt": prompt, "applied": "unchanged"}
 
+        logger.debug(f"[PROMPT-EVENT-BUILD] Building text embeddings for: {prompt!r}")
         text_prompts = [TextPrompt(positive=prompt)]
         if self._state is None or self._state.pipeline_cache is None:
             # Rollout has not produced a chunk yet (or HDMap-only debug
             # mode): stage the prompt for start_generation instead.
+            logger.debug(f"[PROMPT-EVENT-STAGE] No rollout yet, staging for start_generation")
             self._text_prompts = text_prompts
             self._active_prompt = prompt
             return {"prompt": prompt, "applied": "at_start"}
 
+        logger.debug(f"[PROMPT-EVENT-SWAP-START] Applying text prompts at chunk {self.autoregressive_index}")
         swap_t0 = time.perf_counter()
         self._wrapper.apply_text_prompts(self._state, text_prompts)
         self._active_prompt = prompt
+        swap_elapsed_ms = (time.perf_counter() - swap_t0) * 1000.0
         logger.info(
-            "Swapped Omnidreams prompt in {:.0f} ms (chunk={}): {}",
-            (time.perf_counter() - swap_t0) * 1000.0,
+            "[PROMPT-EVENT-SWAP-DONE] Swapped Omnidreams prompt in {:.0f} ms (chunk={}): {}",
+            swap_elapsed_ms,
             self.autoregressive_index,
             prompt,
         )
@@ -773,9 +782,12 @@ class OmnidreamsInferenceRuntime:
         parts = command.removeprefix("/").split()
         name = parts[0].lower() if parts else ""
 
+        logger.debug(f"[ACTOR-CMD] Received: {command!r} (parsed: {name!r})")
+
         if name in {"clear-actors", "clear_actors", "despawn", "clear"}:
             cleared = len(self._spawned_actors)
             self._spawned_actors.clear()
+            logger.debug(f"[ACTOR-CMD-CLEAR] Cleared {cleared} actors")
             return {"prompt": None, "applied": f"cleared {cleared} actors"}
 
         if name != "spawn":
@@ -785,6 +797,7 @@ class OmnidreamsInferenceRuntime:
                 f"(presets: {', '.join(sorted(ACTOR_PRESETS))}) or /clear-actors."
             )
 
+        logger.debug(f"[ACTOR-CMD-SPAWN] Parsing spawn command: {command!r}")
         preset = parts[1].lower() if len(parts) > 1 else "car"
         if preset not in ACTOR_PRESETS:
             raise OmnidreamsRuntimeError(
@@ -796,6 +809,10 @@ class OmnidreamsInferenceRuntime:
             speed_mps = float(parts[3]) if len(parts) > 3 else 0.0
             lateral_m = float(parts[4]) if len(parts) > 4 else 0.0
             yaw_offset_deg = float(parts[5]) if len(parts) > 5 else 0.0
+            logger.debug(
+                f"[ACTOR-CMD-SPAWN-PARAMS] preset={preset}, dist={distance_m}m, "
+                f"speed={speed_mps}m/s, lateral={lateral_m}m, yaw={yaw_offset_deg}°"
+            )
         except ValueError as exc:
             raise OmnidreamsRuntimeError(
                 f"Non-numeric spawn argument in {command!r}: {exc}"
