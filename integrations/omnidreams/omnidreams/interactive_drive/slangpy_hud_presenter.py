@@ -2397,7 +2397,10 @@ class SlangPyHudPresenter:
             "d": _lookup_key(spy.KeyCode, "d"),
             "r": _lookup_key(spy.KeyCode, "r"),
             "x": _lookup_key(spy.KeyCode, "x"),
+            "p": _lookup_key(spy.KeyCode, "p"),
             "space": _lookup_key(spy.KeyCode, "space"),
+            "return": _lookup_key(spy.KeyCode, "return", "enter"),
+            "backspace": _lookup_key(spy.KeyCode, "backspace", "back"),
             "up": _lookup_key(spy.KeyCode, "up", "arrow_up"),
             "down": _lookup_key(spy.KeyCode, "down", "arrow_down"),
             "left": _lookup_key(spy.KeyCode, "left", "arrow_left"),
@@ -2424,28 +2427,35 @@ class SlangPyHudPresenter:
         # Handle Scene Prompt editing (non-blocking, async sends)
         if self._prompt_edit_mode:
             if self._key_matches(key, "escape") and is_press:
+                logger.debug(f"[presenter] prompt edit cancelled")
                 self._prompt_edit_mode = False
                 self._prompt_text = ""
                 return
             if self._key_matches(key, "return") and is_press:
                 if self._prompt_text.strip():
+                    logger.debug(f"[presenter] prompt enter pressed: '{self._prompt_text}'")
                     self._send_scene_prompt_async(self._prompt_text)
+                else:
+                    logger.debug(f"[presenter] prompt enter pressed but text empty")
                 self._prompt_edit_mode = False
                 self._prompt_text = ""
                 return
             if self._key_matches(key, "backspace") and (is_press or is_repeat):
                 self._prompt_text = self._prompt_text[:-1]
+                logger.debug(f"[presenter] prompt backspace: '{self._prompt_text}'")
                 return
             if is_press or is_repeat:
                 char = self._extract_char_from_key(key)
                 if char is not None:
                     self._prompt_text += char
+                    logger.debug(f"[presenter] prompt char added: '{self._prompt_text}'")
                     return
 
         if self._key_matches(key, "escape") and is_press:
             self._should_close_flag = True
             return
         if self._key_matches(key, "p") and is_press:
+            logger.debug(f"[presenter] prompt edit mode enabled")
             self._prompt_edit_mode = True
             self._prompt_text = ""
             return
@@ -2541,16 +2551,35 @@ class SlangPyHudPresenter:
         return code is not None and event_key == code
 
     def _extract_char_from_key(self, key: Any) -> str | None:
-        """Extract single character from KeyCode for text input (A-Z, 0-9, space)."""
+        """Extract single character from KeyCode for text input (A-Z, 0-9, space, /)."""
         if not hasattr(key, "name"):
             return None
         name = key.name.lower()
-        if len(name) == 1 and name.isalnum():
+
+        # Single alphanumeric character (A-Z, a-z)
+        if len(name) == 1 and name.isalpha():
             return name
+
+        # Space
         if name == "space":
             return " "
+
+        # Numbers via digit prefix (digit1 -> '1', digit0 -> '0')
         if name.startswith("digit") and len(name) == 6:
             return name[5]
+
+        # Forward slash (spawn commands: /spawn, /clear-actors)
+        if name in ("slash", "divide", "/"):
+            return "/"
+
+        # Hyphen/minus (for multi-word prompts)
+        if name in ("minus", "hyphen", "-"):
+            return "-"
+
+        # Comma (for complex prompts)
+        if name in ("comma", ","):
+            return ","
+
         return None
 
     def _send_scene_prompt_async(self, prompt: str) -> None:
