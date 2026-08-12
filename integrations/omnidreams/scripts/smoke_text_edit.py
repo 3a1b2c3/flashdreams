@@ -47,7 +47,9 @@ from pathlib import Path
 # Must land before the first CUDA allocation (co-tenant VRAM share).
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+import numpy as np
 import torch
+from PIL import Image, ImageDraw, ImageFont
 from omnidreams.config import SV_2STEPS_CHUNK2_LOC6_LIGHTVAE_LIGHTTAE
 from omnidreams.pipeline import OmnidreamsPipeline
 from omnidreams.runner import DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_WIDTH
@@ -66,21 +68,48 @@ SAMPLES_ROOT = (
 )
 
 UUID = os.environ.get("UUID", "23599139-948f-4681-b7f4-74794113086d")
-N_CHUNKS = int(os.environ.get("N_CHUNKS", "16"))
-SWAP_AT = int(os.environ.get("SWAP_AT", "8"))
+N_CHUNKS = int(os.environ.get("N_CHUNKS", "4"))
+SWAP_AT = int(os.environ.get("SWAP_AT", "2"))
 GUIDE_SCALE = float(os.environ.get("GUIDE_SCALE", "2.5"))
 GUIDE_CHUNKS = int(os.environ.get("GUIDE_CHUNKS", "4"))
+VIDEO_HEIGHT = int(os.environ.get("VIDEO_HEIGHT", "320"))
+VIDEO_WIDTH = int(os.environ.get("VIDEO_WIDTH", "512"))
 SEED = int(os.environ.get("SEED", "42"))
 OUT_DIR = Path(
     os.environ.get("OUT_DIR", "integrations/omnidreams/scripts/outputs/text_edit_smoke")
 )
-EDIT_PROMPT = os.environ.get(
-    "EDIT_PROMPT",
-    "Driving scene from a front-facing car camera at night in a heavy "
-    "snowstorm. Thick snow falling, snow-covered road and buildings, "
-    "headlights and streetlights glowing through the snow. Photorealistic "
-    "dashcam footage.",
-)
+# Mid-stream edit prompts to sweep. Weather edits (rain/snow) are the natural
+# fit for a text swap. The actor edits describe a /spawn <class> object as PROSE
+# -- note this is NOT the /spawn HDMap-cuboid path (that injects geometry into the
+# conditioning, which this pre-baked-hdmap smoke cannot do); it tests whether the
+# model conjures the object from TEXT alone. Compare the per-chunk gaps: weather
+# should move the whole frame; text-only actors typically move it far less than a
+# real HDMap spawn would.
+SWEEP_PROMPTS: dict[str, str] = {
+    "rain": (
+        "Driving scene from a front-facing car camera in heavy rain. Rain "
+        "streaks falling, wet reflective road, water on the windshield, "
+        "overcast gray sky. Photorealistic dashcam footage."
+    ),
+    "snow": (
+        "Driving scene from a front-facing car camera at night in a heavy "
+        "snowstorm. Thick snow falling, snow-covered road and buildings, "
+        "headlights and streetlights glowing through the snow. Photorealistic "
+        "dashcam footage."
+    ),
+    "car": "A car parked on the road directly ahead. Photorealistic dashcam footage.",
+    "truck": "A large truck on the road directly ahead. Photorealistic dashcam footage.",
+    "pedestrian": "A pedestrian walking across the road ahead. Photorealistic dashcam footage.",
+    "cyclist": "A cyclist riding on the road ahead. Photorealistic dashcam footage.",
+    "cone": "Orange traffic cones on the road ahead. Photorealistic dashcam footage.",
+    "barrier": (
+        "An orange and white striped construction barrier across the road "
+        "ahead. Photorealistic dashcam footage."
+    ),
+}
+# Optional filter: EDIT_KEYS="rain,truck" runs just those; default runs all.
+_keys_env = os.environ.get("EDIT_KEYS", "").strip()
+EDIT_KEYS = [k.strip() for k in _keys_env.split(",") if k.strip()] or list(SWEEP_PROMPTS)
 
 
 def _sample_paths(uuid: str) -> tuple[Path, Path, str]:
@@ -134,6 +163,7 @@ def _rollout(
     chunks: list[Tensor] = []
     start = 0
     for ar_idx in range(N_CHUNKS):
+        print(f"  chunk {ar_idx+1}/{N_CHUNKS}...", end=" ", flush=True)
         if swap is not None and ar_idx == swap["at"]:
             pipe.replace_text(
                 cache,
@@ -148,6 +178,7 @@ def _rollout(
         chunk = pipe.generate(ar_idx, cache, hdmap=hdmap[:, :, start:end])
         pipe.finalize(ar_idx, cache)
         chunks.append(chunk[0, 0].float().cpu())
+        print("✓", flush=True)
         start = end
     del cache
     torch.cuda.empty_cache()
@@ -168,41 +199,84 @@ def _per_chunk_gap(a: Tensor, b: Tensor) -> list[float]:
     return [float((a[s:e] - b[s:e]).abs().mean() * 127.5) for s, e in _chunk_bounds()]
 
 
+def _burn_prompts(
+    video: Tensor,
+    base_prompt: str,
+    swap: dict | None,
+) -> Tensor:
+    """Burn prompts onto video frames as text overlay."""
+    device = video.device
+    video = video.cpu()  # Move to CPU for PIL operations
+    T, C, H, W = video.shape
+
+    # Convert to uint8 for PIL (from [-1, 1] to [0, 255])
+    frames_uint8 = ((video + 1) / 2 * 255).clamp(0, 255).byte().numpy()
+
+    # Determine prompt timeline (rough: ~8 frames per chunk)
+    swap_at_frame = (swap["at"] * 8) if swap else T
+
+    burned = []
+    for t in range(T):
+        frame = frames_uint8[t]  # [C, H, W]
+        frame = frame.transpose(1, 2, 0)  # [H, W, C]
+
+        img = Image.fromarray(frame, mode="RGB")
+        draw = ImageDraw.Draw(img)
+
+        # Determine active prompt
+        if swap and t >= swap_at_frame:
+            prompt_text = swap["prompt"][:50]
+            color = (100, 255, 100)  # Bright green
+        else:
+            prompt_text = base_prompt[:50]
+            color = (255, 255, 100)  # Bright yellow
+
+        # Draw text with black background for visibility
+        text_y = H - 50
+        text_x = 10
+        # Black background box
+        draw.rectangle([text_x - 2, text_y - 2, text_x + 400, text_y + 20], fill=(0, 0, 0))
+        # White text (use default font)
+        draw.text((text_x, text_y), prompt_text, fill=color)
+
+        burned.append(torch.from_numpy(np.array(img)).permute(2, 0, 1).float() / 255 * 2 - 1)
+
+    return torch.stack(burned).to(device)
+
+
 def main() -> None:
     hdmap_path, frame_path, clip_prompt = _sample_paths(UUID)
     total_frames = 5 + (N_CHUNKS - 1) * 8
-    print(f"clip {UUID}\n  prompt: {clip_prompt}\n  edit:   {EDIT_PROMPT}")
+    print(f"clip {UUID}\n  prompt: {clip_prompt}\n  edits:  {', '.join(EDIT_KEYS)}")
     print(f"  chunks={N_CHUNKS} swap_at={SWAP_AT} frames={total_frames}")
 
     device = torch.device("cuda")
     hdmap = load_video_tensor(
         hdmap_path,
-        pixel_height=DEFAULT_VIDEO_HEIGHT,
-        pixel_width=DEFAULT_VIDEO_WIDTH,
+        pixel_height=VIDEO_HEIGHT,
+        pixel_width=VIDEO_WIDTH,
         device=device,
         dtype=torch.bfloat16,
     )[:total_frames][None, None]
     first = load_first_frame_tensor(
         frame_path,
-        pixel_height=DEFAULT_VIDEO_HEIGHT,
-        pixel_width=DEFAULT_VIDEO_WIDTH,
+        pixel_height=VIDEO_HEIGHT,
+        pixel_width=VIDEO_WIDTH,
         device=device,
         dtype=torch.bfloat16,
     )[None, None]  # [B=1, V=1, 1, C, H, W]
 
     pipe = _build_pipeline()
 
-    variants: dict[str, dict | None] = {
-        "control": None,
-        "swap": {"at": SWAP_AT, "prompt": EDIT_PROMPT},
-        "swap_guided": {
+    # control + one guided swap per swept prompt (weather + actor-class text).
+    variants: dict[str, dict | None] = {"control": None}
+    for key in EDIT_KEYS:
+        variants[key] = {
             "at": SWAP_AT,
-            "prompt": EDIT_PROMPT,
+            "prompt": SWEEP_PROMPTS[key],
             "scale": GUIDE_SCALE,
             "chunks": GUIDE_CHUNKS,
-        },
-        "swap_recache": {"at": SWAP_AT, "prompt": EDIT_PROMPT, "recache": True},
-    }
+        }
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     videos: dict[str, Tensor] = {}
@@ -213,9 +287,13 @@ def main() -> None:
         )
         write_video_tensor(videos[name], OUT_DIR / f"{name}.mp4", fps=30, layout="tchw")
 
+        # Save annotated version with prompts burned on
+        annotated = _burn_prompts(videos[name], clip_prompt, swap)
+        write_video_tensor(annotated, OUT_DIR / f"{name}_annotated.mp4", fps=30, layout="tchw")
+
     control = videos["control"]
     report: dict[str, list[float]] = {}
-    for name in ("swap", "swap_guided", "swap_recache"):
+    for name in EDIT_KEYS:
         gaps = _per_chunk_gap(videos[name], control)
         report[name] = gaps
         pre = max(gaps[:SWAP_AT])
@@ -225,16 +303,16 @@ def main() -> None:
             f"post-swap per-chunk {' '.join(f'{g:6.2f}' for g in post)}"
         )
 
-    # Side-by-side [control | swap | swap_guided] for eyeballing.
+    # Side-by-side [control | first two edits] for eyeballing.
     sbs = torch.cat(
-        [control, videos["swap"], videos["swap_guided"]], dim=3
+        [control, *(videos[k] for k in EDIT_KEYS[:2])], dim=3
     )  # widths concat
     write_video_tensor(sbs, OUT_DIR / "sbs.mp4", fps=30, layout="tchw")
 
     meta = {
         "uuid": UUID,
         "clip_prompt": clip_prompt,
-        "edit_prompt": EDIT_PROMPT,
+        "edit_prompts": {k: SWEEP_PROMPTS[k] for k in EDIT_KEYS},
         "n_chunks": N_CHUNKS,
         "swap_at": SWAP_AT,
         "guide_scale": GUIDE_SCALE,
