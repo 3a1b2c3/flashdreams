@@ -828,6 +828,9 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
     # Wire Scene Prompt input (P key in HUD) to live prompt editing in pipeline.
     # Uses same apply_text_prompts path as WebRTC for consistency.
     # Runs asynchronously in presenter's background thread, non-blocking to driving.
+    # Cache text encoder to avoid reloading on every prompt.
+    _text_encoder_cache = {"encoder": None}
+
     def handle_scene_prompt(prompt: str) -> None:
         """Callback for scene prompt edits from the HUD (runs in background thread).
 
@@ -884,19 +887,19 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
                                                 time.sleep(0.1)
 
                                         logger.info("[demo] encoding prompt between chunks (non-blocking)")
-                                        # Load text encoder, encode prompt, free it
-                                        from flashdreams.infra.encoder.text.cosmos_reason1 import CosmosReason1TextEncoderConfig
-                                        text_cfg = CosmosReason1TextEncoderConfig()
-                                        text_encoder = text_cfg.setup().to("cuda")
-                                        logger.debug("[demo] text encoder loaded on-demand")
+                                        # Use cached encoder or load it for the first time
+                                        if _text_encoder_cache["encoder"] is None:
+                                            from flashdreams.infra.encoder.text.cosmos_reason1 import CosmosReason1TextEncoderConfig
+                                            text_cfg = CosmosReason1TextEncoderConfig()
+                                            _text_encoder_cache["encoder"] = text_cfg.setup().to("cuda")
+                                            logger.info("[demo] text encoder loaded on-demand and cached on GPU")
+                                        else:
+                                            logger.debug("[demo] reusing cached text encoder on GPU")
 
+                                        text_encoder = _text_encoder_cache["encoder"]
                                         with torch.no_grad():
                                             text_embeddings = text_encoder([[prompt]])
-
-                                        # Free encoder immediately after encoding
-                                        del text_encoder
-                                        torch.cuda.empty_cache()
-                                        logger.debug("[demo] text encoder freed after encoding")
+                                        logger.debug("[demo] prompt encoded, encoder kept on GPU for reuse")
 
                                         # Use embeddings for prompt update
                                         logger.info("[demo] calling pipeline.replace_text_from_embeddings() with encoded prompt")
@@ -919,6 +922,19 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
 
     presenter.set_prompt_callback(handle_scene_prompt)
     logger.info("[demo] scene prompt callback wired")
+
+    # Wire reset callback to clear encoder cache when session restarts (R key)
+    def on_reset() -> None:
+        """Clear text encoder cache when session resets."""
+        if _text_encoder_cache["encoder"] is not None:
+            import torch
+            logger.info("[demo] clearing cached text encoder on session reset")
+            del _text_encoder_cache["encoder"]
+            _text_encoder_cache["encoder"] = None
+            torch.cuda.empty_cache()
+
+    if hasattr(app, "_pipeline") and hasattr(app._pipeline, "set_reset_callback"):
+        app._pipeline.set_reset_callback(on_reset)
 
     # Attach the wheel up front, bound to the app's long-lived keyboard, so
     # the HUD's steering / pedal chrome reacts to the physical device during

@@ -2421,9 +2421,18 @@ class SlangPyHudPresenter:
             "down": _lookup_key(spy.KeyCode, "down", "arrow_down"),
             "left": _lookup_key(spy.KeyCode, "left", "arrow_left"),
             "right": _lookup_key(spy.KeyCode, "right", "arrow_right"),
+            "key0": _lookup_key(spy.KeyCode, "key0", "digit0", "num_0"),
             "key1": _lookup_key(spy.KeyCode, "key1", "digit1", "num_1"),
             "key2": _lookup_key(spy.KeyCode, "key2", "digit2", "num_2"),
             "key3": _lookup_key(spy.KeyCode, "key3", "digit3", "num_3"),
+            "key4": _lookup_key(spy.KeyCode, "key4", "digit4", "num_4"),
+            "key5": _lookup_key(spy.KeyCode, "key5", "digit5", "num_5"),
+            "key6": _lookup_key(spy.KeyCode, "key6", "digit6", "num_6"),
+            "key7": _lookup_key(spy.KeyCode, "key7", "digit7", "num_7"),
+            "key8": _lookup_key(spy.KeyCode, "key8", "digit8", "num_8"),
+            "key9": _lookup_key(spy.KeyCode, "key9", "digit9", "num_9"),
+            "c": _lookup_key(spy.KeyCode, "c"),
+            "v": _lookup_key(spy.KeyCode, "v"),
         }
 
     def _on_keyboard_event(self, event: Any) -> None:
@@ -2459,6 +2468,29 @@ class SlangPyHudPresenter:
             if self._key_matches(key, "backspace") and (is_press or is_repeat):
                 self._prompt_text = self._prompt_text[:-1]
                 logger.debug(f"[presenter] prompt backspace: '{self._prompt_text}'")
+                return
+            # Copy/Paste support
+            if self._key_matches(key, "c") and is_press:
+                # Ctrl+C: copy current prompt
+                if self._prompt_text and hasattr(event, "modifiers"):
+                    try:
+                        import pyperclip
+                        pyperclip.copy(self._prompt_text)
+                        logger.debug(f"[presenter] prompt copied to clipboard")
+                    except:
+                        pass
+                return
+            if self._key_matches(key, "v") and is_press:
+                # Ctrl+V: paste from clipboard
+                if hasattr(event, "modifiers"):
+                    try:
+                        import pyperclip
+                        pasted = pyperclip.paste()
+                        # Only add printable characters
+                        self._prompt_text += "".join(c for c in pasted if c.isprintable() or c.isspace())
+                        logger.debug(f"[presenter] prompt pasted: '{self._prompt_text}'")
+                    except:
+                        pass
                 return
             if is_press or is_repeat:
                 char = self._extract_char_from_key(key)
