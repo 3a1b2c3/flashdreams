@@ -1526,16 +1526,23 @@ class SlangPyHudPresenter:
         area: tuple[int, int, int, int],
     ) -> None:
         """Draw Scene Prompt input field at top-left of camera area (always visible, large)."""
+        # Only show if engine is active (scene loaded + streaming)
+        is_ready = self._engine_active and self._model_ready_probe()
+
         ax, ay, ar, ab = area
         x, y = ax + 20, ay + 20
-        box_width = 600  # Increased from 400
-        box_height = 80 if self._prompt_edit_mode else 70  # Increased from 50/35
+        box_width = 600
+        box_height = 80 if self._prompt_edit_mode else 70
 
-        # Background box
+        # Background box - dimmed if not ready
+        outline_color = NVIDIA_GREEN if self._prompt_edit_mode else (100, 100, 120)
+        if not is_ready:
+            outline_color = (70, 70, 80)  # Dimmed when not ready
+
         draw.rectangle(
             (x, y, x + box_width, y + box_height),
             fill=(30, 30, 40, 240),
-            outline=NVIDIA_GREEN if self._prompt_edit_mode else (100, 100, 120),
+            outline=outline_color,
             width=2,
         )
 
@@ -1551,7 +1558,7 @@ class SlangPyHudPresenter:
                 (x + 15, y + 12),
                 text,
                 fill=text_color,
-                font=self._font_medium,  # Larger font
+                font=self._font_medium,
             )
             # Instructions below input
             draw.text(
@@ -1561,29 +1568,38 @@ class SlangPyHudPresenter:
                 font=self._font_small,
             )
         else:
-            # Display mode: show current prompt (truncated) or placeholder if none set
-            if self._current_scene_prompt:
-                # Truncate to fit in larger box
-                display = self._current_scene_prompt[:80]
-                if len(self._current_scene_prompt) > 80:
-                    display += "..."
-                text_color = (200, 200, 200)
+            # Display mode
+            if is_ready:
+                # Scene loaded - show prompt or "Press P to edit"
+                if self._current_scene_prompt:
+                    display = self._current_scene_prompt[:80]
+                    if len(self._current_scene_prompt) > 80:
+                        display += "..."
+                    text_color = (200, 200, 200)
+                else:
+                    display = "(no prompt)"
+                    text_color = (120, 120, 120)
+                hint = "Press P to edit"
+                hint_color = (150, 150, 150)
             else:
-                display = "(no prompt)"
-                text_color = (120, 120, 120)
+                # Scene not loaded - show hint to load scene
+                display = "Load Scene to edit"
+                text_color = (100, 100, 100)  # Dimmed
+                hint = "Select scene from dropdown"
+                hint_color = (100, 100, 100)  # Dimmed
 
-            # Main prompt text (large, prominent)
+            # Main text (large, prominent)
             draw.text(
                 (x + 15, y + 15),
                 display,
                 fill=text_color,
-                font=self._font_medium,  # Larger font
+                font=self._font_medium,
             )
-            # "Press P to edit" hint
+            # Hint/instruction
             draw.text(
                 (x + 15, y + 48),
-                "Press P to edit",
-                fill=(150, 150, 150),
+                hint,
+                fill=hint_color,
                 font=self._font_small,
             )
 
@@ -2455,9 +2471,13 @@ class SlangPyHudPresenter:
             self._should_close_flag = True
             return
         if self._key_matches(key, "p") and is_press:
-            logger.debug(f"[presenter] prompt edit mode enabled")
-            self._prompt_edit_mode = True
-            self._prompt_text = ""
+            # Only allow prompt editing if engine is active (scene loaded + streaming)
+            if self._engine_active and self._model_ready_probe():
+                logger.debug(f"[presenter] prompt edit mode enabled")
+                self._prompt_edit_mode = True
+                self._prompt_text = ""
+            else:
+                logger.debug(f"[presenter] prompt edit blocked - engine not active or model not ready")
             return
         # Drive keys flow through ``_keyboard_drive`` so the smoothed
         # steer / throttle / brake the wheel + speed-digit chrome reads
@@ -2585,12 +2605,14 @@ class SlangPyHudPresenter:
     def _send_scene_prompt_async(self, prompt: str) -> None:
         """Send prompt to model in background thread (non-blocking)."""
         if self._prompt_send_future is not None and not self._prompt_send_future.done():
+            logger.warning(f"[presenter] prompt send already pending, skipping")
             return
         self._current_scene_prompt = prompt
+        logger.info(f"[presenter] submitting prompt to executor: '{prompt[:60]}...'")
         self._prompt_send_future = self._prompt_send_executor.submit(
             self._prompt_callback, prompt
         )
-        logger.info(f"[presenter] scene prompt sent (async): {prompt[:60]}...")
+        logger.info(f"[presenter] scene prompt queued (async): {prompt[:60]}...")
 
     def set_prompt_callback(self, callback: Callable[[str], None]) -> None:
         """Wire the callback that receives scene prompts from the UI (called in background)."""

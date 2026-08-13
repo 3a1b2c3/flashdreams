@@ -158,10 +158,9 @@ OUT_DIR = Path(
 )
 EDIT_PROMPT = os.environ.get(
     "EDIT_PROMPT",
-    "Driving scene from a front-facing car camera at night in a heavy "
-    "snowstorm. Thick snow falling, snow-covered road and buildings, "
-    "headlights and streetlights glowing through the snow. Photorealistic "
-    "dashcam footage.",
+    "Driving scene with heavy rain, wet road surface, raindrops on windshield, "
+    "heavy rain splashing, dark storm clouds, poor visibility, headlights on, "
+    "wipers running. Photorealistic dashcam footage from front-facing camera.",
 )
 
 _parse_list = lambda s, cast: [cast(x.strip()) for x in s.split(",") if x.strip()]

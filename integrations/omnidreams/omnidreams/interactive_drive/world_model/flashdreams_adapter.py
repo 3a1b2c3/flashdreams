@@ -531,6 +531,9 @@ class FlashdreamsWorldModelSession:
     @property
     def pipeline(self) -> Any:
         if self._pipeline is None:
+            import sys
+            print(f"[ERROR] _pipeline is None! _offload_text_encoder={self._offload_text_encoder}, _pipeline_factory={self._pipeline_factory}, synthetic={self.manifest.synthetic_model}", flush=True)
+            sys.stdout.flush()
             raise RuntimeError(
                 "warmup() must be called before rendering world-model chunks"
             )

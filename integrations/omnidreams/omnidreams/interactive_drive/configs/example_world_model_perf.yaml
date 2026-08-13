@@ -15,7 +15,7 @@
 #   - [1024, 560]
 #   - [896, 496]
 #   - [640, 352]
-resolution_wh: [1168, 640]
+resolution_wh: [960, 544]
 fps: 30
 num_frames_per_block: 8
 # For interactive GUI bring-up, eager mode gives a much faster first chunk than
@@ -57,5 +57,5 @@ native_dit_attention_backend: sage3 # auto | cudnn | sparge | sage3 | sage3_fp8
 # Then either:
 #   export OMNIDREAMS_LIGHTVAE_FP8_STATE_PATH=artifacts/native_vae/lightvae_fp8_state.pt
 # or uncomment and set an absolute or manifest-relative path below.
-native_vae_encoder: disabled             # disabled | fp8
+native_vae_encoder: disabled              # disabled | fp8
 # native_vae_fp8_state_path: /path/to/lightvae_fp8_state.pt

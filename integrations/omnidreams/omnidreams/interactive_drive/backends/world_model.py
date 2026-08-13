@@ -84,10 +84,15 @@ class WorldModelRenderBackend(RenderBackend):
 
     def warmup_model(self) -> None:
         import sys as _sys
-        # Skip warmup on Windows (torch.compile hangs with CUDA graphs)
+        # NOTE: do NOT skip the build on Windows. torch.compile is already disabled
+        # on win32 in _build_pipeline_config (and is lazy -- fires on first forward,
+        # not at build), so building the pipeline here is safe. Skipping it entirely
+        # is fine for the OFFLOAD path (the pipeline is built later in
+        # prepare_for_scene), but the RESIDENT-encoder path (offload_text_encoder=False,
+        # needed for live prompting) never builds it there -> _pipeline stays None ->
+        # "warmup() must be called" on the first chunk. So always build here.
         if _sys.platform == "win32":
-            logger.info("[WARMUP] Skipping warmup on Windows (torch.compile disabled)")
-            return
+            logger.info("[WARMUP] Windows: building pipeline without torch.compile")
 
         logger.info("[WARMUP] Starting validation checks...")
         if self._manifest.resolution_wh != self._raster.resolution_wh:

@@ -87,17 +87,17 @@ REM "!PYEXE!" integrations/omnidreams/scripts/smoke_text_edit.py
 REM ==========================================================================
 REM TEST MODE 7: FULL SUITE (all variations, comprehensive - ~2 hours)
 REM ==========================================================================
-REM set "TEST_MODE=full_suite"
-REM set "SWAP_AT=4,8,12"
-REM set "GUIDE_SCALES=1.0,2.5,5.0"
-REM set "SEQUENTIAL_PROMPTS=Driving with heavy rain and wet road,Driving at night under streetlights,Driving in snowstorm with thick snow cover"
-REM set "CHECK_DETERMINISM=1"
-REM echo Running: %TEST_MODE% - COMPREHENSIVE TEST (will take ~2 hours)
-REM echo   Timing: chunks 4, 8, 12
-REM echo   Guidance: scales 1.0, 2.5, 5.0
-REM echo   Sequential: 3 sequential edits
-REM echo   Determinism: enabled
-REM "!PYEXE!" integrations/omnidreams/scripts/smoke_text_edit.py
+set "TEST_MODE=full_suite"
+set "SWAP_AT=4,8,12"
+set "GUIDE_SCALES=1.0,2.5,5.0"
+set "SEQUENTIAL_PROMPTS=Driving scene with heavy rain and wet road,Driving scene at night under streetlights,Driving scene in snowstorm with thick snow cover"
+set "CHECK_DETERMINISM=1"
+echo Running: %TEST_MODE% - COMPREHENSIVE TEST (will take ~2 hours)
+echo   Timing: chunks 4, 8, 12
+echo   Guidance: scales 1.0, 2.5, 5.0
+echo   Sequential: 3 sequential edits
+echo   Determinism: enabled
+"!PYEXE!" integrations/omnidreams/scripts/smoke_text_edit.py
 
 echo.
 echo ===================================================================

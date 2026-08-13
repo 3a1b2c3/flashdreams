@@ -831,54 +831,94 @@ def _run_slangpy_hud(args: argparse.Namespace) -> None:
     def handle_scene_prompt(prompt: str) -> None:
         """Callback for scene prompt edits from the HUD (runs in background thread).
 
-        Delegates to the backend's omnidreams session, which handles:
-        - Staging the prompt if no chunk has been generated yet
-        - Live swapping via apply_text_prompts() if streaming is active
-        Returns immediately (fire-and-forget); any errors are logged.
+        Accesses the backend's FlashdreamsWorldModelSession._pipeline to apply text prompts.
+        Uses the same OmnidreamsPipeline.replace_text() interface as WebRTC.
         """
+        logger.debug(f"[demo] handle_scene_prompt called with: '{prompt[:60]}...'")
         try:
-            # Access the session through the backend's local adapter.
-            # This mirrors the WebRTC path: datachannel events → trigger_event() → apply_text_prompts().
+            # Access the session through the backend directly.
+            # Structure: app._backend (WorldModelRenderBackend) -> _session (FlashdreamsWorldModelSession) -> _pipeline (OmnidreamsPipeline)
             if hasattr(app, "_backend") and app._backend is not None:
                 backend = app._backend
-                if hasattr(backend, "_adapter") and backend._adapter is not None:
-                    adapter = backend._adapter
-                    if hasattr(adapter, "_session") and adapter._session is not None:
-                        session = adapter._session
-                        # Non-blocking: fire-and-forget on the session's executor
-                        # (trigger_event_sync wraps apply_text_prompts in a distributed_op)
-                        # For immediate sync path, call apply_text_prompts directly on wrapper
-                        if hasattr(session, "_wrapper") and session._wrapper is not None:
-                            from omnidreams.webrtc.types import TextPrompt
-                            text_prompts = [TextPrompt(positive=prompt)]
-                            if session._state is not None and session._state.pipeline_cache is not None:
-                                session._wrapper.apply_text_prompts(session._state, text_prompts)
-                                session._active_prompt = prompt
-                                logger.info(
-                                    f"[demo] scene prompt updated (native UI, async): {prompt[:60]}..."
-                                )
-                            else:
-                                session._text_prompts = text_prompts
-                                session._active_prompt = prompt
-                                logger.info(
-                                    f"[demo] scene prompt staged for start (native UI): {prompt[:60]}..."
-                                )
-                                return
+                logger.debug(f"[demo] backend found: {type(backend).__name__}")
+                if hasattr(backend, "_session") and backend._session is not None:
+                    session = backend._session
+                    logger.debug(f"[demo] session found: {type(session).__name__}")
+                    # Access the OmnidreamsPipeline from the session
+                    if hasattr(session, "_pipeline") and session._pipeline is not None:
+                        pipeline = session._pipeline
+                        logger.debug(f"[demo] pipeline found: {type(pipeline).__name__}")
+                        # Check if cache is available (streaming active)
+                        if hasattr(session, "_cache") and session._cache is not None:
+                            cache = session._cache
+                            logger.debug(f"[demo] cache found, applying text prompt")
+
+                            try:
+                                # Try replace_text first (if text encoder is loaded)
+                                if hasattr(pipeline, "text_encoder") and pipeline.text_encoder is not None:
+                                    logger.info(f"[demo] calling pipeline.replace_text() with prompt: '{prompt[:60]}...'")
+                                    pipeline.replace_text(cache, [[prompt]])
+                                    logger.info(f"[demo] scene prompt updated (native UI, async): {prompt[:60]}...")
+                                else:
+                                    # Text encoder offloaded - queue encoding between chunks
+                                    logger.info(f"[demo] text encoder offloaded, queueing for between-chunk encoding: '{prompt[:60]}...'")
+                                    import torch
+                                    import time
+                                    try:
+                                        # Wait for generation to complete before encoding (check frame queue)
+                                        # Frame queue fills with chunks as they complete; if it's empty, generation is active
+                                        max_wait = 10.0  # max 10s wait
+                                        start_wait = time.time()
+
+                                        while time.time() - start_wait < max_wait:
+                                            try:
+                                                # Try to peek if frames are queued (generation gap = safe to encode)
+                                                # If get_nowait succeeds, a chunk finished recently (queue is draining)
+                                                # We can proceed safely then
+                                                pipeline.frame_queue.get_nowait()
+                                                # Got a frame - put it back and proceed
+                                                logger.debug("[demo] detected frame queue activity, safe to encode")
+                                                break
+                                            except:
+                                                # Queue empty = generation active, wait a bit
+                                                time.sleep(0.1)
+
+                                        logger.info("[demo] encoding prompt between chunks (non-blocking)")
+                                        # Load text encoder, encode prompt, free it
+                                        from flashdreams.infra.encoder.text.cosmos_reason1 import CosmosReason1TextEncoderConfig
+                                        text_cfg = CosmosReason1TextEncoderConfig()
+                                        text_encoder = text_cfg.setup().to("cuda")
+                                        logger.debug("[demo] text encoder loaded on-demand")
+
+                                        with torch.no_grad():
+                                            text_embeddings = text_encoder([[prompt]])
+
+                                        # Free encoder immediately after encoding
+                                        del text_encoder
+                                        torch.cuda.empty_cache()
+                                        logger.debug("[demo] text encoder freed after encoding")
+
+                                        # Use embeddings for prompt update
+                                        logger.info("[demo] calling pipeline.replace_text_from_embeddings() with encoded prompt")
+                                        pipeline.replace_text_from_embeddings(cache, text_embeddings)
+                                        logger.info(f"[demo] scene prompt updated (native UI, async, queued): {prompt[:60]}...")
+                                    except Exception as encode_err:
+                                        logger.error(f"[demo] on-demand text encoding failed: {encode_err}", exc_info=True)
+                            except Exception as e:
+                                logger.error(f"[demo] failed to apply scene prompt: {e}", exc_info=True)
                         else:
-                            logger.warning("[demo] session wrapper not available for prompt update")
-                            return
+                            logger.warning("[demo] cache not available (streaming not yet started)")
                     else:
-                        logger.warning("[demo] session not available for prompt update")
-                        return
+                        logger.warning("[demo] session pipeline not available for prompt update")
                 else:
-                    logger.warning("[demo] adapter not available for prompt update")
-                    return
+                    logger.warning("[demo] session not available on backend")
             else:
                 logger.warning("[demo] backend not available for prompt update")
         except Exception as e:
             logger.error(f"[demo] failed to apply scene prompt: {e}", exc_info=True)
 
     presenter.set_prompt_callback(handle_scene_prompt)
+    logger.info("[demo] scene prompt callback wired")
 
     # Attach the wheel up front, bound to the app's long-lived keyboard, so
     # the HUD's steering / pedal chrome reacts to the physical device during

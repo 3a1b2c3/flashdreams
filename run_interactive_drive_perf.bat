@@ -94,12 +94,12 @@ echo LAUNCHING INTERACTIVE-DRIVE PERF WITH PHYSICS
 echo ===================================================================
 echo Manifest: %MANIFEST%
 echo Game mode: ENABLED ^(collisions + physics^)
-echo Offload text encoder: enabled
+echo Text encoder: OFFLOADED ^(on-demand for live prompting^)
 echo Resolution: 1168x640 (perf tuned)
 echo Denoising steps: [1000, 100]
 echo Native acceleration: auto-fallback to PyTorch
 echo ===================================================================
-echo Controls: WASD=drive Mouse=look C=obstacle R=restart Esc=quit
+echo Controls: WASD=drive Mouse=look C=obstacle R=restart Esc=quit P=edit-prompt
 echo ===================================================================
 echo.
 
