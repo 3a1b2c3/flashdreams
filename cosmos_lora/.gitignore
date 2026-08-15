@@ -1,0 +1,23 @@
+# Dataset directories
+datasets/videos/
+datasets/metas/
+
+# Checkpoints and outputs
+checkpoints/
+outputs/
+
+# Temporary files
+*.pt
+*.pth
+*.safetensors
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# Logs
+*.log
+runs/
+
+# OS files
+.DS_Store
+Thumbs.db
