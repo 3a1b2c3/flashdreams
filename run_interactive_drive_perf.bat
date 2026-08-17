@@ -106,8 +106,10 @@ echo.
 REM Overview minimap: fixed map-centre camera; --bev-fov-deg used for the fit,
 REM --bev-height-m / --bev-tilt-deg ignored in overview. --no-bev-overview for
 REM the old ego-centred/heading-up minimap.
+REM Manga Night: scene 0d404ff7-2b66-498c-b047-1ed8cded60d4, variant manga_night
+REM (remove --scene/--variant args to use default scene)
 echo [INIT] Starting event loop...
-"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode %*
+"%VENV%\Scripts\interactive-drive.exe" --manifest "%MANIFEST%" --offload-text-encoder --bev-tilt-deg 0 --bev-height-m 1200 --bev-fov-deg 60 --game-mode --scene 0d404ff7-2b66-498c-b047-1ed8cded60d4 --variant manga_night %*
 echo [EXIT] interactive-drive closed
 set EXIT_CODE=%ERRORLEVEL%
 

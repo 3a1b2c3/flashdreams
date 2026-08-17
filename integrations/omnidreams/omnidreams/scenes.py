@@ -41,7 +41,9 @@ SCENE_FRAME_SUFFIXES: Final[frozenset[str]] = frozenset({".jpeg", ".jpg", ".png"
 SCENE_VARIANT_DEFAULT: Final[str] = "default"
 
 # Weather variant -> 1-based prompt index inside the archive
-# (prompt1=clear, prompt2=snow, prompt3=rain). Unknown variants -> prompt 1.
+# (prompt1=clear, prompt2=snow, prompt3=rain, prompt_manga_night=custom).
+# Unknown variants -> prompt 1. Custom variants with their own prompt files
+# are auto-discovered and don't need entries here.
 SCENE_VARIANT_PROMPT_INDEX: Final[dict[str, int]] = {
     SCENE_VARIANT_DEFAULT: 1,
     "snow": 2,

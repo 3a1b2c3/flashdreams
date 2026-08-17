@@ -12,6 +12,7 @@ This document describes all changes made to support FlashDreams interactive-driv
 6. **Native DIT extension timing** — No visibility into compilation bottleneck
 7. **DiskSpaceError crash** — Unhandled exception in pipeline worker
 8. **SageAttention availability** — Optional optimized attention backend
+9. **Interrupted `git clone` aliases to parent repo** — nested clone silently resolves to the wrong `.git`
 
 ---
 
@@ -336,6 +337,18 @@ Created comprehensive Windows setup documentation including:
 - [x] SageAttention installed (optional wheel)
 - [x] Config uses sage3 attention backend
 - [x] Documentation in setup_windows.md
+
+---
+
+### 9. Interrupted `git clone` aliases to parent repo
+
+**Problem:** Cloning a nested repo (e.g. `cosmos_lora/cosmos-predict2/`) can time out mid-clone. If a subsequent `rm -rf` on the half-created target fails with `Device or resource busy` (Windows file lock from the killed git process) and the clone is retried, git's directory discovery does not find a `.git` dir in the empty target folder and walks **up the tree**, silently binding the new "clone" to the outer repo's `.git` (here, `flashdream_public/.git`) instead of failing loudly. `git status`/`git log` inside the nested folder then show the *parent* repo's branches and commit history, not the intended remote's content — easy to mistake for a corrupted or unexpected clone.
+
+**Fix:** After any interrupted `git clone`, verify before retrying or trusting the result:
+```bash
+git -C <target> rev-parse --git-dir   # should be <target>/.git, not a parent path
+```
+If it resolves outside `<target>`, the folder has no real `.git` of its own — safe to `rm -rf` (confirm it's otherwise empty first) and re-clone from scratch. Never assume a populated-looking git status inside a nested folder means the intended repo actually cloned there.
 
 ---
 
