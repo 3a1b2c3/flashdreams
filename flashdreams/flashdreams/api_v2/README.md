@@ -13,7 +13,14 @@ Protocols for the FlashDreams API.
 - `user_input_event_data.py`: base type for event payloads.
 
 `flashdreams.runtime_v2.session_runner.run_session` drives a session against a
-window, for a fixed number of steps or until the window reports a close.
+window until the session reports `is_finished` or the window reports a close, or
+for a fixed number of steps a caller asks for. A caller holding an application
+uses `flashdreams.runtime_v2.application_runner.ApplicationRunner` to get there,
+which takes no step count: how long a run lasts is the application's business. A
+run whose output is a file goes the same way, against
+`flashdreams.runtime_v2.mp4_client_window.Mp4ClientWindow`, which reports no
+input and encodes every result. Since it never reports a close, such a run needs
+a session that finishes.
 
 Ownership
 ---------
@@ -26,7 +33,8 @@ Agreed design decisions. Change them by discussion.
   such as a checkpoint or a compiled pipeline, and outlives every session it
   creates.
 - `ISession` is one run: KV cache, game state, and anything else that must not
-  carry into another run.
+  carry into another run. It also says when that run is over, through
+  `is_finished`. The default never finishes.
 - `InputSource` and `OutputSink` belong to the runtime. The runner reads from the
   source and writes to the sink, so a session takes `UserInputEvents` in, returns
   a `StepResult`, and holds neither.
@@ -50,6 +58,10 @@ Agreed design decisions. Change them by discussion.
   the new generation whole, so a key held down when the client restarts is still
   held after, because it is the earlier edge that says so. A session that must
   not inherit that input ignores the older events itself.
+- An `OutputSink` reads `StepResult.output` as one of two things: floats holding
+  `[-1, 1]`, which is what FlashDreams models emit, or integers holding raw
+  `0`-`255`. `SessionDesc` carries no range and a session cannot declare one, so
+  this is a convention every sink follows.
 
 Threading
 ---------
@@ -57,9 +69,12 @@ Threading
 `run_session` uses two threads, and every window runs that way. Generation is on
 the calling thread; the window gets a thread of its own, ticking at
 `frames_per_second_for_ui` to read input, call `ISession.step_ui`, and write
-finished results. A slow step does not hold up input or output, which is why
-`SessionDesc` carries the two frame rates separately. Only the UI rate is read so
-far — generation currently runs as fast as it can.
+finished results. A step that takes longer than one of those ticks does not hold
+up input or output, because it is not on that thread. That is why `SessionDesc`
+carries two rates: `frames_per_second_for_ui` is how often input is read and
+results are presented, and `frames_per_second_for_step` is the rate the generated
+frames are meant to play back at. Only the UI rate is read so far, generation
+currently runs as fast as it can.
 
 A window with no input to report, such as one writing an MP4, returns no events
 and leaves `step_ui` at its default; the threading is unchanged.

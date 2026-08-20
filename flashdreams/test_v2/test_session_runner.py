@@ -67,6 +67,7 @@ class FakeSession(ISession):
         log: CallLog,
         *,
         fail_at: int | None = None,
+        fail_to_close: bool = False,
         release_writes: threading.Event | None = None,
         release_writes_at: int | None = None,
     ) -> None:
@@ -75,6 +76,8 @@ class FakeSession(ISession):
             session_desc: Description this session reports as resolved.
             log: Shared log both fakes record into.
             fail_at: Step index to raise at, for exercising cleanup on failure.
+            fail_to_close: Whether :meth:`close` raises, as a session that
+                cannot release what it holds would.
             release_writes: Event to set once ``release_writes_at`` has been
                 generated, for holding the window back until then.
             release_writes_at: Step index that sets ``release_writes``.
@@ -82,6 +85,7 @@ class FakeSession(ISession):
         self._session_desc = session_desc
         self._log = log
         self._fail_at = fail_at
+        self._fail_to_close = fail_to_close
         self._release_writes = release_writes
         self._release_writes_at = release_writes_at
         self.observed_events: list[UserInputEvents] = []
@@ -115,6 +119,44 @@ class FakeSession(ISession):
 
     def close(self) -> None:
         self._log.record("session.close")
+        if self._fail_to_close:
+            raise RuntimeError("session close failed")
+
+
+class FiniteSession(FakeSession):
+    """A session with a fixed length."""
+
+    def __init__(
+        self,
+        session_desc: SessionDesc,
+        log: CallLog,
+        *,
+        length: int,
+        generated: int = 0,
+    ) -> None:
+        """
+        Args:
+            session_desc: Description this session reports as resolved.
+            log: Shared log both fakes record into.
+            length: Steps to generate before reporting that it has finished.
+                Counted from the last reset, as a session starting over would.
+            generated: Steps to start out having generated, for a session that
+                has finished before the run begins.
+        """
+        super().__init__(session_desc, log)
+        self._length = length
+        self._generated = generated
+
+    def is_finished(self) -> bool:
+        return self._generated >= self._length
+
+    def step(self, step_index: int, events: UserInputEvents) -> StepResult:
+        self._generated += 1
+        return super().step(step_index, events)
+
+    def reset(self) -> None:
+        self._generated = 0
+        super().reset()
 
 
 class RecordingClientWindow(IClientWindow):
@@ -299,6 +341,42 @@ def test_run_session_resets_the_session_and_the_step_index() -> None:
     assert log.calls.index("session.reset") < log.calls.index("session.step(0)")
     # A reset restarts the index without granting extra steps.
     assert [result.step_index for result in window.results] == [0, 1]
+
+
+def test_run_session_stops_when_the_session_says_it_has_finished() -> None:
+    """A model that knows its own length ends its own run, uncounted."""
+    log = CallLog()
+    session = FiniteSession(_session_desc(), log, length=2)
+    window = RecordingClientWindow(log)
+
+    run_session(session, window, steps=None)
+
+    assert [result.step_index for result in window.results] == [0, 1]
+
+
+def test_run_session_ends_at_whichever_comes_first() -> None:
+    """A caller can ask for fewer steps than the session would generate."""
+    log = CallLog()
+    session = FiniteSession(_session_desc(), log, length=5)
+    window = RecordingClientWindow(log)
+
+    run_session(session, window, steps=2)
+
+    assert [result.step_index for result in window.results] == [0, 1]
+
+
+def test_run_session_lets_a_reset_restart_a_finished_session() -> None:
+    """A session that starts over is asked about the run it is starting."""
+    log = CallLog()
+    session = FiniteSession(_session_desc(), log, length=1, generated=1)
+    window = RecordingClientWindow(log, [_lifecycle_event(ResetUserInputEventData())])
+
+    run_session(session, window, steps=3)
+
+    # Finished before the run began, so without the reset nothing would be
+    # generated. It is applied first, and the session runs its length again.
+    assert [result.step_index for result in window.results] == [0]
+    assert "session.reset" in log.calls
 
 
 def test_run_session_closes_a_session_that_failed_to_init() -> None:
@@ -516,3 +594,67 @@ def test_run_session_reports_a_window_that_fails_to_open() -> None:
     # holds what it had acquired, so both halves are closed anyway.
     assert "session.step(0)" not in log.calls
     assert log.calls[-2:] == ["window.close", "session.close"]
+
+
+def test_run_session_reports_what_ended_the_run_rather_than_the_close(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    log = CallLog()
+    session = FakeSession(_session_desc(), log, fail_at=0)
+    window = RecordingClientWindow(log, fail_to_close=True)
+
+    # Both the step and the close fail. The step is the one that explains the
+    # run, so that is what a caller is given, and the close is logged rather
+    # than lost.
+    with caplog.at_level(logging.ERROR, logger=_RUNNER_LOGGER):
+        with pytest.raises(RuntimeError, match="step failed"):
+            run_session(session, window, steps=2)
+
+    assert "close failed" in caplog.text
+    assert log.calls[-2:] == ["window.close", "session.close"]
+
+
+def test_run_session_reports_a_session_that_fails_to_close() -> None:
+    log = CallLog()
+    session = FakeSession(_session_desc(), log, fail_to_close=True)
+    window = RecordingClientWindow(log)
+
+    # Nothing else went wrong, so the only thing wrong with the run is that the
+    # session still holds what it was using.
+    with pytest.raises(RuntimeError, match="session close failed"):
+        run_session(session, window, steps=2)
+
+    assert [result.step_index for result in window.results] == [0, 1]
+
+
+def test_run_session_reports_the_step_rather_than_the_session_close(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    log = CallLog()
+    session = FakeSession(_session_desc(), log, fail_at=0, fail_to_close=True)
+    window = RecordingClientWindow(log)
+
+    with caplog.at_level(logging.ERROR, logger=_RUNNER_LOGGER):
+        with pytest.raises(RuntimeError, match="step failed"):
+            run_session(session, window, steps=2)
+
+    assert "session close failed" in caplog.text
+
+
+def test_run_session_reports_the_init_rather_than_the_session_close(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    log = CallLog()
+
+    class FailingSession(FakeSession):
+        def init(self) -> None:
+            super().init()
+            raise RuntimeError("init failed")
+
+    session = FailingSession(_session_desc(), log, fail_to_close=True)
+
+    with caplog.at_level(logging.ERROR, logger=_RUNNER_LOGGER):
+        with pytest.raises(RuntimeError, match="init failed"):
+            run_session(session, RecordingClientWindow(log), steps=1)
+
+    assert "session close failed" in caplog.text

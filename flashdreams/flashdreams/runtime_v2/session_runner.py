@@ -5,6 +5,7 @@
 
 import logging
 import queue
+import sys
 import threading
 from enum import Enum
 
@@ -38,6 +39,27 @@ def _contains(events: UserInputEvents, event_type: type[UserInputEventData]) -> 
     return any(
         isinstance(event.get_event_data(), event_type) for event in events.get_events()
     )
+
+
+def _close_session(session: ISession, *, run_failed: bool) -> None:
+    """Close a session, keeping its close from hiding an earlier failure.
+
+    Args:
+        session: Session to close.
+        run_failed: Whether something has already failed the run. When it has,
+            a failing close is logged rather than raised over the top of it.
+
+    Raises:
+        Whatever the session raises, when nothing has failed yet.
+    """
+    try:
+        session.close()
+    except Exception:
+        if not run_failed:
+            raise
+        _LOGGER.exception(
+            "The session failed to close after the run had already failed."
+        )
 
 
 def run_session(
@@ -76,12 +98,25 @@ def run_session(
     results waiting. ``max_pending`` bounds how many wait, and ``when_full`` says
     what to do about the next one.
 
+    A run whose output is a file works the same way, driven against
+    :class:`~flashdreams.runtime_v2.mp4_client_window.Mp4ClientWindow`. That
+    window reports no input, so it never reports a close, and such a run ends on
+    ``steps`` or on the session saying it has finished.
+
+    A session says so through :meth:`ISession.is_finished`, asked before every
+    step, which is how a model that knows its own length ends its own run. The
+    run ends at whichever comes first: that, ``steps``, or a close.
+
+    A window that fails to close fails the run, because for a file that means the
+    encode did not finish. A close that fails after something else already has is
+    logged instead, though, since the earlier failure is what explains the run.
+
     Args:
         session: Uninitialized session to drive.
         window: Client window supplying input events and presenting results.
-        steps: Exact number of steps to run, counted across resets so a reset
-            cannot extend the run. ``None`` runs until the window reports a close,
-            which is what an interactive window does.
+        steps: Most steps to run, counted across resets so a reset cannot extend
+            the run. ``None`` runs until the session finishes or the window
+            reports a close, which is what an interactive window does.
         max_pending: How many finished results may wait to be written.
         when_full: What to do with a result when ``max_pending`` are already
             waiting.
@@ -105,7 +140,7 @@ def run_session(
         session.init()
     except Exception:
         # A partly initialized session still holds whatever it managed to load.
-        session.close()
+        _close_session(session, run_failed=True)
         raise
 
     # Backpressure is all here. Finished results wait here for the I/O thread to
@@ -255,6 +290,10 @@ def run_session(
             if _contains(events, ResetUserInputEventData):
                 session.reset()
                 step_index = 0
+            # After the reset, so a session starting over is asked about the new
+            # run rather than the one it just finished.
+            if session.is_finished():
+                break
             dropped_for_space += add_pending_result(
                 step_generation, session.step(step_index, events)
             )
@@ -263,7 +302,18 @@ def run_session(
     finally:
         stop.set()
         io_thread.join()
-        session.close()
+        # A failure here is what the run reports, since a window failure stops
+        # generation rather than raising through it: both places this thread can
+        # be sitting give up once io_failure is set, so a run that reports a
+        # window failure got there without failing itself. The two are only ever
+        # both set by failing independently, and then this is the one raised.
+        run_failed = sys.exc_info()[0] is not None
+        if io_failure and run_failed:
+            _LOGGER.error(
+                "The window failed as well as the run, and this is that failure.",
+                exc_info=io_failure[0],
+            )
+        _close_session(session, run_failed=run_failed or bool(io_failure))
 
     # A log line is the only report of these: a caller cannot count them.
     if dropped_for_space:

@@ -3,12 +3,17 @@
 
 """Application lifecycle runner for the v2 runtime."""
 
+import logging
+import sys
 from collections.abc import Sequence
 
 from flashdreams.api_v2.application import IApplication
 from flashdreams.api_v2.client_window import IClientWindow
 from flashdreams.runtime_v2.session_desc import SessionDesc
 from flashdreams.runtime_v2.session_runner import run_session
+
+_LOGGER = logging.getLogger(__name__)
+"""Logger for an application that could not be closed."""
 
 
 class ApplicationRunner:
@@ -24,11 +29,12 @@ class ApplicationRunner:
         self._client_window = client_window
 
     def run(
-        self,
-        session_desc: SessionDesc,
-        commandline_args: Sequence[str] = (),
+        self, session_desc: SessionDesc, commandline_args: Sequence[str] = ()
     ) -> None:
         """Initialize the application, create one session, and run it.
+
+        The run ends when the window reports a close or the session reports that
+        it has finished.
 
         The application is closed before this method returns or raises.
 
@@ -41,4 +47,31 @@ class ApplicationRunner:
             session = self._application.create_session(session_desc)
             run_session(session, self._client_window)
         finally:
-            self._application.close()
+            _close_application(
+                self._application, run_failed=sys.exc_info()[0] is not None
+            )
+
+
+def _close_application(application: IApplication, *, run_failed: bool) -> None:
+    """Close an application, keeping its close from hiding an earlier failure.
+
+    This is ``session_runner._close_session`` for the application: whatever
+    failed first is what a run reports, and a failure while cleaning up after it
+    is logged.
+
+    Args:
+        application: Application to close.
+        run_failed: Whether something has already failed the run. When it has,
+            a failing close is logged rather than raised over the top of it.
+
+    Raises:
+        Whatever the application raises, when nothing has failed yet.
+    """
+    try:
+        application.close()
+    except Exception:
+        if not run_failed:
+            raise
+        _LOGGER.exception(
+            "The application failed to close after the run had already failed."
+        )
