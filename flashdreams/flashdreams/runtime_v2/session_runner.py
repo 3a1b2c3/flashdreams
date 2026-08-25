@@ -46,17 +46,26 @@ def run_session(
     """Run a session's UI and model loops.
 
     The calling thread handles the window and UI. The model runs on a separate
-    Python thread.
+    Python thread. Returns when the client closes the window, when the model
+    loop has finished and no generated frames are still waiting, or when either
+    loop fails.
+
+    Both loops are shut down, every sink opened is closed, and the session is
+    closed, before this returns or raises.
 
     Args:
         session: Session to run.
         window: Source of input and destination for UI output.
-        metrics_output_sink: Sink for model measurements, if requested.
+        metrics_output_sink: Sink for model measurements, if requested. Receives
+            the model loop's results rather than the UI loop's.
         steps: Maximum model steps; ``None`` runs until stopped.
         max_pending: Maximum model steps waiting to be shown.
 
     Raises:
         ValueError: ``steps`` is negative, or ``max_pending`` is not positive.
+        BaseException: A loop's failure if one was queued, otherwise this
+            function's own, otherwise the first cleanup failure. The rest are
+            logged.
     """
     if steps is not None and steps < 0:
         raise ValueError(f"steps must be >= 0 or None, got {steps}.")
@@ -206,12 +215,12 @@ def run_session(
 
     if presentation_manager.dropped_for_space:
         _LOGGER.warning(
-            "Dropped %d results the window could not keep up with.",
+            "Dropped %d model steps the window could not keep up with.",
             presentation_manager.dropped_for_space,
         )
     if presentation_manager.discarded_at_reset:
         _LOGGER.info(
-            "Discarded %d results generated before a reset.",
+            "Discarded %d model steps generated before a reset.",
             presentation_manager.discarded_at_reset,
         )
     if primary_failure is not None:
