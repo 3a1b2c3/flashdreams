@@ -11,13 +11,23 @@ import torch
 from numpy import uint64
 
 from flashdreams.api_v2.client_window import IClientWindow
+from flashdreams.api_v2.loop import IModelLoop, IUILoop, invoke_async
 from flashdreams.api_v2.session import ISession
 from flashdreams.api_v2.user_input_event_data import UserInputEventData
-from flashdreams.runtime_v2.session_desc import SessionDesc
-from flashdreams.runtime_v2.session_runner import WhenFull, run_session
+from flashdreams.runtime_v2.blit_model_output_to_screen_loop import (
+    BlitModelOutputToScreenLoop,
+)
+from flashdreams.runtime_v2.presentation_manager import PresentationManager
+from flashdreams.runtime_v2.session_desc import (
+    BackpressureMode,
+    PresentationMode,
+    SessionDesc,
+)
+from flashdreams.runtime_v2.session_runner import run_session
 from flashdreams.runtime_v2.step_result import StepResult
 from flashdreams.runtime_v2.user_input_event import (
     CloseUserInputEventData,
+    KeyboardInputState,
     KeyboardUserInputEventData,
     ResetUserInputEventData,
     UserInputEvent,
@@ -27,11 +37,24 @@ from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 
 pytestmark = pytest.mark.ci_cpu
 
-_IO_THREAD_NAME = "flashdreams-io"
-"""Name the runner gives its I/O thread."""
+_STEP_THREAD_NAME = "flashdreams-model-generation-thread"
+"""Name the runner gives its model-generation thread."""
 
 _RUNNER_LOGGER = "flashdreams.runtime_v2.session_runner"
 """Logger the runner reports discarded results on."""
+
+
+def test_session_modes_are_independent() -> None:
+    assert list(BackpressureMode) == [
+        BackpressureMode.BLOCK,
+        BackpressureMode.DROP_OLDEST,
+    ]
+    assert list(PresentationMode) == [
+        PresentationMode.ONLY_PRESENT_NEW,
+        PresentationMode.ONLY_PRESENT_NEWEST,
+    ]
+    assert SessionDesc().backpressure_mode is BackpressureMode.BLOCK
+    assert SessionDesc().presentation_mode is PresentationMode.ONLY_PRESENT_NEWEST
 
 
 class CallLog:
@@ -56,6 +79,29 @@ class CallLog:
         """Return the names of the threads that made ``call``."""
         with self._lock:
             return {thread for made, thread in self._calls if made == call}
+
+
+class FakeModelLoop(IModelLoop["FakeSession"]):
+    """Delegate standard model-loop hooks to the test session."""
+
+    def step(self, step_index: int, events: UserInputEvents) -> list[StepResult]:
+        return [self.state.step(step_index, events)]
+
+    def is_finished(self) -> bool:
+        return self.state.is_finished()
+
+    def reset(self) -> None:
+        self.state.reset()
+
+
+class FakeUILoop(IUILoop["FakeSession"]):
+    """Delegate direct UI rendering to the test session."""
+
+    def step(self, step_index: int, events: UserInputEvents) -> StepResult | None:
+        return self.state.run_ui(step_index, events)
+
+    def reset(self) -> None:
+        return
 
 
 class FakeSession(ISession):
@@ -92,6 +138,8 @@ class FakeSession(ISession):
 
     def init(self) -> None:
         self._log.record("session.init")
+        self.register_ui_loop(FakeUILoop, state=self)
+        self.register_model_loop(FakeModelLoop, state=self)
 
     @property
     def session_desc(self) -> SessionDesc:
@@ -106,13 +154,27 @@ class FakeSession(ISession):
             self._release_writes.set()
         return StepResult(
             step_index=step_index,
-            output=torch.zeros((1, 3, 1, 1, 1), dtype=torch.float32),
+            output=torch.full((1, 3, 1, 1, 1), step_index, dtype=torch.float32),
             frame_count=1,
             output_layout=self._session_desc.output_layout,
         )
 
-    def step_ui(self, events: UserInputEvents) -> None:
-        self._log.record("session.step_ui")
+    def run_ui(self, step_index: int, events: UserInputEvents) -> StepResult | None:
+        del events
+        self._log.record("ui_loop.step")
+        frame = self._presentation_manager.presented_frame(0)
+        if frame is None:
+            return None
+        return StepResult(
+            step_index=step_index,
+            output=frame.unsqueeze(0).unsqueeze(2),
+            frame_count=1,
+            output_layout=self.session_desc.output_layout,
+            metrics={"ui_ms": 0.25},
+        )
+
+    def is_finished(self) -> bool:
+        return False
 
     def reset(self) -> None:
         self._log.record("session.reset")
@@ -121,6 +183,45 @@ class FakeSession(ISession):
         self._log.record("session.close")
         if self._fail_to_close:
             raise RuntimeError("session close failed")
+
+
+def test_registration_attaches_loop_lifecycle_events() -> None:
+    session = FakeSession(_session_desc(), CallLog())
+
+    session.init()
+
+    assert session.model_loop._shutdown_event is session._shutdown_event
+    assert session.ui_loop._shutdown_event is session._shutdown_event
+    assert session.model_loop._failure_queue is session._failure_queue
+    assert session.ui_loop._failure_queue is session._failure_queue
+
+
+def test_session_shutdown_closes_every_registered_loop() -> None:
+    closed: list[str] = []
+
+    class FailingModelLoop(FakeModelLoop):
+        def close(self) -> None:
+            closed.append("model")
+            raise RuntimeError("model close failed")
+
+    class ClosingUILoop(FakeUILoop):
+        def close(self) -> None:
+            closed.append("ui")
+
+    class ShutdownSession(FakeSession):
+        def init(self) -> None:
+            self.register_model_loop(FailingModelLoop, state=self)
+            self.register_ui_loop(ClosingUILoop, state=self)
+
+    session = ShutdownSession(_session_desc(), CallLog())
+    session.init()
+
+    failures = session._shutdown_registered_loops()
+
+    assert closed == ["model", "ui"]
+    assert len(failures) == 1
+    assert str(failures[0]) == "model close failed"
+    assert session._shutdown_event.is_set()
 
 
 class FiniteSession(FakeSession):
@@ -216,11 +317,19 @@ class RecordingClientWindow(IClientWindow):
             raise RuntimeError("close failed")
 
 
-def _session_desc() -> SessionDesc:
+def _session_desc(
+    *,
+    backpressure_mode: BackpressureMode = BackpressureMode.BLOCK,
+    presentation_mode: PresentationMode = PresentationMode.ONLY_PRESENT_NEW,
+    ui_fps: int = 100,
+    model_fps: int = 1,
+) -> SessionDesc:
     return SessionDesc(
         output_layout=VideoTensorLayout.bcthw,
-        frames_per_second_for_ui=100,
-        frames_per_second_for_step=1,
+        backpressure_mode=backpressure_mode,
+        presentation_mode=presentation_mode,
+        frames_per_second_for_ui=ui_fps,
+        frames_per_second_for_step=model_fps,
         video_width=1,
         video_height=1,
     )
@@ -231,7 +340,9 @@ def _key_event() -> UserInputEvents:
         [
             UserInputEvent(
                 timestamp=uint64(0),
-                event_data=KeyboardUserInputEventData(key="a", pressed=True),
+                event_data=KeyboardUserInputEventData(
+                    key="a", state=KeyboardInputState.PRESSED
+                ),
             )
         ]
     )
@@ -249,6 +360,7 @@ def test_run_session_presents_every_step_in_order() -> None:
     run_session(session, window, steps=3)
 
     assert [result.step_index for result in window.results] == [0, 1, 2]
+    assert window.results[-1] is session.ui_loop.latest_result
     steps = [call for call in log.calls if call.startswith("session.step(")]
     assert steps == ["session.step(0)", "session.step(1)", "session.step(2)"]
 
@@ -274,21 +386,163 @@ def test_run_session_touches_the_window_only_from_the_io_thread() -> None:
 
     run_session(session, window, steps=2)
 
-    # A native window has to be pumped by the thread that opened it.
+    # All window calls stay on the thread that called run_session.
+    io_thread_name = threading.current_thread().name
     for call in ("window.open", "window.get_user_input_events", "window.close"):
-        assert log.threads_for(call) == {_IO_THREAD_NAME}
-    assert log.threads_for("window.write(0)") == {_IO_THREAD_NAME}
+        assert log.threads_for(call) == {io_thread_name}
+    assert log.threads_for("window.write(0)") == {io_thread_name}
 
 
-def test_run_session_calls_step_ui_on_the_io_thread() -> None:
+def test_run_session_calls_ui_run_on_the_io_thread() -> None:
     log = CallLog()
     session = FakeSession(_session_desc(), log)
     window = RecordingClientWindow(log)
 
     run_session(session, window, steps=2)
 
-    assert log.threads_for("session.step_ui") == {_IO_THREAD_NAME}
-    assert log.threads_for("session.step(0)") == {threading.current_thread().name}
+    assert log.threads_for("ui_loop.step") == {threading.current_thread().name}
+    assert log.threads_for("session.step(0)") == {_STEP_THREAD_NAME}
+
+
+def test_each_message_queue_runs_on_its_owning_thread() -> None:
+    log = CallLog()
+
+    class MessageSession(FakeSession):
+        def init(self) -> None:
+            super().init()
+
+            def model_message(state: FakeSession) -> None:
+                state._log.record("model_loop.message")
+                invoke_async(
+                    self.model_loop,
+                    lambda owner: owner._log.record("model_loop.self_message"),
+                )
+
+            invoke_async(
+                self.ui_loop, lambda state: state._log.record("ui_loop.message")
+            )
+            invoke_async(self.model_loop, model_message)
+
+    run_session(
+        MessageSession(_session_desc(), log), RecordingClientWindow(log), steps=2
+    )
+
+    assert log.threads_for("ui_loop.message") == {threading.current_thread().name}
+    assert log.threads_for("model_loop.message") == {_STEP_THREAD_NAME}
+    assert log.threads_for("model_loop.self_message") == {_STEP_THREAD_NAME}
+    assert log.calls.index("model_loop.self_message") > log.calls.index(
+        "session.step(0)"
+    )
+
+
+def test_default_ui_composites_channels_and_holds_the_latest_frame() -> None:
+    manager = PresentationManager()
+    colors = (
+        torch.tensor([0.0, 0.0, 0.0]),
+        torch.tensor([0.0, 1.0, 0.0, 0.5]),
+        torch.tensor([1.0, 0.0, 0.0, 0.5]),
+    )
+    manager.publish(
+        0,
+        [
+            StepResult(
+                step_index=0,
+                output=color.reshape(1, -1, 1, 1),
+                frame_count=1,
+                output_layout=VideoTensorLayout.tchw,
+            )
+            for color in colors
+        ],
+    )
+    ui = BlitModelOutputToScreenLoop()
+    ui.register_session_ui_loop_objects(
+        output_layout=VideoTensorLayout.tchw,
+        presentation_manager=manager,
+    )
+
+    assert manager.advance(0)[0]
+    first = ui.step(0, UserInputEvents([]))
+    assert first is not None
+    assert first.output[0, :, 0, 0].tolist() == [0.5, 0.25, 0.0]
+    assert not manager.advance(0)[0]
+    held = ui.step(1, UserInputEvents([]))
+    assert held is not None
+    assert torch.equal(held.output, first.output)
+    assert not manager.advance(1)[0]
+    assert ui.step(2, UserInputEvents([])) is None
+
+
+def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
+    log = CallLog()
+
+    class MultiFrameSession(FakeSession):
+        def step(self, step_index: int, events: UserInputEvents) -> StepResult:
+            del events
+            self._log.record(f"session.step({step_index})")
+            return StepResult(
+                step_index=step_index,
+                output=torch.arange(6, dtype=torch.float32).reshape(1, 3, 2, 1, 1),
+                frame_count=2,
+                output_layout=self.session_desc.output_layout,
+                metrics={"total_ms": 1.5},
+            )
+
+    class RecordingMetricsSink:
+        def __init__(self) -> None:
+            self.results: list[StepResult] = []
+
+        def open(self, session_desc: SessionDesc) -> None:
+            del session_desc
+
+        def write(self, result: StepResult) -> None:
+            self.results.append(result)
+
+        def close(self) -> None:
+            return
+
+    window = RecordingClientWindow(log)
+    metrics = RecordingMetricsSink()
+    run_session(
+        MultiFrameSession(_session_desc(), log),
+        window,
+        metrics_output_sink=metrics,
+        steps=1,
+    )
+
+    assert [result.frame_count for result in window.results] == [1, 1]
+    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == [0, 1]
+    assert [result.metrics for result in window.results] == [
+        {"ui_ms": 0.25},
+        {"ui_ms": 0.25},
+    ]
+    assert len(metrics.results) == 1
+    assert metrics.results[0].metrics == {"total_ms": 1.5}
+
+
+def test_drop_oldest_preempts_the_rest_of_a_stale_chunk() -> None:
+    manager = PresentationManager()
+    manager.configure(
+        max_pending=1,
+        backpressure_mode=BackpressureMode.DROP_OLDEST,
+        stop=threading.Event(),
+        put_timeout=0.01,
+    )
+
+    def result(step_index: int, frames: int) -> StepResult:
+        return StepResult(
+            step_index=step_index,
+            output=torch.full((frames, 3, 1, 1), float(step_index)),
+            frame_count=frames,
+            output_layout=VideoTensorLayout.tchw,
+        )
+
+    manager.publish(0, [result(0, 2)])
+    assert manager.advance(0)[0]
+    manager.publish(0, [result(1, 1)])
+    assert manager.advance(0)[0]
+    newest = manager.presented_frame(0)
+    assert newest is not None
+    assert newest[0, 0, 0] == 1
 
 
 def test_run_session_opens_window_with_the_resolved_session_desc() -> None:
@@ -333,7 +587,7 @@ def test_run_session_resets_the_session_and_the_step_index() -> None:
 
     run_session(session, window, steps=2)
 
-    # step_ui is the I/O thread's and can land anywhere among these.
+    # Ignore UI calls when checking the model thread's order.
     calls = [call for call in log.calls if call.startswith("session.reset")] + [
         call for call in log.calls if call.startswith("session.step(")
     ]
@@ -424,7 +678,7 @@ def test_run_session_gives_the_step_after_a_reset_the_whole_batch() -> None:
     assert held_key in session.observed_events[0].get_events()
 
 
-def test_run_session_keeps_the_last_result_when_a_reset_arrives_too_late() -> None:
+def test_run_session_keeps_polling_while_the_final_result_is_pending() -> None:
     log = CallLog()
     session = FakeSession(_session_desc(), log)
     window = RecordingClientWindow(
@@ -434,9 +688,8 @@ def test_run_session_keeps_the_last_result_when_a_reset_arrives_too_late() -> No
 
     run_session(session, window, steps=1)
 
-    # A reset the run never acts on cannot cost it the result it did finish, so
-    # the loop stops polling once the run has stopped.
-    assert [result.step_index for result in window.results] == [0]
+    # The reset arrives before the queued frame is shown, so that frame is dropped.
+    assert window.results == []
 
 
 def test_run_session_drops_a_result_the_reset_interrupted() -> None:
@@ -475,36 +728,78 @@ def test_run_session_drops_a_result_the_reset_interrupted() -> None:
     assert [result.step_index for result in window.results] == [0]
 
 
-def test_run_session_presents_every_result_when_blocking() -> None:
+def test_equality_eval_preserves_every_frame_when_model_is_faster() -> None:
     log = CallLog()
-    session = FakeSession(_session_desc(), log)
+    session = FakeSession(_session_desc(ui_fps=30, model_fps=10_000), log)
     window = RecordingClientWindow(log)
 
-    # Room for one result and three more coming, so generation has to wait for
-    # the window rather than run ahead of it.
-    run_session(session, window, steps=4, max_pending=1, when_full=WhenFull.BLOCK)
+    run_session(session, window, steps=4, max_pending=1)
 
     assert [result.step_index for result in window.results] == [0, 1, 2, 3]
+    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == [
+        0,
+        1,
+        2,
+        3,
+    ]
+
+
+def test_ONLY_PRESENT_NEW_runs_ui_once_per_new_frame() -> None:
+    log = CallLog()
+    session = FakeSession(_session_desc(ui_fps=1_000, model_fps=20), log)
+    window = RecordingClientWindow(log)
+    run_session(session, window, steps=3)
+
+    assert log.calls.count("ui_loop.step") == 3
+    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == [
+        0,
+        1,
+        2,
+    ]
+
+
+def test_only_present_newest_runs_ui_eagerly_when_ui_is_faster() -> None:
+    log = CallLog()
+    session = FakeSession(
+        _session_desc(
+            presentation_mode=PresentationMode.ONLY_PRESENT_NEWEST,
+            ui_fps=1_000,
+            model_fps=20,
+        ),
+        log,
+    )
+    window = RecordingClientWindow(log)
+
+    run_session(session, window, steps=3)
+
+    presented = [result.output[0, 0, 0, 0, 0].item() for result in window.results]
+    assert presented == sorted(presented)
+    assert len(presented) > 3
+    assert presented[-1] == 2
 
 
 def test_run_session_drops_the_oldest_waiting_result() -> None:
     log = CallLog()
+
     # Hold the window until every step is generated, so which results are dropped
     # does not depend on how the two threads happen to be scheduled.
     generated = threading.Event()
+    drop_oldest_desc = _session_desc(
+        backpressure_mode=BackpressureMode.DROP_OLDEST,
+    )
     session = FakeSession(
-        _session_desc(), log, release_writes=generated, release_writes_at=3
+        drop_oldest_desc, log, release_writes=generated, release_writes_at=3
     )
     window = RecordingClientWindow(log, hold_writes=generated)
 
-    run_session(session, window, steps=4, max_pending=1, when_full=WhenFull.DROP_OLDEST)
+    run_session(session, window, steps=4, max_pending=1)
 
     presented = [result.step_index for result in window.results]
     # Room for one result and four generated behind a window that cannot write
     # until the end, so what is stale is lost and the newest always arrives.
     assert presented == sorted(presented)
     assert len(presented) < 4
-    assert presented[-1] == 3
+    assert window.results[-1].output[0, 0, 0, 0, 0].item() == 3
 
 
 def test_run_session_discards_results_generated_before_a_reset(
