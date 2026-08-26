@@ -4,23 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo ""
-echo "========== OmniDreams Interactive-Drive (Game Mode + High Quality) =========="
+echo "========== OmniDreams WebRTC Server (High Quality) =========="
 echo "Directory: $SCRIPT_DIR"
-echo "Starting with physics simulation and high-quality rendering..."
+echo "Starting WebRTC server..."
 echo ""
 echo "Settings:"
-echo "  Game Mode: Enabled (physics, collisions, vehicle limits)"
-echo "  Resolution: 2560x1440"
-echo "  Frame Rate: 60 fps"
+echo "  Resolution: 1920x1080"
+echo "  Frame Rate: 30 fps"
+echo "  Bitrate: 12 Mbps"
+echo "  Post-Processing: RTX Super Resolution"
 echo ""
-echo "Command:"
-echo "uv run --python 3.12 --package flashdreams-omnidreams interactive-drive"
-echo "  --game-mode --width 2560 --height 1440 --fps 60"
+echo "Access: http://10.74.11.118:8082/request_session"
 echo ""
 
 cd "$SCRIPT_DIR"
-uv run --python 3.12 --package flashdreams-omnidreams python -m omnidreams.interactive_drive.cli \
-  --game-mode --width 2560 --height 1440 --fps 60
+uv run --active --python 3.12 --package flashdreams-omnidreams flashdreams-run omnidreams webrtc \
+  --video-width 1920 --video-height 1080 --fps 30 \
+  --encoder_bitrate_bps 12000000 --postprocess-preset flashvsr-v1.1-sparse-2.0
 
 echo ""
 echo "========== Application Closed =========="
