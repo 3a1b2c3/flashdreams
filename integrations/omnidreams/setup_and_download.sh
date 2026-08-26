@@ -81,19 +81,19 @@ if [ $SKIP_DOWNLOAD -eq 0 ]; then
 
   # Download models (model repo)
   echo "Downloading nvidia/omni-dreams-models..."
-  python -m huggingface_hub download nvidia/omni-dreams-models --repo-type model
+  python -c "from huggingface_hub import snapshot_download; snapshot_download('nvidia/omni-dreams-models', repo_type='model')"
   echo "Models downloaded successfully"
   echo ""
 
   # Download samples (dataset repo)
   echo "Downloading nvidia/omni-dreams-samples..."
-  python -m huggingface_hub download nvidia/omni-dreams-samples --repo-type dataset
+  python -c "from huggingface_hub import snapshot_download; snapshot_download('nvidia/omni-dreams-samples', repo_type='dataset')"
   echo "Samples downloaded successfully"
   echo ""
 
   # Download scenes (dataset repo)
   echo "Downloading nvidia/omni-dreams-scenes..."
-  python -m huggingface_hub download nvidia/omni-dreams-scenes --repo-type dataset
+  python -c "from huggingface_hub import snapshot_download; snapshot_download('nvidia/omni-dreams-scenes', repo_type='dataset')"
   echo "Scenes downloaded successfully"
   echo ""
 else
