@@ -14,7 +14,7 @@ echo "  Resolution: 2560x1440"
 echo "  Frame Rate: 60 fps"
 echo ""
 echo "Command:"
-echo "uv run --python 3.12 --package flashdreams-omnidreams interactive-drive \"
+echo "uv run --python 3.12 --package flashdreams-omnidreams interactive-drive"
 echo "  --game-mode --width 2560 --height 1440 --fps 60"
 echo ""
 
