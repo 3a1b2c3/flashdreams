@@ -45,22 +45,17 @@ fi
 echo ""
 echo "[2/4] Installing/syncing dependencies..."
 
-# Find or use uv (fallback to uvx if uv not installed)
-if command -v uv &> /dev/null; then
-  UV_EXE="uv"
-  echo "Found uv: $(which uv)"
-elif command -v uvx &> /dev/null; then
-  echo "uv not found, using uvx instead"
-  UV_EXE="uvx --from uv"
-else
-  echo "ERROR: Neither 'uv' nor 'uvx' found"
-  echo "       Install with: pip install uv"
-  echo "       Or use uvx from Python: python -m pip install --user uv"
-  exit 1
+# Auto-install uv if missing
+if ! command -v uv &> /dev/null; then
+  echo "Installing uv..."
+  pip install uv
 fi
+UV_EXE="uv"
 
 # Sync dependencies with uv
 $UV_EXE sync --package flashdreams-omnidreams --extra interactive-drive
+# Ensure huggingface-hub is installed
+pip install huggingface-hub
 echo "Dependencies synced successfully"
 echo ""
 
@@ -86,19 +81,19 @@ if [ $SKIP_DOWNLOAD -eq 0 ]; then
 
   # Download models (model repo)
   echo "Downloading nvidia/omni-dreams-models..."
-  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-models --repo-type model
+  huggingface-hub hf download nvidia/omni-dreams-models --repo-type model
   echo "Models downloaded successfully"
   echo ""
 
   # Download samples (dataset repo)
   echo "Downloading nvidia/omni-dreams-samples..."
-  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-samples --repo-type dataset
+  huggingface-hub hf download nvidia/omni-dreams-samples --repo-type dataset
   echo "Samples downloaded successfully"
   echo ""
 
   # Download scenes (dataset repo)
   echo "Downloading nvidia/omni-dreams-scenes..."
-  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-scenes --repo-type dataset
+  huggingface-hub hf download nvidia/omni-dreams-scenes --repo-type dataset
   echo "Scenes downloaded successfully"
   echo ""
 else
