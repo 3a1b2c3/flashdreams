@@ -24,3 +24,4 @@ uv run --python 3.12 --package flashdreams-omnidreams python -m omnidreams.inter
 
 echo ""
 echo "========== Application Closed =========="
+
