@@ -10,7 +10,7 @@ echo "Directory: $SCRIPT_DIR"
 echo "Starting with physics simulation and collisions..."
 echo ""
 
-uv run --python 3.12 --package flashdreams-omnidreams interactive-drive --game-mode --width 2560 --height 1440 --fps 60
+python -m omnidreams.interactive_drive.cli --game-mode --width 2560 --height 1440 --fps 60
 
 echo ""
 echo "========== Application Closed =========="
