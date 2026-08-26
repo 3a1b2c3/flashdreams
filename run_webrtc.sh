@@ -19,7 +19,7 @@ echo "  --game-mode --width 2560 --height 1440 --fps 60"
 echo ""
 
 cd "$SCRIPT_DIR"
-uv run --python 3.12 --package flashdreams-omnidreams interactive-drive \
+uv run --python 3.12 --package flashdreams-omnidreams python -m omnidreams.interactive_drive.cli \
   --game-mode --width 2560 --height 1440 --fps 60
 
 echo ""
