@@ -18,9 +18,7 @@ echo "Access: http://10.74.11.118:8082/request_session"
 echo ""
 
 cd "$SCRIPT_DIR"
-uv run --active --python 3.12 --package flashdreams-omnidreams flashdreams-run omnidreams webrtc \
-  --video-width 1920 --video-height 1080 --fps 30 \
-  --encoder_bitrate_bps 12000000 --postprocess-preset flashvsr-v1.1-sparse-2.0
+uv run --active python -m omnidreams.webrtc.server
 
 echo ""
 echo "========== Application Closed =========="
