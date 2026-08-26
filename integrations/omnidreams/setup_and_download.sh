@@ -86,19 +86,19 @@ if [ $SKIP_DOWNLOAD -eq 0 ]; then
 
   # Download models (model repo)
   echo "Downloading nvidia/omni-dreams-models..."
-  $UV_EXE run --from huggingface_hub hf download nvidia/omni-dreams-models --repo-type model
+  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-models --repo-type model
   echo "Models downloaded successfully"
   echo ""
 
   # Download samples (dataset repo)
   echo "Downloading nvidia/omni-dreams-samples..."
-  $UV_EXE run --from huggingface_hub hf download nvidia/omni-dreams-samples --repo-type dataset
+  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-samples --repo-type dataset
   echo "Samples downloaded successfully"
   echo ""
 
   # Download scenes (dataset repo)
   echo "Downloading nvidia/omni-dreams-scenes..."
-  $UV_EXE run --from huggingface_hub hf download nvidia/omni-dreams-scenes --repo-type dataset
+  $UV_EXE run huggingface-hub hf download nvidia/omni-dreams-scenes --repo-type dataset
   echo "Scenes downloaded successfully"
   echo ""
 else

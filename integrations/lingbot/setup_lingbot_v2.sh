@@ -41,11 +41,17 @@ fi
 echo ""
 echo "[2/3] Installing/syncing dependencies..."
 
-# Find uv
+# Find or use uv (fallback to uvx if uv not installed)
 if command -v uv &> /dev/null; then
   UV_EXE="uv"
+  echo "Found uv: $(which uv)"
+elif command -v uvx &> /dev/null; then
+  echo "uv not found, using uvx instead"
+  UV_EXE="uvx --from uv"
 else
-  echo "ERROR: uv not found. Install with: pip install uv"
+  echo "ERROR: Neither 'uv' nor 'uvx' found"
+  echo "       Install with: pip install uv"
+  echo "       Or use uvx from Python: python -m pip install --user uv"
   exit 1
 fi
 

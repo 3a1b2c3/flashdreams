@@ -51,7 +51,14 @@ if exist "%REPO_ROOT%\uv.exe" (
 )
 
 if not defined UV_EXE (
-  echo ERROR: uv not found. Install with: pip install uv
+  echo uv not found, attempting to use uvx instead...
+  for /f "tokens=*" %%i in ('where uvx 2^>nul') do set UV_EXE=%%i --from uv
+)
+
+if not defined UV_EXE (
+  echo ERROR: Neither 'uv' nor 'uvx' found in PATH
+  echo        Install with: pip install uv
+  echo        Or: python -m pip install --user uv
   exit /b 1
 )
 
