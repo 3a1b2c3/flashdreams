@@ -34,8 +34,8 @@ if [ ! -f "$IMAGE_PATH" ]; then
     exit 1
 fi
 
-# Build command (no intrinsics needed)
-CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 --image-path $IMAGE_PATH --world-scale $WORLD_SCALE"
+# Build command (args after -- go to the app)
+CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 -- --image-path $IMAGE_PATH --world-scale $WORLD_SCALE"
 
 # Print connection options BEFORE starting server
 echo "=========================================="
