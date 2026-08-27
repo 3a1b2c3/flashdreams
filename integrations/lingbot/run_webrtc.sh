@@ -50,14 +50,12 @@ echo ""
 
 # Run server using lingbot.demo app
 python << PYEOF
-import sys
-from lingbot.demo.app import parse_args, run_demo
+from lingbot.demo.app import main
 
-args = parse_args([
+main([
     "webrtc",
     "--host", "$HOST",
     "--port", "$PORT",
     "--example-idx", "$EXAMPLE_IDX",
 ])
-run_demo(args)
 PYEOF
