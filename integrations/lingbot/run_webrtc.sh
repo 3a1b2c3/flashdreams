@@ -16,9 +16,9 @@ echo "=========================================="
 echo ""
 
 # Parse arguments
-EXAMPLE_IDX="${1:-0}"
-HOST="${2:-0.0.0.0}"
-PORT="${3:-8089}"
+HOST="${1:-0.0.0.0}"
+PORT="${2:-8089}"
+EXAMPLE_IDX="${3:-0}"
 
 echo "=========================================="
 echo "CONNECTION OPTIONS (Choose one)"
@@ -48,7 +48,7 @@ echo "Starting WebRTC server..."
 echo "=========================================="
 echo ""
 
-# Run server
-uv run flashdreams-run lingbot-world-v2-14b-causal-fast \
-  --example-idx "$EXAMPLE_IDX" \
-  --host "$HOST" --port "$PORT"
+# Run server using lingbot.demo CLI
+python -m lingbot.demo webrtc \
+  --host "$HOST" --port "$PORT" \
+  --example-idx "$EXAMPLE_IDX"
