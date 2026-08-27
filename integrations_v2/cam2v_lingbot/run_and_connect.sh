@@ -17,8 +17,20 @@ echo ""
 echo "Starting server on port 8089..."
 echo ""
 
-# Default to example-data mode
-CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 -- --example-data"
+# Default to fdse data (requires poses for streaming)
+IMAGE_PATH="${1:-/workspace/data/isekai/fdse/frame_0000.png}"
+POSE_PATH="${2:-/workspace/data/isekai/fdse/poses.npy}"
+INTRINSIC_PATH="${3:-/workspace/data/isekai/fdse/intrinsics.npy}"
+WORLD_SCALE="${4:-2000}"
+
+# Convert Windows paths to WSL paths if needed
+if [[ "$IMAGE_PATH" == C:\\* ]]; then
+    IMAGE_PATH="${IMAGE_PATH//C:\\workspace/\/workspace}"
+    IMAGE_PATH="${IMAGE_PATH//\\/\/}"
+fi
+
+# Build command with poses for streaming
+CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 -- --image-path $IMAGE_PATH --pose-path $POSE_PATH --intrinsic-path $INTRINSIC_PATH --world-scale $WORLD_SCALE"
 
 # Print connection options BEFORE starting server
 echo "=========================================="
