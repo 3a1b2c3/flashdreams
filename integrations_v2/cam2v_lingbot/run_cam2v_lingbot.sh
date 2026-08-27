@@ -10,21 +10,20 @@ echo "Running cam2v_lingbot (LingBot World v2)"
 echo "=========================================="
 echo ""
 
-# Check uv
-if ! command -v uv &>/dev/null; then
-    echo "ERROR: uv not found. Install with: pip install uv"
+# Check python
+if ! command -v python &>/dev/null; then
+    echo "ERROR: Python not found"
     exit 1
 fi
 
-# Sync workspace
-echo "[1/2] Syncing dependencies..."
-uv sync --package flashdreams-cam2v-lingbot --inexact
+# Install package
+echo "[1/2] Installing cam2v_lingbot..."
+pip install -e .
 
 # Run app
 echo "[2/2] Starting WebRTC server..."
 echo ""
-uv run --no-sync flashdreams-run-v2 cam2v-lingbot \
-    --mode webrtc --host 0.0.0.0 --port 8089 -- --example-data
+flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 -- --example-data
 
 echo ""
 echo "=========================================="
