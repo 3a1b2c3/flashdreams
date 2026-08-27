@@ -17,36 +17,25 @@ echo ""
 echo "Starting server on port 8089..."
 echo ""
 
-# Parse arguments (defaults to omnidreams screenshot + fdse intrinsics)
+# Parse arguments
 IMAGE_PATH="${1:-../../integrations/omnidreams/omnidreams/interactive_drive/screenshot.jpg}"
-INTRINSIC_PATH="${2:-../../data/isekai/fdse/intrinsics.npy}"
-WORLD_SCALE="${3:-1000}"
+WORLD_SCALE="${2:-1000}"
 
-# Convert Windows paths to WSL paths if needed (for absolute paths only)
+# Convert Windows paths to WSL paths if needed
 if [[ "$IMAGE_PATH" == C:\\* ]]; then
     IMAGE_PATH="${IMAGE_PATH//C:\\workspace/\/workspace}"
     IMAGE_PATH="${IMAGE_PATH//\\/\/}"
 fi
-if [[ "$INTRINSIC_PATH" == C:\\* ]]; then
-    INTRINSIC_PATH="${INTRINSIC_PATH//C:\\workspace/\/workspace}"
-    INTRINSIC_PATH="${INTRINSIC_PATH//\\/\/}"
-fi
 
-# Check if files exist
+# Check if image exists
 if [ ! -f "$IMAGE_PATH" ]; then
     echo "ERROR: Image not found: $IMAGE_PATH"
-    echo "Usage: bash run_and_connect.sh [image] [intrinsics] [world_scale]"
+    echo "Usage: bash run_and_connect.sh [image] [world_scale]"
     exit 1
 fi
 
-if [ ! -f "$INTRINSIC_PATH" ]; then
-    echo "ERROR: Intrinsics not found: $INTRINSIC_PATH"
-    echo "Usage: bash run_and_connect.sh [image] [intrinsics] [world_scale]"
-    exit 1
-fi
-
-# Build command
-CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 --image-path $IMAGE_PATH --intrinsic-path $INTRINSIC_PATH --world-scale $WORLD_SCALE"
+# Build command (no intrinsics needed)
+CMD="uv run --no-sync flashdreams-run-v2 cam2v-lingbot --mode webrtc --host 0.0.0.0 --port 8089 --image-path $IMAGE_PATH --world-scale $WORLD_SCALE"
 
 # Print connection options BEFORE starting server
 echo "=========================================="
