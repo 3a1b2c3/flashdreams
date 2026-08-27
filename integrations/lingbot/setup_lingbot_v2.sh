@@ -41,23 +41,12 @@ fi
 echo ""
 echo "[2/3] Installing/syncing dependencies..."
 
-# Find or use uv (fallback to uvx if uv not installed)
-if command -v uv &> /dev/null; then
-  UV_EXE="uv"
-  echo "Found uv: $(which uv)"
-elif command -v uvx &> /dev/null; then
-  echo "uv not found, using uvx instead"
-  UV_EXE="uvx --from uv"
-else
-  echo "ERROR: Neither 'uv' nor 'uvx' found"
-  echo "       Install with: pip install uv"
-  echo "       Or use uvx from Python: python -m pip install --user uv"
-  exit 1
-fi
-
-# Sync dependencies with uv
-$UV_EXE sync --package flashdreams-lingbot
-echo "Dependencies synced successfully"
+# Install dependencies with pip
+echo "Installing dependencies..."
+pip install --upgrade pip setuptools wheel
+pip install -r "$REPO_ROOT/requirements.txt" 2>/dev/null || echo "Note: requirements.txt not found, skipping"
+pip install -e "$REPO_ROOT" 2>/dev/null || echo "Note: editable install not available"
+echo "Dependencies installed successfully"
 echo ""
 
 # Step 2: Download checkpoint and example data
@@ -82,13 +71,13 @@ if [ $SKIP_DOWNLOAD -eq 0 ]; then
 
   # Download v2 checkpoint
   echo "Downloading robbyant/lingbot-world-v2-14b-causal-fast checkpoint..."
-  $UV_EXE run --from huggingface_hub hf download robbyant/lingbot-world-v2-14b-causal-fast --repo-type model
+  python -m huggingface_hub download robbyant/lingbot-world-v2-14b-causal-fast --repo-type model
   echo "Checkpoint downloaded successfully (~200GB)"
   echo ""
 
   # Download example data from GitHub
   echo "Downloading example data from GitHub..."
-  if $UV_EXE run --from huggingface_hub hf download --repo-type dataset robbyant/lingbot-world-v2-examples; then
+  if python -m huggingface_hub download --repo-type dataset robbyant/lingbot-world-v2-examples; then
     echo "Example data downloaded successfully"
   else
     echo "WARNING: Failed to download example data from HF mirror"
@@ -105,15 +94,15 @@ echo "========== Setup Complete =========="
 echo ""
 echo "Next steps:"
 echo "1. Test inference with example data:"
-echo "   uv run --python 3.12 --package flashdreams-lingbot flashdreams-run \\"
+echo "   python -m flashdreams.lingbot.run \\"
 echo "     lingbot-world-v2-14b-causal-fast mp4 \\"
 echo "     --scenario.example-idx 0 \\"
 echo "     --scenario.total-blocks 10 \\"
 echo "     --output.path outputs/lingbot-v2-demo.mp4"
 echo ""
 echo "2. Or stream with WebRTC:"
-echo "   uv run --python 3.12 --package flashdreams-lingbot flashdreams-run \\"
-echo "     lingbot-world-v2-14b-causal-fast webrtc \\"
+echo "   python -m flashdreams.lingbot.webrtc \\"
+echo "     lingbot-world-v2-14b-causal-fast \\"
 echo "     --host 0.0.0.0 --port 8089 \\"
 echo "     --scenario.example-idx 0"
 echo ""
