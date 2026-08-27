@@ -48,7 +48,16 @@ echo "Starting WebRTC server..."
 echo "=========================================="
 echo ""
 
-# Run server using lingbot.demo CLI
-python -m lingbot.demo webrtc \
-  --host "$HOST" --port "$PORT" \
-  --example-idx "$EXAMPLE_IDX"
+# Run server using lingbot.demo app
+python << PYEOF
+import sys
+from lingbot.demo.app import parse_args, run_demo
+
+args = parse_args([
+    "webrtc",
+    "--host", "$HOST",
+    "--port", "$PORT",
+    "--example-idx", "$EXAMPLE_IDX",
+])
+run_demo(args)
+PYEOF
