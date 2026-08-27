@@ -50,5 +50,5 @@ echo ""
 
 # Run server
 uv run flashdreams-run lingbot-world-v2-14b-causal-fast \
-  --host "$HOST" --port "$PORT" \
-  -- --example-idx "$EXAMPLE_IDX"
+  --example-idx "$EXAMPLE_IDX" \
+  --host "$HOST" --port "$PORT"
