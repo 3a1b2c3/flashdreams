@@ -6,7 +6,7 @@
 import threading
 
 from flashdreams.runtime_v2.user_input_event import (
-    ResetUserInputEventData,
+    ResetUserInputEvent,
     UserInputEvent,
 )
 from flashdreams.runtime_v2.user_input_events import UserInputEvents
@@ -20,7 +20,7 @@ class EventBuffer:
     cursor per registered reader, hands each reader only what it has not seen,
     and drops the prefix they have all passed.
 
-    It also counts resets. Every :class:`ResetUserInputEventData` appended bumps
+    It also counts resets. Every :class:`ResetUserInputEvent` appended bumps
     :attr:`generation`, which the loops and the presentation manager compare
     against their own; that counter is how a reset reaches all of them without
     any of them talking to each other.
@@ -50,8 +50,7 @@ class EventBuffer:
         with self._lock:
             self._events.extend(received)
             self._generation += sum(
-                isinstance(event.get_event_data(), ResetUserInputEventData)
-                for event in received
+                isinstance(event, ResetUserInputEvent) for event in received
             )
 
     def read(self, reader_id: int) -> tuple[UserInputEvents, int]:

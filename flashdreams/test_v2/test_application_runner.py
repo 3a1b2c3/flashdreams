@@ -18,8 +18,7 @@ from flashdreams.runtime_v2.application_runner import ApplicationRunner
 from flashdreams.runtime_v2.session_desc import PresentationMode, SessionDesc
 from flashdreams.runtime_v2.step_result import StepResult
 from flashdreams.runtime_v2.user_input_event import (
-    CloseUserInputEventData,
-    UserInputEvent,
+    CloseUserInputEvent,
 )
 from flashdreams.runtime_v2.user_input_events import UserInputEvents
 from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
@@ -119,9 +118,8 @@ class _Window(IClientWindow):
             self._reported_close = True
             return UserInputEvents(
                 [
-                    UserInputEvent(
+                    CloseUserInputEvent(
                         timestamp=uint64(0),
-                        event_data=CloseUserInputEventData(),
                     )
                 ]
             )

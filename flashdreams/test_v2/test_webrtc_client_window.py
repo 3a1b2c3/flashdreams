@@ -34,10 +34,10 @@ from flashdreams.runtime_v2.serving.webrtc_server import (
 from flashdreams.runtime_v2.session_desc import PresentationMode, SessionDesc
 from flashdreams.runtime_v2.step_result import StepResult
 from flashdreams.runtime_v2.user_input_event import (
-    FocusUserInputEventData,
+    FocusUserInputEvent,
     KeyboardInputState,
-    KeyboardUserInputEventData,
-    MouseUserInputEventData,
+    KeyboardUserInputEvent,
+    MouseUserInputEvent,
 )
 from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 from flashdreams.runtime_v2.webrtc_client_window import WebRTCClientWindow
@@ -144,9 +144,7 @@ async def test_window_buffers_browser_events_until_drained(monkeypatch: Any) -> 
 
         assert len(events) == 4
         keyboard_events = [
-            data
-            for event in events
-            if isinstance(data := event.get_event_data(), KeyboardUserInputEventData)
+            event for event in events if isinstance(event, KeyboardUserInputEvent)
         ]
         assert [(event.key, event.state) for event in keyboard_events] == [
             ("w", KeyboardInputState.PRESSED),
@@ -172,15 +170,11 @@ async def test_window_buffers_browser_events_until_drained(monkeypatch: Any) -> 
         )
         assert events[0].get_timestamp() <= events[1].get_timestamp()
         mouse = next(
-            data
-            for event in events
-            if isinstance(data := event.get_event_data(), MouseUserInputEventData)
+            event for event in events if isinstance(event, MouseUserInputEvent)
         )
         assert (mouse.action, mouse.x, mouse.y) == ("move", 0.25, 0.75)
         focus = next(
-            data
-            for event in events
-            if isinstance(data := event.get_event_data(), FocusUserInputEventData)
+            event for event in events if isinstance(event, FocusUserInputEvent)
         )
         assert focus.focused
         assert window.get_user_input_events().get_events() == []
