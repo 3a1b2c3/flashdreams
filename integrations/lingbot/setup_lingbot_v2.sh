@@ -77,18 +77,28 @@ if [ $SKIP_DOWNLOAD -eq 0 ]; then
 
   # Download v2 checkpoint
   echo "Downloading robbyant/lingbot-world-v2-14b-causal-fast checkpoint..."
-  python -m huggingface_hub download robbyant/lingbot-world-v2-14b-causal-fast --repo-type model
-  echo "Checkpoint downloaded successfully (~200GB)"
+  python << 'PYEOF'
+from huggingface_hub import snapshot_download
+try:
+    snapshot_download("robbyant/lingbot-world-v2-14b-causal-fast", repo_type="model")
+    print("Checkpoint downloaded successfully (~200GB)")
+except Exception as e:
+    print(f"ERROR: {e}")
+    exit(1)
+PYEOF
   echo ""
 
-  # Download example data from GitHub
-  echo "Downloading example data from GitHub..."
-  if python -m huggingface_hub download --repo-type dataset robbyant/lingbot-world-v2-examples; then
-    echo "Example data downloaded successfully"
-  else
-    echo "WARNING: Failed to download example data from HF mirror"
-    echo "         Examples will download on first run instead"
-  fi
+  # Download example data
+  echo "Downloading example data..."
+  python << 'PYEOF'
+from huggingface_hub import snapshot_download
+try:
+    snapshot_download("robbyant/lingbot-world-v2-examples", repo_type="dataset")
+    print("Example data downloaded successfully")
+except Exception as e:
+    print(f"WARNING: Failed to download example data: {e}")
+    print("         Examples will download on first run instead")
+PYEOF
   echo ""
 
 else
