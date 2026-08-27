@@ -44,6 +44,12 @@ echo "[2/3] Installing/syncing dependencies..."
 # Install dependencies with pip
 echo "Installing dependencies..."
 pip install --upgrade pip setuptools wheel
+
+# Install torch for CUDA 13.2 first
+echo "Installing torch for CUDA 13.2..."
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu132
+
+# Install other dependencies
 pip install -r "$REPO_ROOT/requirements.txt" 2>/dev/null || echo "Note: requirements.txt not found, skipping"
 pip install -e "$REPO_ROOT" 2>/dev/null || echo "Note: editable install not available"
 echo "Dependencies installed successfully"
