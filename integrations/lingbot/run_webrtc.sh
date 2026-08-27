@@ -49,7 +49,6 @@ echo "=========================================="
 echo ""
 
 # Run server
-uv run flashdreams-run lingbot-world-v2 \
-  --mode webrtc \
+uv run flashdreams-run lingbot-world-v2-14b-causal-fast \
   --host "$HOST" --port "$PORT" \
   -- --example-idx "$EXAMPLE_IDX"
