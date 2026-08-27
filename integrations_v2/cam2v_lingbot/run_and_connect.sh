@@ -18,7 +18,7 @@ echo "Starting server on port 8089..."
 echo ""
 
 # Parse arguments (defaults to omnidreams screenshot + fdse intrinsics)
-IMAGE_PATH="${1:-../../../integrations/omnidreams/omnidreams/interactive_drive/screenshot.jpg}"
+IMAGE_PATH="${1:-../../integrations/omnidreams/omnidreams/interactive_drive/screenshot.jpg}"
 INTRINSIC_PATH="${2:-../../data/isekai/fdse/intrinsics.npy}"
 WORLD_SCALE="${3:-1000}"
 
