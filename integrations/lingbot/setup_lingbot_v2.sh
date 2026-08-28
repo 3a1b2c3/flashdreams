@@ -19,7 +19,7 @@ find "$FLASHDREAMS_ROOT" -type d -name "*.egg-info" -delete 2>/dev/null || true
 
 # Step 2: Create venv with Python 3.11
 echo "[2/6] Creating Python 3.11 venv..."
-python3.11 -m venv .venv
+/c/Users/kschmid/.local/bin/python3.11 -m venv .venv
 source .venv/bin/activate
 
 # Step 3: Upgrade pip

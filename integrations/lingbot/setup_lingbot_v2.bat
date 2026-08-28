@@ -25,19 +25,22 @@ for %%A in (%*) do (
 
 REM Step 1: Create venv if needed
 if %SKIP_VENV%==0 (
-  echo [1/3] Setting up virtual environment...
+  echo [1/3] Setting up virtual environment with Python 3.11...
   if exist ".venv" (
-    echo Virtual environment already exists
-  ) else (
-    echo Creating new venv...
-    python -m venv .venv
-    if errorlevel 1 (
-      echo ERROR: Failed to create venv
-      exit /b 1
-    )
+    echo Virtual environment already exists, removing...
+    rmdir /s /q .venv
+  )
+  echo Creating new venv with Python 3.11...
+  python3.11 -m venv .venv
+  if errorlevel 1 (
+    echo ERROR: Failed to create venv
+    exit /b 1
   )
   call .venv\Scripts\activate.bat
   echo Virtual environment activated
+  pip install --upgrade pip setuptools wheel
+  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu132
+  pip install sentencepiece scipy transformers==4.56.0
 ) else (
   echo [1/3] Skipping venv setup
 )
@@ -122,14 +125,14 @@ echo ========== Setup Complete ==========
 echo.
 echo Next steps:
 echo 1. Test inference with example data:
-echo    uv run --python 3.12 --package flashdreams-lingbot flashdreams-run ^
+echo    uv run --python 3.11 --package flashdreams-lingbot flashdreams-run ^
 echo      lingbot-world-v2-14b-causal-fast mp4 ^
 echo      --scenario.example-idx 0 ^
 echo      --scenario.total-blocks 10 ^
 echo      --output.path outputs/lingbot-v2-demo.mp4
 echo.
 echo 2. Or stream with WebRTC:
-echo    uv run --python 3.12 --package flashdreams-lingbot flashdreams-run ^
+echo    uv run --python 3.11 --package flashdreams-lingbot flashdreams-run ^
 echo      lingbot-world-v2-14b-causal-fast webrtc ^
 echo      --host 0.0.0.0 --port 8089 ^
 echo      --scenario.example-idx 0
