@@ -599,6 +599,7 @@ class LingbotInferenceRuntime(
         self._base_intrinsics: torch.Tensor | None = None
         self._first_frames: torch.Tensor | None = None
         self._prompt: str | None = None
+        self._pending_user_prompt: str | None = None
         self._base_text_embeddings: torch.Tensor | None = None
         self._event_embeddings: dict[str, torch.Tensor] = {}
         self._prompt_embeddings: dict[str, torch.Tensor] = {}
@@ -1075,6 +1076,7 @@ class LingbotInferenceRuntime(
             self._active_event_id = None
             return {"active_event_id": None}
         if event_id == "user_prompt":
+            # User prompt is handled via input_mapping, not via event embeddings
             return {"active_event_id": None}
         self._replace_rollout_text_embeddings(self._event_embeddings[event_id])
         self._active_event_id = event_id
@@ -1186,13 +1188,22 @@ class LingbotInferenceRuntime(
     def _apply_conditioning_update_sync(self, inputs: InferenceInput) -> None:
         """Apply a text-event prompt swap requested by the mapping."""
         prompt = inputs.global_conditioning.get("prompt")
+        print(f"[PROMPT FLOW] >> ENTERING session._apply_conditioning_update_sync")
+        print(f"  prompt={prompt!r}, current={self._prompt!r}")
         if prompt is None or prompt == self._prompt:
+            print(f"[PROMPT FLOW]   [SKIP: prompt unchanged or None]")
             return
+        print(f"[PROMPT FLOW]   [ACTION: Encoding new prompt]")
         embeddings = self._prompt_embeddings.get(prompt)
         if embeddings is None:
+            print(f"[PROMPT FLOW]   [ENCODE: encoding prompt to embeddings]")
             embeddings = self._encode_text_embeddings_sync([prompt])
+        print(f"[PROMPT FLOW]   [APPLY: calling _replace_rollout_text_embeddings]")
         self._replace_rollout_text_embeddings(embeddings)
         self._prompt = prompt
+        print(f"[PROMPT FLOW] << EXITING session._apply_conditioning_update_sync")
+        print(f"  embeddings shape={embeddings.shape if embeddings is not None else None}")
+        print(f"{'='*80}\n")
         self._active_event_id = next(
             (
                 event_id

@@ -1078,6 +1078,10 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
         event_id = str(payload.get("event_id", payload.get("id", ""))).strip()
         state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
         dynamic_prompt = payload.get("prompt")  # Extract prompt for user_prompt events
+        print(f"\n{'='*80}")
+        print(f"[PROMPT FLOW] >> ENTERING manager._handle_event_message")
+        print(f"  event_id={event_id!r}, state={state!r}")
+        print(f"  prompt={dynamic_prompt!r}")
         clear_states = {"clear", "release", "off", "none"}
         if not event_id and state not in clear_states:
             if channel is not None:
@@ -1104,6 +1108,8 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                 }
                 if dynamic_prompt is not None and not clears:
                     event_payload_dict["prompt"] = dynamic_prompt
+                print(f"[PROMPT FLOW] << EXITING manager, passing to input_mapping:")
+                print(f"  event_payload_dict={event_payload_dict}")
                 event_payload = self._validate_user_event_payload(
                     managed_session=managed_session,
                     event_type="text_event",

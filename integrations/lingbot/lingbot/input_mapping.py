@@ -416,8 +416,12 @@ class LingbotInputMapping:
         step = dict(inference_input.step)
         step[FIELD_CAMERA_TRAJECTORY] = poses
         step[FIELD_CAMERA_INTRINSICS] = intrinsics
+        conditioning = self._text_event_update(canonical_inputs)
+        print(f"[PROMPT FLOW] << EXITING input_mapping.map_step_inputs")
+        print(f"  global_conditioning={conditioning}")
+        print(f"[PROMPT FLOW] >> ENTERING session._step_sync (via InferenceInput)")
         return InferenceInput(
-            global_conditioning=self._text_event_update(canonical_inputs),
+            global_conditioning=conditioning,
             step=step,
             metadata=inference_input.metadata,
         )
@@ -486,12 +490,14 @@ class LingbotInputMapping:
     ) -> Mapping[str, Any]:
         value = canonical_inputs.values.get(TEXT_EVENT.name)
         if value is None:
+            print(f"[PROMPT FLOW] >> ENTERING input_mapping._text_event_update (no TEXT_EVENT)")
             return {}
 
         event_id = value.get("event_id")
         dynamic_prompt = value.get("prompt")  # Direct prompt from UI
 
-        print(f"[DEBUG] Event: event_id={event_id!r}, dynamic_prompt={dynamic_prompt!r}, applied={self._applied_event_id!r}")
+        print(f"[PROMPT FLOW] >> ENTERING input_mapping._text_event_update")
+        print(f"  event_id={event_id!r}, dynamic_prompt={dynamic_prompt!r}")
 
         # Check if this is a repeated event (same event_id as last time)
         if event_id == self._applied_event_id and not dynamic_prompt:
@@ -501,6 +507,7 @@ class LingbotInputMapping:
         if dynamic_prompt:
             # Direct dynamic prompt from prompt bar
             prompt = dynamic_prompt
+            print(f"[PROMPT FLOW]   [PATH: dynamic_prompt selected] prompt={prompt!r}")
         elif event_id is not None:
             if event_id == "user_prompt":
                 # user_prompt without dynamic_prompt - restore base prompt
@@ -522,8 +529,10 @@ class LingbotInputMapping:
             prompt = self._base_prompt
 
         self._applied_event_id = event_id
-        print(f"[DEBUG] Selected prompt: {prompt!r}")
-        return {} if prompt is None else {FIELD_PROMPT: prompt}
+        result = {} if prompt is None else {FIELD_PROMPT: prompt}
+        print(f"[PROMPT FLOW] << EXITING input_mapping._text_event_update")
+        print(f"  result={result}")
+        return result
 
     def set_base_prompt(self, prompt: str) -> None:
         """Record the rollout prompt restored when a text event is cleared."""
