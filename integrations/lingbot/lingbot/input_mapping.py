@@ -491,6 +491,8 @@ class LingbotInputMapping:
         event_id = value.get("event_id")
         dynamic_prompt = value.get("prompt")  # Direct prompt from UI
 
+        print(f"[DEBUG] Event: event_id={event_id!r}, dynamic_prompt={dynamic_prompt!r}, applied={self._applied_event_id!r}")
+
         # Check if this is a repeated event (same event_id as last time)
         if event_id == self._applied_event_id and not dynamic_prompt:
             return {}
@@ -520,6 +522,7 @@ class LingbotInputMapping:
             prompt = self._base_prompt
 
         self._applied_event_id = event_id
+        print(f"[DEBUG] Selected prompt: {prompt!r}")
         return {} if prompt is None else {FIELD_PROMPT: prompt}
 
     def set_base_prompt(self, prompt: str) -> None:
