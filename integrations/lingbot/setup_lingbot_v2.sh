@@ -37,8 +37,8 @@ pip install tyro pydantic fastapi uvicorn pillow numpy gradio websockets
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
 # Step 6: Clear caches
-echo "[6/7] Clearing caches..."
-find "$FLASHDREAMS_ROOT" -type d -name __pycache__ -delete 2>/dev/null || true
+echo "[6/6] Clearing caches..."
+find "$HERE" -type d -name __pycache__ -delete 2>/dev/null || true
 cd "$HERE"
 
 echo ""
