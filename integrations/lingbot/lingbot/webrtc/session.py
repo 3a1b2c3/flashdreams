@@ -1056,7 +1056,7 @@ class LingbotInferenceRuntime(
                 "Event state must be one of trigger, hold, on, clear, release, off."
             )
         event_id = event_id.strip()
-        if event_id not in self._event_embeddings:
+        if event_id != "user_prompt" and event_id not in self._event_embeddings:
             supported = ", ".join(sorted(self._event_embeddings))
             raise ValueError(f"Unknown event_id={event_id!r}. Supported: {supported}")
         return event_id, state
@@ -1073,6 +1073,8 @@ class LingbotInferenceRuntime(
                 raise LingbotRuntimeError("Base prompt embeddings are not ready.")
             self._replace_rollout_text_embeddings(self._base_text_embeddings)
             self._active_event_id = None
+            return {"active_event_id": None}
+        if event_id == "user_prompt":
             return {"active_event_id": None}
         self._replace_rollout_text_embeddings(self._event_embeddings[event_id])
         self._active_event_id = event_id

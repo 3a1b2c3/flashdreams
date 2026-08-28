@@ -78,6 +78,7 @@ function makePromptBar() {
       <input class="promptBarInput" type="text" placeholder="Enter prompt for next generation..." maxlength="500">
       <button class="promptBarSubmit" type="button">Send</button>
     </label>
+    <button class="sceneCardToggleButton" type="button" title="Show/hide initial scene setup">Setup</button>
   `
   return bar
 }
@@ -528,9 +529,16 @@ export default {
     context.slots.controls.append(promptBar)
     promptBarInput = promptBar.querySelector(".promptBarInput")
     const promptBarSubmit = promptBar.querySelector(".promptBarSubmit")
+    const sceneCardToggleButton = promptBar.querySelector(".sceneCardToggleButton")
     bindElements()
     setFirstFrameInputMode("url")
     attachListeners()
+
+    // Toggle Initial Scene panel
+    sceneCardToggleButton.addEventListener("click", () => {
+      sceneCard.hidden = !sceneCard.hidden
+      sceneCardToggleButton.classList.toggle("is-active", !sceneCard.hidden)
+    })
 
     // Prompt bar submit handler
     promptBarSubmit.addEventListener("click", () => {

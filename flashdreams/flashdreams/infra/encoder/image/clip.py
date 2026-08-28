@@ -23,7 +23,7 @@ from typing import Literal, cast
 
 import torch
 from torch import Tensor
-from transformers import BatchFeature, CLIPImageProcessor, CLIPVisionModel
+from transformers import AutoImageProcessor, BatchFeature, CLIPVisionModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from flashdreams.core.io.hf import maybe_download_hf_repo_on_rank0
@@ -74,7 +74,7 @@ class CLIPImageEncoder(Encoder):
         )
         self.image_encoder.eval().requires_grad_(False)
 
-        self.image_processor = CLIPImageProcessor.from_pretrained(
+        self.image_processor = AutoImageProcessor.from_pretrained(
             config.model_id_or_local_path,
             subfolder="image_processor",
             local_files_only=True,
