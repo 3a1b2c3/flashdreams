@@ -50,8 +50,9 @@ Presenting it:
 
 - `blit_model_output_to_screen_loop.py` is the UI loop a session gets when it
   registers none of its own.
-- `slangpy_ui_loop.py` and `slangpy_ui_renderer.py` are the UI loop for
-  applications that draw widgets over the model output.
+- `slangpy_ui_loop.py` and `slangpy_ui_renderer.py` provide retained SlangPy
+  widgets over the model output. `imgui_ui_loop.py` and `imgui_ui_renderer.py`
+  provide immediate Dear ImGui controls rendered through SlangPy.
 - `mp4_client_window.py` and `webrtc_client_window.py` are the two windows.
 - `mp4_output_sink.py`, `metrics_output_sink.py`, `video_encoder.py` and
   `video_tensor.py` are what output is written through.
@@ -154,6 +155,14 @@ The model thread publishes a list of channels per step into a bounded queue
 which walks the frames within the chunk it is already showing before taking
 another off the queue.
 
+When CUDA is available, the default `PresentationManager` creates a stream at
+the device's highest available priority. `run_session` keeps that one stream
+current for the entire UI-thread lifecycle, including session and window
+initialization, input collection, UI rendering, window writes, and cleanup.
+Constructing the manager with an explicit CPU device disables the CUDA stream.
+Stream priority lets short UI work overtake queued lower-priority kernels, but
+does not preempt a kernel that is already executing.
+
 Frame cadence initially uses `frames_per_second_for_step`, then follows the
 throughput of model steps completed over the trailing two seconds. The estimate
 uses time spent inside model steps, so presentation-queue backpressure cannot
@@ -189,6 +198,12 @@ once.
 A UI loop reads model frames through `presented_model_frame` and
 `presented_model_frames`, composites whatever it wants, and returns one
 `StepResult` that `run_session` writes to the window.
+
+The ImGui and SlangPy UI loops prepare the optional model back buffer before
+composition: integer `[0, 255]` frames are normalized to the renderer's
+floating-point range, frames are moved to the renderer's device, and dimensions
+are resized to the rendered overlay. `PresentationManager.composite` then
+enforces matching dimensions and device instead of silently repairing them.
 
 The default UI loop, `BlitModelOutputToScreenLoop`, composites every model
 channel in list order as if they were image layers and reshapes the result into

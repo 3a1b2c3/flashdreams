@@ -663,6 +663,15 @@ def test_default_ui_composites_channels_and_holds_the_latest_frame() -> None:
     assert ui.step(2, UserInputEvents([])) is None
 
 
+def test_composite_rejects_frames_with_different_dimensions() -> None:
+    manager = PresentationManager(device=torch.device("cpu"))
+    bottom = torch.full((3, 2, 3), -1.0)
+    overlay = torch.ones((4, 4, 5))
+
+    with pytest.raises(ValueError, match="same dimensions"):
+        manager.composite(bottom, overlay)
+
+
 def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
     log = CallLog()
 
