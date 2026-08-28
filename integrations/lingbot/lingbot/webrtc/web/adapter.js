@@ -534,6 +534,7 @@ export default {
     promptBarSubmit.addEventListener("click", () => {
       const prompt = promptBarInput.value.trim()
       if (prompt) {
+        console.log(`[FlashDreams WebRTC][client] sending prompt: ${prompt}`)
         // Send dynamic prompt directly (triggers prompt update in backend)
         context.sendCommand({
           type: "event",
@@ -541,6 +542,7 @@ export default {
           state: "trigger",
           prompt: prompt
         }, `prompt: ${prompt.slice(0, 30)}...`)
+        console.log(`[FlashDreams WebRTC][client] prompt sent successfully`)
         promptBarInput.value = ""
       }
     })
