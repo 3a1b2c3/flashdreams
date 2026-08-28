@@ -131,6 +131,13 @@ function makeEventControls() {
   root.innerHTML = `
     <div class="eventButtons"></div>
     <button class="eventButton eventButtonClear" type="button">Clear</button>
+    <div class="promptBar">
+      <label class="promptBarControl">
+        <input class="promptBarInput" type="text" placeholder="Enter prompt..." maxlength="500">
+      </label>
+      <button class="promptBarSubmit" type="button">Send</button>
+      <button class="sceneCardToggleButton" type="button" title="Show/hide initial scene setup">Setup</button>
+    </div>
   `
   return root
 }
@@ -522,14 +529,12 @@ export default {
     preview.setAttribute("aria-hidden", "true")
     sceneCard = makeSceneCard()
     eventControls = makeEventControls()
-    const promptBar = makePromptBar()
     context.slots.stage.append(preview)
     context.slots.panel.append(sceneCard)
     context.slots.controls.append(eventControls)
-    context.slots.controls.append(promptBar)
-    promptBarInput = promptBar.querySelector(".promptBarInput")
-    const promptBarSubmit = promptBar.querySelector(".promptBarSubmit")
-    const sceneCardToggleButton = promptBar.querySelector(".sceneCardToggleButton")
+    promptBarInput = eventControls.querySelector(".promptBarInput")
+    const promptBarSubmit = eventControls.querySelector(".promptBarSubmit")
+    const sceneCardToggleButton = eventControls.querySelector(".sceneCardToggleButton")
     bindElements()
     setFirstFrameInputMode("url")
     attachListeners()
