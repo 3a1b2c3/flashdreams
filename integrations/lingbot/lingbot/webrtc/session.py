@@ -669,7 +669,13 @@ class LingbotInferenceRuntime(
         state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
         event_id, state = self._validate_event_request(event_id=event_id, state=state)
         clears = state in {"clear", "release", "off", "none"}
-        return {"event_id": None if clears else event_id, "state": state}
+
+        # Support dynamic prompts from prompt bar
+        dynamic_prompt = payload.get("prompt")
+        result = {"event_id": None if clears else event_id, "state": state}
+        if dynamic_prompt is not None:
+            result["prompt"] = str(dynamic_prompt).strip()
+        return result
 
     def _build_input_layers_sync(self, text_events: tuple[TextEventSpec, ...]) -> None:
         """Build the canonicalizer and mapping for the current rollout."""

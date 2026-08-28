@@ -484,25 +484,38 @@ class LingbotInputMapping:
         self,
         canonical_inputs: CanonicalInputs,
     ) -> Mapping[str, Any]:
-        if not self._text_event_prompts:
-            return {}
         value = canonical_inputs.values.get(TEXT_EVENT.name)
         if value is None:
             return {}
+
         event_id = value.get("event_id")
-        if event_id == self._applied_event_id:
+        dynamic_prompt = value.get("prompt")  # Direct prompt from UI
+
+        # Check if this is a repeated event (same event_id as last time)
+        if event_id == self._applied_event_id and not dynamic_prompt:
             return {}
-        if event_id is not None and event_id not in self._text_event_prompts:
-            supported = ", ".join(sorted(self._text_event_prompts))
-            raise ValueError(
-                f"Unknown Lingbot text event_id={event_id!r}. Supported: {supported}"
-            )
+
+        # Determine the prompt to use
+        if dynamic_prompt:
+            # Direct dynamic prompt from prompt bar
+            prompt = dynamic_prompt
+        elif event_id is not None:
+            # Lookup in predefined text_event_prompts
+            if not self._text_event_prompts:
+                raise ValueError(
+                    f"Text event_id={event_id!r} specified but no text_events defined"
+                )
+            if event_id not in self._text_event_prompts:
+                supported = ", ".join(sorted(self._text_event_prompts))
+                raise ValueError(
+                    f"Unknown Lingbot text event_id={event_id!r}. Supported: {supported}"
+                )
+            prompt = self._text_event_prompts[event_id]
+        else:
+            # No event_id and no dynamic prompt - restore base prompt
+            prompt = self._base_prompt
+
         self._applied_event_id = event_id
-        prompt = (
-            self._base_prompt
-            if event_id is None
-            else self._text_event_prompts[event_id]
-        )
         return {} if prompt is None else {FIELD_PROMPT: prompt}
 
     def set_base_prompt(self, prompt: str) -> None:

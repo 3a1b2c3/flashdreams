@@ -66,6 +66,21 @@ let addTextEventButton = null
 let eventControls = null
 let eventButtons = null
 let clearEventButton = null
+let promptBarInput = null
+
+function makePromptBar() {
+  const bar = document.createElement("div")
+  bar.className = "promptBar overlayPanel"
+  bar.setAttribute("aria-label", "Prompt Control")
+  bar.innerHTML = `
+    <label class="promptBarControl">
+      <span>Prompt</span>
+      <input class="promptBarInput" type="text" placeholder="Enter prompt for next generation..." maxlength="500">
+      <button class="promptBarSubmit" type="button">Send</button>
+    </label>
+  `
+  return bar
+}
 
 function makeSceneCard() {
   const panel = document.createElement("section")
@@ -506,12 +521,37 @@ export default {
     preview.setAttribute("aria-hidden", "true")
     sceneCard = makeSceneCard()
     eventControls = makeEventControls()
+    const promptBar = makePromptBar()
     context.slots.stage.append(preview)
     context.slots.panel.append(sceneCard)
     context.slots.controls.append(eventControls)
+    context.slots.controls.append(promptBar)
+    promptBarInput = promptBar.querySelector(".promptBarInput")
+    const promptBarSubmit = promptBar.querySelector(".promptBarSubmit")
     bindElements()
     setFirstFrameInputMode("url")
     attachListeners()
+
+    // Prompt bar submit handler
+    promptBarSubmit.addEventListener("click", () => {
+      const prompt = promptBarInput.value.trim()
+      if (prompt) {
+        // Send dynamic prompt directly (triggers prompt update in backend)
+        context.sendCommand({
+          type: "event",
+          event_id: "user_prompt",
+          state: "trigger",
+          prompt: prompt
+        }, `prompt: ${prompt.slice(0, 30)}...`)
+        promptBarInput.value = ""
+      }
+    })
+    promptBarInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        promptBarSubmit.click()
+      }
+    })
+    promptBarInput.addEventListener("focus", context.releaseControls)
     try {
       await loadInitialScene()
     } catch (error) {
