@@ -23,7 +23,7 @@ from typing import Literal, cast
 
 import torch
 from torch import Tensor
-from transformers import AutoImageProcessor, BatchFeature, CLIPVisionModel
+from transformers import CLIPImageProcessor as AutoImageProcessor, BatchFeature, CLIPVisionModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from flashdreams.core.io.hf import maybe_download_hf_repo_on_rank0
