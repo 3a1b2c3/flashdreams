@@ -131,6 +131,7 @@ class TextEventSelection:
         window: TimeWindow,
     ) -> Mapping[str, Any] | None:
         del window
+        result_payload = {"event_id": None, "prompt": None}
         for event in user_inputs.events:
             if event.event_type != "text_event":
                 continue
@@ -145,7 +146,11 @@ class TextEventSelection:
                 self._active_event_id = None
                 continue
             self._active_event_id = str(event_id)
-        return TEXT_EVENT.value({"event_id": self._active_event_id})
+            result_payload["event_id"] = self._active_event_id
+            # Pass through dynamic prompt if present (text field input)
+            if "prompt" in event.payload:
+                result_payload["prompt"] = event.payload.get("prompt")
+        return TEXT_EVENT.value(result_payload)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
