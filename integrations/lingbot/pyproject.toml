@@ -26,7 +26,7 @@ requires-python = ">=3.10"
 dependencies = [
     "flashdreams",
     "flashdreams-cam2v",
-    "transformers>=4.40,<6",
+    "transformers>=4.50,<6",
     "sentencepiece>=0.1.99",
     "aiohttp>=3.9",
     "aiortc>=1.9",

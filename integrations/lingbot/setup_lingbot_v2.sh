@@ -30,12 +30,11 @@ pip install --upgrade pip setuptools wheel
 echo "[4/6] Installing PyTorch with CUDA 13.2..."
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu132
 
-# Step 5: Install flashdreams and all dependencies
+# Step 5: Install all dependencies
 echo "[5/6] Installing dependencies..."
 pip install transformers==4.56.0 sentencepiece scipy
 pip install aiohttp aiortc python-multipart loguru
-cd "$HERE"
-pip install -e .
+pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
 # Step 6: Clear caches
 echo "[6/6] Clearing caches..."
@@ -50,7 +49,7 @@ echo ""
 echo "To run WebRTC server:"
 echo "  cd $HERE"
 echo "  source .venv/bin/activate"
-echo "  export PYTHONPATH=\"/localhome/kschmid/flashdreams/integrations:\$PYTHONPATH\""
+echo "  export PYTHONPATH=\"/localhome/kschmid/flashdreams:/localhome/kschmid/flashdreams/integrations:\$PYTHONPATH\""
 echo "  python -c \"from lingbot.demo.app import main; import sys; sys.argv = ['lingbot', 'webrtc', '--preset-id', 'lingbot-world-v2-14b-causal-fast', '--example-idx', '0']; main()\""
 echo ""
 echo "Server will be available at:"
