@@ -32,7 +32,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Step 5: Install all dependencies
 echo "[5/6] Installing dependencies..."
-pip install transformers==4.56.0 sentencepiece scipy
+pip install transformers==4.40.0 sentencepiece scipy opencv-python
 pip install aiohttp aiortc python-multipart loguru
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
@@ -49,7 +49,7 @@ echo ""
 echo "To run WebRTC server:"
 echo "  cd $HERE"
 echo "  source .venv/bin/activate"
-echo "  export PYTHONPATH=\"/localhome/kschmid/flashdreams:/localhome/kschmid/flashdreams/integrations:\$PYTHONPATH\""
+echo "  export PYTHONPATH=\"/localhome/kschmid/flashdreams:/localhome/kschmid/flashdreams/apps:/localhome/kschmid/flashdreams/integrations:\$PYTHONPATH\""
 echo "  python -c \"from lingbot.demo.app import main; import sys; sys.argv = ['lingbot', 'webrtc', '--preset-id', 'lingbot-world-v2-14b-causal-fast', '--example-idx', '0']; main()\""
 echo ""
 echo "Server will be available at:"
