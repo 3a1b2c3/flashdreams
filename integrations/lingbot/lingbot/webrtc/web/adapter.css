@@ -228,7 +228,8 @@ body.is-ready-preview .firstFramePreview {
 
 .eventControls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
   gap: 8px;
   margin-top: 16px;
   padding-top: 14px;
@@ -239,6 +240,24 @@ body.is-ready-preview .firstFramePreview {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  grid-column: 1;
+}
+
+.eventButtonClear {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.promptBar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  align-items: center;
+  justify-content: stretch;
 }
 
 .eventButton {

@@ -410,7 +410,7 @@ class LingbotInputProvider:
         event_id = self._active_text_event_id
         if event_id == self._applied_text_event_id:
             return {}
-        if event_id is not None and event_id not in self._inputs.text_event_prompts:
+        if event_id is not None and event_id != "user_prompt" and event_id not in self._inputs.text_event_prompts:
             supported = ", ".join(sorted(self._inputs.text_event_prompts))
             raise ValueError(
                 f"Unknown Lingbot text event_id={event_id!r}. Supported: {supported}"
@@ -418,7 +418,7 @@ class LingbotInputProvider:
         self._applied_text_event_id = event_id
         prompt = (
             self._inputs.prompt
-            if event_id is None
+            if event_id is None or event_id == "user_prompt"
             else self._inputs.text_event_prompts[event_id]
         )
         return {} if prompt is None else {FIELD_PROMPT: prompt}

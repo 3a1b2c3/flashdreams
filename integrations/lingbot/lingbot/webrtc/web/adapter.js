@@ -68,21 +68,6 @@ let eventButtons = null
 let clearEventButton = null
 let promptBarInput = null
 
-function makePromptBar() {
-  const bar = document.createElement("div")
-  bar.className = "promptBar overlayPanel"
-  bar.setAttribute("aria-label", "Prompt Control")
-  bar.innerHTML = `
-    <label class="promptBarControl">
-      <span>Prompt</span>
-      <input class="promptBarInput" type="text" placeholder="Enter prompt for next generation..." maxlength="500">
-      <button class="promptBarSubmit" type="button">Send</button>
-    </label>
-    <button class="sceneCardToggleButton" type="button" title="Show/hide initial scene setup">Setup</button>
-  `
-  return bar
-}
-
 function makeSceneCard() {
   const panel = document.createElement("section")
   panel.className = "sceneCard overlayPanel"
