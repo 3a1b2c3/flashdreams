@@ -326,12 +326,12 @@ body.is-ready-preview .firstFramePreview {
 
 /* Prompt bar for real-time prompt updates during playback */
 .promptBar {
-  position: absolute;
-  bottom: 24px;
+  position: fixed;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
   padding: 12px 16px;
   width: auto;
@@ -431,6 +431,12 @@ body.is-ready-preview .firstFramePreview {
   color: #dff7ff;
 }
 
+@media (max-width: 900px) {
+  .promptBar {
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 600px) {
   .promptBar {
     bottom: 12px;
@@ -439,22 +445,25 @@ body.is-ready-preview .firstFramePreview {
     transform: none;
     width: auto;
     max-width: none;
+    flex-wrap: wrap;
   }
 
   .promptBarControl {
-    flex-direction: column;
+    flex-direction: row;
+    width: 100%;
   }
 
   .promptBarControl span {
-    width: 100%;
+    display: none;
   }
 
   .promptBarInput {
-    width: 100%;
-    min-width: 100%;
+    flex: 1;
+    min-width: 100px;
   }
 
-  .promptBarSubmit {
-    width: 100%;
+  .promptBarSubmit,
+  .sceneCardToggleButton {
+    flex: 0 0 auto;
   }
 }

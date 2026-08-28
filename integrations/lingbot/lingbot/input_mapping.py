@@ -500,17 +500,21 @@ class LingbotInputMapping:
             # Direct dynamic prompt from prompt bar
             prompt = dynamic_prompt
         elif event_id is not None:
-            # Lookup in predefined text_event_prompts
-            if not self._text_event_prompts:
-                raise ValueError(
-                    f"Text event_id={event_id!r} specified but no text_events defined"
-                )
-            if event_id not in self._text_event_prompts:
-                supported = ", ".join(sorted(self._text_event_prompts))
-                raise ValueError(
-                    f"Unknown Lingbot text event_id={event_id!r}. Supported: {supported}"
-                )
-            prompt = self._text_event_prompts[event_id]
+            if event_id == "user_prompt":
+                # user_prompt without dynamic_prompt - restore base prompt
+                prompt = self._base_prompt
+            else:
+                # Lookup in predefined text_event_prompts
+                if not self._text_event_prompts:
+                    raise ValueError(
+                        f"Text event_id={event_id!r} specified but no text_events defined"
+                    )
+                if event_id not in self._text_event_prompts:
+                    supported = ", ".join(sorted(self._text_event_prompts))
+                    raise ValueError(
+                        f"Unknown Lingbot text event_id={event_id!r}. Supported: {supported}"
+                    )
+                prompt = self._text_event_prompts[event_id]
         else:
             # No event_id and no dynamic prompt - restore base prompt
             prompt = self._base_prompt
