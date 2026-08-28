@@ -215,7 +215,7 @@ def result_to_rgb24_tensor(result: StepResult, session_desc: SessionDesc) -> Ten
         session_desc: Description the output is expected to match.
 
     Returns:
-        Contiguous uint8 RGB frames on ``result.output.device``.
+        Contiguous uint8 RGB frames on the result's output device.
 
     Raises:
         ValueError: ``result`` does not match ``session_desc``, carries more than
@@ -227,7 +227,8 @@ def result_to_rgb24_tensor(result: StepResult, session_desc: SessionDesc) -> Ten
             f"Output was described as {session_desc.output_layout.value} but "
             f"arrived as {result.output_layout.value}."
         )
-    frames = _to_tchw(result.output.detach(), result.output_layout)
+    output = result.read_output().detach()
+    frames = _to_tchw(output, result.output_layout)
     if frames.shape[0] != result.frame_count:
         raise ValueError(
             f"Result claims {result.frame_count} frames but carries {frames.shape[0]}."

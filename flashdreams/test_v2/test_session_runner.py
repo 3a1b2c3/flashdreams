@@ -4,7 +4,9 @@
 """CPU test for the v2 session loop, independent of any application."""
 
 import logging
+import queue
 import threading
+import time
 
 import pytest
 import torch
@@ -17,6 +19,7 @@ from flashdreams.api_v2.user_input_event import UserInputEvent
 from flashdreams.runtime_v2.blit_model_output_to_screen_loop import (
     BlitModelOutputToScreenLoop,
 )
+from flashdreams.runtime_v2.event_buffer import EventBuffer
 from flashdreams.runtime_v2.presentation_manager import PresentationManager
 from flashdreams.runtime_v2.session_desc import (
     BackpressureMode,
@@ -49,11 +52,15 @@ def test_session_modes_are_independent() -> None:
         BackpressureMode.DROP_OLDEST,
     ]
     assert list(PresentationMode) == [
-        PresentationMode.ONLY_PRESENT_NEW,
-        PresentationMode.ONLY_PRESENT_NEWEST,
+        PresentationMode.ON_DEMAND,
+        PresentationMode.CONTINUOUS,
     ]
+    assert [mode.value for mode in PresentationMode] == ["on_demand", "continuous"]
+    for legacy_value in ("only_present_new", "only_present_newest"):
+        with pytest.raises(ValueError):
+            PresentationMode(legacy_value)
     assert SessionDesc().backpressure_mode is BackpressureMode.BLOCK
-    assert SessionDesc().presentation_mode is PresentationMode.ONLY_PRESENT_NEWEST
+    assert SessionDesc().presentation_mode is PresentationMode.CONTINUOUS
 
 
 def test_presentation_clock_paces_frames_and_reanchors_after_a_stall() -> None:
@@ -70,13 +77,28 @@ def test_presentation_clock_paces_frames_and_reanchors_after_a_stall() -> None:
     assert clock.is_due(now=2.0, generation=1)
 
 
+def _observe_model_step(
+    clock: _PresentationClock,
+    completed_at: float,
+    frame_count: int,
+    elapsed_s: float,
+    generation: int = 0,
+) -> None:
+    clock.observe_model_output(
+        now=completed_at,
+        generation=generation,
+        frame_count=frame_count,
+        step_elapsed_s=elapsed_s,
+    )
+
+
 def test_presentation_clock_uses_recent_model_fps() -> None:
     clock = _PresentationClock(frames_per_second=16)
 
-    clock.observe_model_output(now=1.0, generation=0, frame_count=12)
+    _observe_model_step(clock, 1.0, 12, 0.9)
     assert clock.frames_per_second == 16
 
-    clock.observe_model_output(now=1.9, generation=0, frame_count=12)
+    _observe_model_step(clock, 1.9, 12, 0.9)
     assert clock.frames_per_second == pytest.approx(12 / 0.9)
 
     assert clock.is_due(now=2.0, generation=0)
@@ -91,8 +113,8 @@ def test_presentation_clock_clamps_model_fps_to_ui_fps() -> None:
         maximum_frames_per_second=60,
     )
 
-    clock.observe_model_output(now=1.0, generation=0, frame_count=120)
-    clock.observe_model_output(now=2.0, generation=0, frame_count=120)
+    _observe_model_step(clock, 1.0, 120, 1.0)
+    _observe_model_step(clock, 2.0, 120, 1.0)
 
     assert clock.frames_per_second == 60
 
@@ -100,28 +122,96 @@ def test_presentation_clock_clamps_model_fps_to_ui_fps() -> None:
 def test_presentation_clock_limits_estimate_to_recent_two_seconds() -> None:
     clock = _PresentationClock(frames_per_second=30)
 
-    clock.observe_model_output(now=0.0, generation=0, frame_count=10)
-    clock.observe_model_output(now=1.0, generation=0, frame_count=10)
+    _observe_model_step(clock, 0.0, 10, 1.0)
+    _observe_model_step(clock, 1.0, 10, 1.0)
     assert clock.frames_per_second == pytest.approx(10.0)
 
-    clock.observe_model_output(now=2.0, generation=0, frame_count=20)
+    _observe_model_step(clock, 2.0, 20, 1.0)
     assert clock.frames_per_second == pytest.approx(15.0)
 
-    clock.observe_model_output(now=3.0, generation=0, frame_count=20)
+    _observe_model_step(clock, 3.0, 20, 1.0)
     assert clock.frames_per_second == pytest.approx(20.0)
+
+
+def test_presentation_clock_ignores_gaps_between_model_steps() -> None:
+    clock = _PresentationClock(frames_per_second=16)
+
+    _observe_model_step(clock, 1.0, 12, 0.9)
+    _observe_model_step(clock, 1.9, 12, 0.9)
+    assert clock.frames_per_second == pytest.approx(12 / 0.9)
+
+    _observe_model_step(clock, 6.8, 12, 0.9)
+    assert clock.frames_per_second == pytest.approx(12 / 0.9)
 
 
 def test_presentation_clock_resets_estimate_for_a_new_generation() -> None:
     clock = _PresentationClock(frames_per_second=16)
-    clock.observe_model_output(now=1.0, generation=0, frame_count=12)
-    clock.observe_model_output(now=2.0, generation=0, frame_count=12)
+    _observe_model_step(clock, 1.0, 12, 1.0)
+    _observe_model_step(clock, 2.0, 12, 1.0)
     assert clock.frames_per_second == pytest.approx(12.0)
 
     assert clock.is_due(now=2.1, generation=1)
     assert clock.frames_per_second == 16
 
-    clock.observe_model_output(now=2.2, generation=0, frame_count=120)
+    _observe_model_step(clock, 2.2, 120, 0.01, generation=0)
     assert clock.frames_per_second == 16
+
+
+def test_model_loop_excludes_publish_stalls_from_step_timing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 0.0
+
+    class TimedModelLoop(IModelLoop[None]):
+        def step(
+            self,
+            step_index: int,
+            events: UserInputEvents,
+        ) -> list[StepResult]:
+            nonlocal now
+            del events
+            now += 0.9
+            return [
+                StepResult(
+                    step_index=step_index,
+                    output=torch.zeros((1, 3, 1, 1, 1)),
+                    frame_count=1,
+                    output_layout=VideoTensorLayout.bcthw,
+                )
+            ]
+
+    monkeypatch.setattr("flashdreams.api_v2.loop.time.monotonic", lambda: now)
+    failure_queue: queue.Queue[BaseException] = queue.Queue()
+    model_loop = TimedModelLoop()
+    model_loop.register_session_loop_objects(
+        state=None,
+        frequency=0,
+        shutdown_event=threading.Event(),
+        failure_queue=failure_queue,
+    )
+    event_buffer = EventBuffer()
+    event_buffer.register(0)
+    step_timings: list[float] = []
+
+    def publish(
+        generation: int,
+        results: list[StepResult],
+        step_elapsed_s: float,
+    ) -> None:
+        nonlocal now
+        del generation, results
+        step_timings.append(step_elapsed_s)
+        now += 4.0
+
+    model_loop._run_model_loop(
+        event_buffer=event_buffer,
+        reader_id=0,
+        publish=publish,
+        max_steps=2,
+    )
+
+    assert failure_queue.empty()
+    assert step_timings == pytest.approx([0.9, 0.9])
 
 
 class CallLog:
@@ -387,7 +477,7 @@ class RecordingClientWindow(IClientWindow):
 def _session_desc(
     *,
     backpressure_mode: BackpressureMode = BackpressureMode.BLOCK,
-    presentation_mode: PresentationMode = PresentationMode.ONLY_PRESENT_NEW,
+    presentation_mode: PresentationMode = PresentationMode.ON_DEMAND,
     ui_fps: int = 100,
     model_fps: int = 1,
 ) -> SessionDesc:
@@ -487,7 +577,7 @@ def test_continuous_ui_processes_input_while_model_generation_waits() -> None:
 
     session = SlowModelSession(
         _session_desc(
-            presentation_mode=PresentationMode.ONLY_PRESENT_NEWEST,
+            presentation_mode=PresentationMode.CONTINUOUS,
             ui_fps=100,
             model_fps=1,
         ),
@@ -563,11 +653,11 @@ def test_default_ui_composites_channels_and_holds_the_latest_frame() -> None:
     assert manager.advance(0)[0]
     first = ui.step(0, UserInputEvents([]))
     assert first is not None
-    assert first.output[0, :, 0, 0].tolist() == [0.5, 0.25, 0.0]
+    assert first.read_output()[0, :, 0, 0].tolist() == [0.5, 0.25, 0.0]
     assert not manager.advance(0)[0]
     held = ui.step(1, UserInputEvents([]))
     assert held is not None
-    assert torch.equal(held.output, first.output)
+    assert torch.equal(held.read_output(), first.read_output())
     assert not manager.advance(1)[0]
     assert manager.presented_frame_count == 0
     assert ui.step(2, UserInputEvents([])) is None
@@ -611,9 +701,9 @@ def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
     )
 
     assert [result.frame_count for result in window.results] == [1] * 12
-    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == list(
-        range(12)
-    )
+    assert [
+        result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
+    ] == list(range(12))
     assert [result.metrics for result in window.results] == [{"ui_ms": 0.25}] * 12
     assert len(metrics.results) == 1
     assert metrics.results[0].metrics == {"total_ms": 1.5}
@@ -629,7 +719,7 @@ def test_default_ui_does_not_redraw_an_unchanged_model_frame() -> None:
 
     session = DefaultUISession(
         _session_desc(
-            presentation_mode=PresentationMode.ONLY_PRESENT_NEW,
+            presentation_mode=PresentationMode.ON_DEMAND,
             ui_fps=100,
             model_fps=30,
         ),
@@ -736,7 +826,7 @@ def test_run_session_resets_the_session_and_the_step_index() -> None:
     ]
     assert calls == ["session.reset", "session.step(0)", "session.step(1)"]
     assert log.calls.index("session.reset") < log.calls.index("session.step(0)")
-    # A reset restarts the index without granting extra steps.
+    # A reset restarts both loops without granting extra model steps.
     assert [result.step_index for result in window.results] == [0, 1]
 
 
@@ -771,7 +861,7 @@ def test_run_session_lets_a_reset_restart_a_finished_session() -> None:
     run_session(session, window, steps=3)
 
     # Finished before the run began, so without the reset nothing would be
-    # generated. It is applied first, and the session runs its length again.
+    # generated. It is applied before the session runs its length again.
     assert [result.step_index for result in window.results] == [0]
     assert "session.reset" in log.calls
 
@@ -877,33 +967,75 @@ def test_equality_eval_preserves_every_frame_when_model_is_faster() -> None:
     run_session(session, window, steps=4, max_pending=1)
 
     assert [result.step_index for result in window.results] == [0, 1, 2, 3]
-    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == [
-        0,
-        1,
-        2,
-        3,
-    ]
+    assert [
+        result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
+    ] == [0, 1, 2, 3]
 
 
-def test_ONLY_PRESENT_NEW_runs_ui_once_per_new_frame() -> None:
+def test_ui_stall_does_not_burst_multiple_frames_per_input_tick() -> None:
+    log = CallLog()
+
+    class FourFrameSession(FakeSession):
+        def step(self, step_index: int, events: UserInputEvents) -> StepResult:
+            del events
+            self._log.record(f"session.step({step_index})")
+            return StepResult(
+                step_index=step_index,
+                output=torch.arange(4, dtype=torch.float32).reshape(1, 1, 4, 1, 1),
+                frame_count=4,
+                output_layout=self.session_desc.output_layout,
+            )
+
+    class FirstWriteStalls(RecordingClientWindow):
+        def __init__(self, call_log: CallLog) -> None:
+            super().__init__(call_log)
+            self._first_write = True
+
+        def write(self, result: StepResult) -> None:
+            if self._first_write:
+                self._first_write = False
+                time.sleep(0.05)
+            super().write(result)
+
+    window = FirstWriteStalls(log)
+    run_session(
+        FourFrameSession(_session_desc(ui_fps=100, model_fps=100), log),
+        window,
+        steps=1,
+    )
+
+    assert [
+        result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
+    ] == [0, 1, 2, 3]
+    writes_per_input_tick: list[int] = []
+    writes = 0
+    for call in log.calls:
+        if call == "window.get_user_input_events":
+            writes_per_input_tick.append(writes)
+            writes = 0
+        elif call.startswith("window.write("):
+            writes += 1
+    writes_per_input_tick.append(writes)
+    assert max(writes_per_input_tick) == 1
+
+
+def test_on_demand_runs_ui_once_per_new_frame() -> None:
     log = CallLog()
     session = FakeSession(_session_desc(ui_fps=1_000, model_fps=20), log)
     window = RecordingClientWindow(log)
     run_session(session, window, steps=3)
 
     assert log.calls.count("ui_loop.step") == 3
-    assert [result.output[0, 0, 0, 0, 0].item() for result in window.results] == [
-        0,
-        1,
-        2,
-    ]
+    assert [
+        result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
+    ] == [0, 1, 2]
 
 
-def test_only_present_newest_runs_ui_eagerly_when_ui_is_faster() -> None:
+def test_continuous_runs_ui_eagerly_when_ui_is_faster() -> None:
     log = CallLog()
     session = FakeSession(
         _session_desc(
-            presentation_mode=PresentationMode.ONLY_PRESENT_NEWEST,
+            presentation_mode=PresentationMode.CONTINUOUS,
             ui_fps=1_000,
             model_fps=20,
         ),
@@ -913,7 +1045,9 @@ def test_only_present_newest_runs_ui_eagerly_when_ui_is_faster() -> None:
 
     run_session(session, window, steps=3)
 
-    presented = [result.output[0, 0, 0, 0, 0].item() for result in window.results]
+    presented = [
+        result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
+    ]
     assert presented == sorted(presented)
     assert len(presented) > 3
     assert presented[-1] == 2
@@ -940,7 +1074,7 @@ def test_run_session_drops_the_oldest_waiting_result() -> None:
     # until the end, so what is stale is lost and the newest always arrives.
     assert presented == sorted(presented)
     assert len(presented) < 4
-    assert window.results[-1].output[0, 0, 0, 0, 0].item() == 3
+    assert window.results[-1].read_output()[0, 0, 0, 0, 0].item() == 3
 
 
 def test_run_session_discards_results_generated_before_a_reset(
