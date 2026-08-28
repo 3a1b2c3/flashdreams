@@ -33,15 +33,11 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 echo "[5/7] Installing dependencies..."
 pip install transformers==4.45.0 sentencepiece scipy opencv-python
 pip install aiohttp aiortc python-multipart loguru
+pip install tyro pydantic fastapi uvicorn pillow numpy gradio websockets
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
-# Step 6: Install flashdreams package
-echo "[6/7] Installing flashdreams package..."
-cd "$FLASHDREAMS_ROOT"
-pip install -e . --no-build-isolation
-
-# Step 7: Clear caches
-echo "[7/7] Clearing caches..."
+# Step 6: Clear caches
+echo "[6/7] Clearing caches..."
 find "$FLASHDREAMS_ROOT" -type d -name __pycache__ -delete 2>/dev/null || true
 cd "$HERE"
 
