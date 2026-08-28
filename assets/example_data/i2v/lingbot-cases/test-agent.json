@@ -1,0 +1,142 @@
+{
+  "id": "test-agent",
+  "name": "Test: Agent Tools",
+  "description": "Game-Cartridge fixture (wheat harvest) — the equipped-tool + world-consequence sandbox from the Roblox world-model post. ALL tools are present in the scene from the start (scythe in hand, rifle + torch on the ground); most actions are NOT chained. Keys: cut wheat (scythe), shoot rifle, pick up torch, torch the wheat, and drop any tool — scythe / rifle / torch each have a drop; emotes: wave / tip hat / dance; Space jump, C crouch. Director: Night Falls, Wind Picks Up, Fire Spreads. Exercises decomposed World/Character/Actions/Dynamics conditioning, player-vs-director split, prompt invariance, and VLM visual triggers.",
+  "objective": {
+    "summary": "Work the field however you like, then burn it — harvest the wheat, cycle through the tools, put a torch to the dry stalks, and let the fire spread until the whole field is scorched to blackened stubble.",
+    "director": "Escalate toward destruction and build on what has happened: once the wheat is dry and the tools are out, spread the fire across the whole field until the crop is burned to blackened stubble. Do not repeat the same event back-to-back.",
+    "success": [
+      "the wheat field is burned down to blackened stubble"
+    ],
+    "failure": [
+      "time runs out with the field still golden and un-burned"
+    ],
+    "durationChunks": 120,
+    "reward": "Fire Spreads"
+  },
+  "image": {
+    "label": "Test: Agent Tools",
+    "src": "/lingbot-cases/harvesting-golden-wheat-stockcake.jpg"
+  },
+  "scene": {
+    "base": {
+      "default": "A vast field of tall golden wheat glowing in the warm light of a dramatic sunset — the sun sinking low and blazing orange and gold across a sky of deep blue and amber clouds. The world contains EXACTLY ONE dense stand of tall golden wheat on the left at a fixed position AND EXACTLY ONE dense stand of tall golden wheat on the right at a fixed position AND EXACTLY ONE line of distant dark trees along the horizon straight ahead at a fixed position AND EXACTLY ONE bolt-action rifle lying on the cut stubble at a fixed position AND EXACTLY ONE flaming wooden torch stuck upright in the ground at a fixed position. All three tools are present in the field from the start — the scythe in the farmer's hands, the rifle and the torch on the ground — no tool appears out of nowhere. Warm golden-hour light, long shadows, drifting chaff catching the sun, photorealistic.",
+      "burned": "The same wheat field after the fire — the golden stalks burned down to blackened, charred stubble and bare scorched dirt, thin grey smoke drifting up across the field against the sunset sky. The world still contains EXACTLY ONE burned-out stretch of field on the left at a fixed position AND EXACTLY ONE burned-out stretch of field on the right at a fixed position AND EXACTLY ONE line of distant dark trees along the horizon straight ahead at a fixed position, dim behind the smoke. Ash drifting, deep char, warm dying light, photorealistic.",
+      "night": "The same wheat field deep at night — a star-scattered deep blue-black sky with a bright moon, the tall golden wheat washed cool and silvery in the moonlight. The world still contains EXACTLY ONE dense stand of tall wheat on the left at a fixed position AND EXACTLY ONE dense stand of tall wheat on the right at a fixed position AND EXACTLY ONE line of distant dark trees along the horizon straight ahead at a fixed position AND EXACTLY ONE bolt-action rifle lying on the cut stubble at a fixed position AND EXACTLY ONE flaming wooden torch stuck upright in the ground at a fixed position, its flame glowing bright in the dark. Cool moonlit shadows, fireflies drifting, photorealistic."
+    },
+    "player": {
+      "default": "A farmer in faded blue denim overalls over a light-blue work shirt with rolled sleeves and a wide-brimmed straw hat, holding EXACTLY ONE long-handled scythe in both hands as he harvests the wheat. EXACTLY ONE farmer in the entire field — a single lone figure, the only person anywhere in the scene, no second farmer, no other people, no duplicate and no clone of the farmer."
+    },
+    "camera": {
+      "default": {
+        "static": "Third-person view of the farmer at golden-hour sunset, the figure locked at the exact centre of the frame at constant size and distance — never a first-person view. Neither the farmer nor the camera moves on its own; arrow-key look-input is the only source of camera motion, arcing the camera around the stationary, centred farmer only while held.",
+        "dynamic": "Strict third-person view, the farmer locked at the exact centre of the frame as the camera holds a fixed position behind them and tracks them forward through the wheat — never a first-person view. The camera does not rotate around the farmer; look-input becomes the farmer changing heading."
+      }
+    },
+    "movement": {
+      "default": {
+        "static": "The farmer stands among the tall golden wheat, the scythe in hand, the wheat heads swaying gently around them and chaff drifting in the warm sunset light.",
+        "dynamic": "The farmer strides forward through the field, wading between the rows of tall golden wheat, the stalks brushing past on either side and dust rising into the golden light as they move deeper into the crop."
+      }
+    },
+    "events": [
+      {
+        "name": "Do Nothing",
+        "actor": "character",
+        "detail": "The farmer simply stands still among the wheat, holding the scythe and taking no action at all — just waiting in place as the golden wheat sways gently around them and chaff drifts in the warm light. EXACTLY ONE farmer holding EXACTLY ONE scythe — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Empty Hands",
+        "actor": "character",
+        "detail": "The farmer sets down the tool they are holding onto the wheat stubble and stands empty-handed in the field, nothing in their grip, arms loose at their sides. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Cut Wheat",
+        "actor": "character",
+        "detail": "The farmer swings the long-handled scythe low in a broad sweep and cuts down a swath of golden wheat, the cut stalks toppling and falling away to leave fresh pale stubble and bare dirt where they stood — the cut wheat now GONE, only low stubble left behind. EXACTLY ONE farmer holding EXACTLY ONE scythe — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Drop Scythe",
+        "actor": "character",
+        "detail": "The farmer opens their hands and drops the long-handled scythe, letting it fall to the wheat stubble at their feet where it lies still; the farmer now stands empty-handed in the field with nothing in their hands. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Shoot Rifle",
+        "actor": "character",
+        "detail": "The farmer sets down the scythe, takes up the bolt-action rifle from the ground and raises it to their shoulder, then fires it across the wheat field — a bright muzzle flash and a puff of white smoke bursting from the barrel as the rifle kicks back against their shoulder. EXACTLY ONE farmer holding EXACTLY ONE rifle — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Drop Rifle",
+        "actor": "character",
+        "requires": { "fired": ["Shoot Rifle"] },
+        "detail": "The farmer lets go of the rifle and it drops straight down to the ground, landing in the stubble at their feet where it lies still; the farmer now stands empty-handed in the wheat field with nothing in their hands. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Pick Up Torch",
+        "actor": "character",
+        "detail": "The farmer takes up the flaming wooden torch from the ground, gripping it firmly and raising it high, holding the burning torch ready in one hand. EXACTLY ONE farmer holding EXACTLY ONE torch — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Torch the Wheat",
+        "actor": "character",
+        "requires": { "fired": ["Pick Up Torch"] },
+        "detail": "The farmer lowers the flaming torch to the dry golden wheat and sweeps it along the base of the stalks, setting a spreading line of wheat ablaze — flames catching and climbing up through the crop where the torch passes as the fire takes hold across the nearest rows. EXACTLY ONE farmer holding EXACTLY ONE torch — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Drop Torch",
+        "actor": "character",
+        "requires": { "fired": ["Pick Up Torch"] },
+        "detail": "The farmer lets go of the flaming torch and it drops to the ground, landing in the stubble at their feet where it lies burning; the farmer now stands empty-handed in the field with nothing in their hands. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Wave",
+        "actor": "character",
+        "detail": "The farmer lifts one hand off the tool and waves it high overhead in a broad friendly wave across the field, then lowers it back down to grip the tool again. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Tip Hat",
+        "actor": "character",
+        "detail": "The farmer reaches up with one hand and tips their wide-brimmed straw hat in a courteous doff, dipping it toward the field before settling it back down on their head. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Dance",
+        "actor": "character",
+        "detail": "The farmer breaks into a lively jig right there among the wheat, stepping and spinning with arms swinging in rhythm, the tool still in hand as they groove among the golden stalks. EXACTLY ONE farmer — a single lone figure, no duplicate and no clone.",
+        "health": 0
+      },
+      {
+        "name": "Night Falls",
+        "actor": "environment",
+        "baseVersion": "night",
+        "detail": "Darkness sweeps across the wheat field as the sun finishes setting and the sky deepens to star-scattered night, a bright moon rising over the field and washing the golden wheat cool and silvery in the moonlight, the torch's flame now glowing bright in the dark. From then on the field STAYS in night — dark, moonlit and shadowed. The farmer stays EXACTLY ONE in frame, unchanged in pose and appearance; only the world around them changes."
+      },
+      {
+        "name": "Wind Picks Up",
+        "actor": "environment",
+        "detail": "A strong wind sweeps across the wheat field — the tall golden stalks bending and rippling in long waves as the gusts push through them, loose chaff and dust streaming sideways through the air and the whole field swaying hard one way in the wind. From then on the wind KEEPS blowing, the wheat bending and rippling across the field. The farmer stays EXACTLY ONE in frame, unchanged in pose and appearance; only the world around them changes."
+      },
+      {
+        "name": "Fire Spreads",
+        "actor": "environment",
+        "requires": { "fired": ["Torch the Wheat"] },
+        "baseVersion": "burned",
+        "detail": "The fire spreads through the wheat — flames consuming and charring the stalks across the whole field as the crop catches and burns down to blackened stubble, thick grey smoke billowing up around the farmer and the golden field left scorched and black. From then on the field STAYS burned: blackened, charred stubble and drifting smoke, the standing wheat GONE. The farmer stays EXACTLY ONE in frame, unchanged in pose and appearance; only the world around them changes.",
+        "win": true
+      }
+    ],
+    "jumpPrompt": "The farmer leaps up off the ground, both boots lifting clear of the stubble and rising into the air for a moment before dropping back down and landing among the wheat, dust puffing up around their feet.",
+    "crouchPrompt": "The camera lowers toward the ground as the farmer crouches down low among the stalks, bending the knees and ducking the head into a compact, hunched stance; the viewpoint sinks smoothly to a low, near-ground vantage and settles there, close to the dirt.",
+    "standPrompt": "The farmer straightens back up out of the crouch, rising to full standing height as the camera lifts smoothly back to its normal over-the-shoulder vantage."
+  }
+}

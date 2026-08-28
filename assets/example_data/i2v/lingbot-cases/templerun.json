@@ -1,0 +1,134 @@
+{
+  "id": "templerun",
+  "name": "Temple Run",
+  "description": "Third-person temple runner — key 1 = grab coins, key 2 = spell cast, key 3 = whip crack, key 4 = back kick, key 5 = machete slash, key 6 = torch swing, key 7 = shoulder barge; Space = jump, C = crouch",
+  "objective": {
+    "summary": "Outrun the temple and survive the chase.",
+    "director": "Hunt the runner and escalate the danger over time: start with the lone Demon Ape Charges to build pressure, then bring the Enemy Horde Floods In as he speeds up, and interleave hazards (Fire Trap, Rockslide, Statue Awakens, Bridge Collapses) so the threat keeps rising. Space out coin rewards (Coin Rush, Gold Coin Appears) between the danger. Don't repeat the same event back-to-back."
+  },
+  "image": {
+    "label": "Temple Run",
+    "src": "/lingbot-cases/templerun.jpg"
+  },
+  "scene": {
+    "base": {
+      "default": "A narrow raised stone temple causeway of mossy cracked flagstones running straight ahead through misty jungle ruins — the path just one lane wide, like walking along the top of an ancient wall, with a sheer drop falling away into a deep misty chasm on the LEFT at a fixed position AND a matching sheer drop falling away into the deep chasm on the RIGHT at a fixed position. The path ALWAYS stays this same narrow walled causeway with a drop on each side — it never widens into open ground; there is always a straight run of flagstones ahead flanked by the two drops. NO monster and NO creature is present — the path behind is empty ruins, with nothing chasing yet. The world contains EXACTLY ONE row of carved stone guardian statues lining the path ahead at a fixed position AND EXACTLY ONE trail of glowing golden diamond coins floating down the centre of the path at a fixed position. Overgrown jungle-temple ruins draped in vines and moss, crumbling idols, shafts of green sunlight through the canopy. Temple Run video-game look, vivid saturated colours, third-person over-the-shoulder running-game framing, photorealistic. NO monster until one is introduced."
+    },
+    "player": {
+      "default": "A lone explorer seen from behind — a young adventurer in a torn off-white shirt, brown trousers and boots, arms out for balance. EXACTLY ONE explorer — a single lone runner, no duplicate and no clone."
+    },
+    "camera": {
+      "default": {
+        "static": "Third-person over-the-shoulder view from close behind the explorer, his back centred in frame at constant size, the temple path stretching ahead — never a first-person view. Neither the explorer nor the camera moves on its own; arrow-key look-input is the only source of camera motion, arcing around the stationary centred explorer while held.",
+        "dynamic": "Strict third-person over-the-shoulder chase view from close behind and slightly above the explorer, his back and shoulders filling frame centre as the camera holds a fixed position behind him and tracks him forward down the temple path — never first-person. The camera does not rotate around him; look-input becomes the explorer changing heading, veering left and right along the path."
+      }
+    },
+    "movement": {
+      "default": {
+        "static": "The explorer runs on the spot at the head of the temple path, boots pounding the mossy flagstones and arms pumping, poised to sprint; the ruins behind him are empty with nothing chasing him, and the path ahead holds still until he moves.",
+        "dynamic": "The explorer sprints flat-out forward down the ancient stone temple path, boots hammering the cracked flagstones and arms pumping, vaulting and dodging as the carved guardian statues, mossy walls and floating golden coins streak past on either side; the ruins behind him stay empty with nothing chasing him yet."
+      }
+    },
+    "events": [
+      {
+        "name": "Grab Coins",
+        "actor": "character",
+        "health": 3,
+        "addItem": "gold coins",
+        "detail": "The explorer runs straight through the floating trail of golden diamond coins, collecting them one by one only as he reaches each — every coin popping into a small burst of gold sparks the instant he touches it, while the rest keep floating and streaming steadily down the path ahead of him, still glinting along the flagstones. The coins do NOT all vanish at once and are not removed before he reaches them; the trail keeps flowing ahead as he scoops them up in sequence. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone."
+      },
+      {
+        "name": "Spell Cast",
+        "actor": "character",
+        "detail": "Without breaking stride, the explorer thrusts out a hand and casts a spell, a burst of glowing arcane energy crackling from his palm and streaking back down the path toward the pursuing monster in a flash of magical light, then he closes his fist and runs on. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 5
+      },
+      {
+        "name": "Whip Crack",
+        "actor": "character",
+        "detail": "Without breaking stride, the explorer whips out a coiled bullwhip and cracks it back over his shoulder toward the pursuing demonic ape monster, the leather lashing through the air with a sharp snap, then coils it back and keeps running. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 5
+      },
+      {
+        "name": "Back Kick",
+        "actor": "character",
+        "detail": "Still sprinting, the explorer twists and drives a hard back kick behind him at the chasing monster, his boot lashing out to fend it off, then plants back down and runs on. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 5
+      },
+      {
+        "name": "Machete Slash",
+        "actor": "character",
+        "detail": "The explorer draws a machete and slashes it in a swift arc ahead of him, cutting through hanging vines and obstacles across the path in a flash of steel, then keeps running with the blade in hand. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 4
+      },
+      {
+        "name": "Torch Swing",
+        "actor": "character",
+        "detail": "The explorer snatches up a burning torch and swings it in a wide arc behind him, the flame roaring and trailing sparks to drive back the pursuing monster, then runs on with the torch held high. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 5
+      },
+      {
+        "name": "Shoulder Barge",
+        "actor": "character",
+        "detail": "The explorer lowers his shoulder and barges straight through a crumbling stone obstacle in his path, smashing it aside in a shower of dust and rubble without breaking his sprint. EXACTLY ONE explorer, a single lone runner, no duplicate and no clone.",
+        "health": 3
+      },
+      {
+        "name": "Demon Ape Charges",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world behind him changes: a single giant demonic ape monster BURSTS into view behind him, smashing out through the misty jungle ruins where there was nothing chasing him a moment before, jaws gaping wide in a snarl, its huge clawed hands swiping as it charges up the path after him. From now on the monster is present, looming and pursuing in the background. It ALWAYS stays BEHIND the explorer, chasing from behind down the path — it never catches up to, draws level with, overtakes or passes him, and never appears in front of or ahead of him; the explorer stays out ahead the whole time. EXACTLY ONE ape monster, no second monster, no duplicate and no clone.",
+        "health": -8
+      },
+      {
+        "name": "Enemy Horde Floods In",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world behind him changes: a snarling horde of dark demonic ape monsters pours out of the temple ruins and swarms the whole path, filling the frame from edge to edge with charging beasts that clamber over the flagstones and each other, a churning wave of monsters chasing him down the bridge.",
+        "health": -12
+      },
+      {
+        "name": "Bridge Collapses",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world changes: the ancient stone bridge begins to collapse, flagstones crumbling and falling away into the deep water far below just behind him, the whole span buckling and breaking apart section by section as he races to stay ahead of the crumbling edge."
+      },
+      {
+        "name": "Fire Trap",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world ahead changes: a row of flame jets erupts from the temple path, spouts of orange fire blasting up between the flagstones directly in his way, flames flickering and billowing as he bears down on them."
+      },
+      {
+        "name": "Statue Awakens",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world changes: one of the carved stone guardian statues lining the path grinds and cracks to life, its stone head turning and a heavy stone arm swinging out across the path to block the way, dust crumbling from its joints as it moves. EXACTLY ONE statue awakens, a single one, no duplicate and no clone."
+      },
+      {
+        "name": "Coin Rush",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world ahead changes: a dense glittering stream of golden diamond coins floods the path, a long winding river of spinning gold coins hovering along the flagstones and around the corners, sparkling in the shafts of jungle light."
+      },
+      {
+        "name": "Rockslide",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world ahead changes: a rockslide tumbles across the temple path, a cascade of mossy boulders and rubble crashing down from the ruined walls and bouncing across the flagstones, kicking up dust as they roll into his path."
+      },
+      {
+        "name": "Gold Coin Appears",
+        "actor": "environment",
+        "detail": "The explorer himself is completely unchanged — same pose, same appearance, still running exactly as before; ONLY the world ahead changes: a single large glowing golden diamond coin materializes on the path, spinning and hovering just above the mossy flagstones directly in his line, flashing bright and sparkling in the shafts of jungle light, waiting there to be collected as he runs toward it. EXACTLY ONE gold coin, a single coin, no second coin, no duplicate and no clone.",
+        "health": 0,
+        "count": 1,
+        "addItem": "gold coins"
+      }
+    ],
+    "hud": {
+      "show": true,
+      "maxHealth": 100,
+      "health": 100,
+      "inventory": [
+        "gold coins"
+      ]
+    },
+    "jumpPrompt": "The explorer springs upward off both feet, leaping high over a gap in the broken bridge, sailing through the air with his arms out before dropping back down and landing on the flagstones to keep running.",
+    "crouchPrompt": "The explorer drops into a low crouching slide close to the ground, ducking under an obstacle as the camera sinks low near the flagstones, and holds low.",
+    "standPrompt": "The explorer rises back up out of the slide to full running height as the camera lifts smoothly back to its normal over-the-shoulder vantage."
+  }
+}

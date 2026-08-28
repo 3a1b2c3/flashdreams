@@ -18,7 +18,7 @@ echo ""
 # Parse arguments
 HOST="${1:-0.0.0.0}"
 PORT="${2:-8089}"
-EXAMPLE_IDX="${3:-0}"
+EXAMPLE_IDX="${3:-}"
 
 echo "=========================================="
 echo "CONNECTION OPTIONS (Choose one)"
@@ -43,6 +43,9 @@ echo "  A/D = yaw left/right"
 echo "  Q/E = strafe left/right"
 echo "  I/K = pitch up/down"
 echo ""
+echo "Prompt Bar:"
+echo "  Type prompt at bottom + press Enter to update scene"
+echo ""
 echo "=========================================="
 echo "Starting WebRTC server..."
 echo "=========================================="
@@ -52,10 +55,14 @@ echo ""
 python << PYEOF
 from lingbot.demo.app import main
 
-main([
+args = [
     "webrtc",
     "--host", "$HOST",
     "--port", "$PORT",
-    "--example-idx", "$EXAMPLE_IDX",
-])
+]
+
+if "$EXAMPLE_IDX":
+    args.extend(["--example-idx", "$EXAMPLE_IDX"])
+
+main(args)
 PYEOF
