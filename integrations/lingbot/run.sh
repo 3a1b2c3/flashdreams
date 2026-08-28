@@ -33,7 +33,7 @@ echo ""
 echo "=========================================="
 echo ""
 
-python -m flashdreams.lingbot.webrtc \
+python -m lingbot.webrtc \
   lingbot-world-v2-14b-causal-fast \
   --host 0.0.0.0 --port 8089 \
   --scenario.example-idx 0
