@@ -3,11 +3,6 @@
 
 """Compatibility exports for camera controls now owned by ``cam2v``."""
 
-try:
-    from cam2v.controls import CameraPoseIntegrator, KeyboardResampler, PoseSegment
-except (ImportError, AttributeError):
-    CameraPoseIntegrator = None
-    KeyboardResampler = None
-    PoseSegment = None
+from cam2v.controls import CameraPoseIntegrator, KeyboardResampler, PoseSegment
 
 __all__ = ["CameraPoseIntegrator", "KeyboardResampler", "PoseSegment"]
