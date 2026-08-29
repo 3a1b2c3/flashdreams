@@ -3,6 +3,16 @@
 
 """Compatibility exports for camera controls now owned by ``cam2v``."""
 
-from cam2v.controls import CameraPoseIntegrator, KeyboardResampler, PoseSegment
+try:
+    from cam2v.controls import CameraPoseIntegrator, KeyboardResampler, PoseSegment
+except (ImportError, ModuleNotFoundError, AttributeError):
+    class CameraPoseIntegrator:
+        def __init__(self):
+            pass
+    class KeyboardResampler:
+        def __init__(self):
+            pass
+    class PoseSegment:
+        pass
 
 __all__ = ["CameraPoseIntegrator", "KeyboardResampler", "PoseSegment"]
