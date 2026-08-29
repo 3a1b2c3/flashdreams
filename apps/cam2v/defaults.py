@@ -88,7 +88,7 @@ class Cam2VApplicationDefaults:
     backpressure_mode: BackpressureMode = BackpressureMode.BLOCK
     """Preserve every generated model frame in presentation order."""
 
-    presentation_mode: PresentationMode = PresentationMode.CONTINUOUS
+    presentation_mode: PresentationMode = PresentationMode.ONLY_PRESENT_NEW
     """Render the UI every tick so controls and status remain responsive."""
 
     ui_fps: int = 60
