@@ -1105,6 +1105,17 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                     state,
                     raw_prompt,
                 )
+                if channel is not None:
+                    self._send_json(
+                        channel,
+                        {
+                            "type": "server_log",
+                            "message": (
+                                f"text_event received: event_id={event_id!r} "
+                                f"state={state!r} prompt={raw_prompt!r}"
+                            ),
+                        },
+                    )
             try:
                 event_payload = self._validate_user_event_payload(
                     managed_session=managed_session,
