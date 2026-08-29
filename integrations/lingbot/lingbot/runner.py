@@ -24,10 +24,7 @@ from typing import Annotated
 import tyro
 from loguru import logger
 
-try:
-    from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
-except ImportError:
-    from flashdreams.infra.postprocess import VideoTensorLayout
+from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 from flashdreams.infra.runner import Runner, RunnerConfig
 from flashdreams.infra.runner_io import runner_artifact_path
 from flashdreams.runtime.demo import DemoSpec, Mp4OutputSpec, OutputSpec
