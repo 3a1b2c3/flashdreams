@@ -382,3 +382,23 @@ check for a zombie process first.** This one cost most of a debugging
 session because every signal pointed at "the fix isn't deployed" when
 the fix was deployed correctly the whole time — the browser just
 wasn't talking to it.
+
+## 13. `_active_prompt` fallback chain is not currently implemented
+
+An earlier session's notes (now superseded, consolidated here) describe
+adding an `_active_prompt: str | None = None` instance field to
+`LingbotInputMapping` plus a fallback chain in `_text_event_update`
+(event_prompt -> active_prompt -> base_prompt), so the active prompt
+would persist across steps that don't carry a new text event, instead
+of `_text_event_update` returning `{}` and implicitly leaving the
+model's conditioning unchanged. As of this session's investigation,
+**this fallback chain is not present in the current codebase** —
+`_text_event_update` returns `{}` early (line ~505,
+`if event_id == self._applied_event_id: return {}`) whenever the
+canonical event id hasn't changed since the last step, relying on the
+caller/model session to simply keep using whatever conditioning was
+last applied rather than re-asserting it every step. Whether this is a
+real regression or an intentional simplification (steps with unchanged
+conditioning genuinely don't need to resend it) hasn't been confirmed
+— flagging so it isn't rediscovered from scratch if prompts appear to
+"drop" on steps between explicit trigger events.
