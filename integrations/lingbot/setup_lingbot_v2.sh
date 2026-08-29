@@ -67,8 +67,9 @@ print(f'torch {torch.__version__} / torchaudio {torchaudio.__version__} OK')
 # leaves a static site-packages copy that silently shadows the editable
 # install and source edits stop taking effect.
 echo "[6/7] Installing flashdreams + lingbot (editable)..."
-pip uninstall -y flashdreams flashdreams-lingbot >/dev/null 2>&1 || true
+pip uninstall -y flashdreams flashdreams-lingbot flashdreams-cam2v >/dev/null 2>&1 || true
 pip install -e "$FLASHDREAMS_ROOT/flashdreams" --no-deps
+pip install -e "$FLASHDREAMS_ROOT/apps/cam2v" --no-deps
 pip install -e "$HERE" --no-deps
 
 # Step 7: Clear caches
