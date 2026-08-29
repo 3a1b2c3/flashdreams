@@ -158,3 +158,123 @@ this object's requirements defined correctly?
 Being diagnosed the same way as #1/#2 — import the concrete submodule
 directly to find the real underlying exception before assuming it's a
 version problem.
+
+## 7. tyro 1.0.16 fix was a false lead; `cli.py` is not the bug
+
+Do not re-patch `flashdreams/flashdreams/scripts/cli.py`'s `runner` field
+in response to "Field runner is marked as Fixed or Suppress but is
+missing a default value" — that patch attempt was reverted (see git
+history around commit `f508ae1b`). Confirmed locally: the *pristine*
+`cli.py` builds the tyro parser correctly under `tyro==1.0.15`. If this
+error resurfaces, first check whether `all_runners()` is actually empty
+(see #8) before touching `cli.py` again.
+
+## 8. `all_runners()` can return an empty registry — use `run_direct.py`
+
+`flashdreams.configs.runner_configs.all_runners()` was observed to
+return **zero** runners (not just missing `lingbot` — the built-ins were
+missing too), root cause not identified. When that happens,
+`flashdreams-run`'s tyro CLI parser ends up built over the wrong/empty
+union, which is what actually produces the "Field runner is marked as
+Fixed or Suppress" error in this environment — not a `tyro` version
+issue in that case.
+
+Diagnose:
+
+```bash
+python -c "from flashdreams.configs.runner_configs import all_runners; print(len(all_runners()))"
+```
+
+**Workaround in place:** `integrations/lingbot/run_direct.py` bypasses
+the registry and tyro entirely — it imports `RUNNER_LINGBOT_WORLD_FAST`
+directly from `lingbot.config` and calls
+`flashdreams.scripts.cli.main()` with it, the same pattern
+`flashdreams/tests/test_launch.py` uses. `run.sh` calls
+`python run_direct.py` instead of `flashdreams-run lingbot-world-fast
+webrtc`. If `all_runners()` gets root-caused and fixed, `run.sh` could
+switch back to the real `flashdreams-run` CLI.
+
+## 9. cam2v was stubbed out, then had to be un-stubbed
+
+`lingbot/controls.py` briefly wrapped `from cam2v.controls import
+CameraPoseIntegrator, ...` in a broken try/except stub (no-op
+`step()`/`apply()` methods that don't match the real API) to unblock
+module imports while the environment was broken. Once the app actually
+ran far enough to drive, this crashed with `'CameraPoseIntegrator'
+object has no attribute 'integrate_chunk'`. Fixed by installing the
+real package instead of stubbing:
+
+```bash
+pip install -e ~/flashdreams/apps/cam2v --no-deps
+```
+
+`apps/cam2v/defaults.py` also had a bad edit from the same era —
+`PresentationMode.ONLY_PRESENT_NEW` (not a real enum member) instead of
+the correct `PresentationMode.CONTINUOUS`
+(`flashdreams/flashdreams/runtime_v2/session_desc.py` only defines
+`ON_DEMAND` and `CONTINUOUS`). **Lesson: don't stub out real
+dependencies to work around unrelated environment breakage — fix the
+environment, then use the real package.** A stub that "unblocks" an
+import silently ships broken functionality until something actually
+exercises it.
+
+## 10. Custom prompt: `Unknown event_id='user_prompt'`
+
+The client's free-form custom-prompt field sends
+`{event_id: "user_prompt", state, prompt}` over the WebRTC data channel
+(`lingbot/webrtc/web/adapter.js`). This event id is deliberately *not*
+one of the precomputed catalog entries in `DEFAULT_TEXT_EVENTS`
+(portal/storm/fireworks/blue_balloon) — it's a reserved sentinel for a
+free-form prompt supplied at request time. Every validation layer in the
+pipeline defaulted to catalog-only membership checks and had to be
+special-cased for `event_id == "user_prompt"`, and the raw `prompt`
+string was getting silently dropped in more than one place before it
+ever reached that check. Four fixes, all now required together:
+
+1. `flashdreams/flashdreams/serving/webrtc/manager.py`
+   `_handle_event_message` (shared framework layer, used by every
+   integration) hardcoded the session-branch payload to
+   `{"event_id": ..., "state": ...}`, dropping `prompt` from the raw
+   incoming message entirely.
+2. `lingbot/webrtc/session.py` `validate_user_event` also stripped
+   `prompt` from its returned payload dict, and delegated to
+   `_validate_event_request`, which rejects any `event_id` not in the
+   precomputed `_event_embeddings` catalog.
+3. `lingbot/input_mapping.py` `_text_event_update` — same shape of bug:
+   rejected any `event_id` not in `self._text_event_prompts`, and even
+   if it hadn't, it would have used the static catalog prompt for that
+   id rather than the dynamic one in the payload.
+4. `lingbot/demo/providers.py` `_apply_text_event` /
+   `_text_event_update` — an exact duplicate of #3 for the
+   replay/mp4 demo path (`LingbotInputProvider`), same fix needed.
+
+All four now special-case a reserved `_USER_PROMPT_EVENT_ID = "user_prompt"`
+constant (defined locally in each of the three lingbot files — no shared
+import, to avoid circular imports between `session.py` and
+`input_mapping.py`) to skip the catalog check and read the prompt
+straight from the payload.
+
+**The actual embedding/encoding step needed no fix** —
+`session.py`'s `_apply_conditioning_update_sync` already correctly
+encodes arbitrary prompt text live via `_encode_text_embeddings_sync`
+when the prompt string isn't a cache hit against a precomputed catalog
+prompt. Only the validation/plumbing layers in front of it were
+stripping or rejecting the dynamic prompt before it could get there.
+
+`logger.info()` calls were added at each of the four stages
+(`manager.py`, `session.py` x2, `input_mapping.py`) — gated to
+state-change points only, not per-frame — so future debugging can see
+exactly which stage a prompt reaches in server logs instead of guessing
+blind again.
+
+## 11. GPU memory usage looks abnormally high
+
+Observed `GPU mem alloc 110.579 GiB` / `peak 119.327 GiB` for
+`lingbot-world-fast`, which is built on a 1.3B parameter base model
+(`Wan-AI/Wan2.1-T2V-1.3B-Diffusers`). That's an order of magnitude more
+than expected for a model that size. Not yet investigated — flagging so
+it isn't mistaken for "expected" if a CUDA OOM shows up again on a
+smaller GPU. Possible causes to check first: duplicate model copies
+resident (e.g. both a base + reloaded checkpoint), no memory-efficient
+attention/offloading enabled by default, or accumulation across
+multiple rollout resets in one long-lived process.
