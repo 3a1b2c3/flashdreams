@@ -20,6 +20,8 @@ follows is already done for you.
   and the reference for writing a UI loop.
 - `cam2v_lingbot` — the Lingbot World specialization of the shared interactive
   camera-to-video application.
+- `waypoint` — the interactive Waypoint 1.5 image-established application
+  with deterministic control replay and live keyboard/mouse input.
 - `t2v_self_forcing`, `t2v_causal_forcing`, `t2v_fastvideo_causal_wan22`,
   `t2v_wan21`, `t2v_cosmos_predict2` — real models, each a thin wrapper over
   `flashdreams.t2v_v2`.
@@ -168,7 +170,7 @@ window never sends a close event. And `reset` raises by default, so implement it
 even when the body is one line — a browser client can ask for one at any time.
 
 Register no UI loop unless you need one. The default composites every model
-channel into one frame, which is what all of these except `slangpy_ui_demo` do.
+channel into one frame, which is what most demos need (Refer to `slangpy_ui_demo` for more complex behavior via `SlangPyUILoop`; Refer to `interactive_drive` for more complex behavior via `ImGuiUILoop`).
 
 ## Running it
 

@@ -12,7 +12,11 @@ from red_screen import create_app
 
 from flashdreams.api_v2.client_window import IClientWindow
 from flashdreams.api_v2.session import ISession
-from flashdreams.runtime_v2.session_desc import PresentationMode, SessionDesc
+from flashdreams.runtime_v2.session_desc import (
+    BackpressureMode,
+    PresentationMode,
+    SessionDesc,
+)
 from flashdreams.runtime_v2.session_runner import run_session
 from flashdreams.runtime_v2.step_result import StepResult
 from flashdreams.runtime_v2.user_input_event import (
@@ -80,7 +84,8 @@ def _session_desc(
 ) -> SessionDesc:
     return SessionDesc(
         output_layout=layout,
-        presentation_mode=PresentationMode.ONLY_PRESENT_NEW,
+        backpressure_mode=BackpressureMode.BLOCK,
+        presentation_mode=PresentationMode.ON_DEMAND,
         frames_per_second_for_ui=frames_per_second_for_ui,
         frames_per_second_for_step=1,
         video_width=_FRAME_SIZE,
@@ -106,14 +111,12 @@ def _key_event(*, pressed: bool, key: str = _ACTIVATION_KEY) -> UserInputEvents:
 
 def _is_red(result: StepResult) -> bool:
     # Frames carry [-1, 1], so full red is 1.0 and the other channels are -1.0.
-    return bool(
-        torch.all(result.output[:, 0] == 1.0)
-        and torch.all(result.output[:, 1:] == -1.0)
-    )
+    output = result.read_output()
+    return bool(torch.all(output[:, 0] == 1.0) and torch.all(output[:, 1:] == -1.0))
 
 
 def _is_black(result: StepResult) -> bool:
-    return bool(torch.all(result.output == -1.0))
+    return bool(torch.all(result.read_output() == -1.0))
 
 
 def _step(session: ISession, step_index: int, events: UserInputEvents) -> StepResult:
@@ -193,9 +196,10 @@ def test_red_screen_uses_last_event_to_adjust_color_intensity() -> None:
         ),
     )
 
+    increased_output = increased.read_output()
     assert torch.allclose(
-        increased.output[:, 0],
-        torch.full_like(increased.output[:, 0], -0.8),
+        increased_output[:, 0],
+        torch.full_like(increased_output[:, 0], -0.8),
     )
     assert _is_black(last_event_decreases)
 
@@ -241,8 +245,9 @@ def test_red_screen_frames_match_the_session_desc() -> None:
     window = _run(_key_event(pressed=True), steps=1)
 
     result = window.results[0]
-    assert result.output.shape == (1, 3, 1, _FRAME_SIZE, _FRAME_SIZE)
-    assert result.output.dtype is torch.float32
+    output = result.read_output()
+    assert output.shape == (1, 3, 1, _FRAME_SIZE, _FRAME_SIZE)
+    assert output.dtype is torch.float32
     assert result.frame_count == 1
     assert result.output_layout is VideoTensorLayout.bcthw
 

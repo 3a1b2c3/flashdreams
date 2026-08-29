@@ -11,6 +11,15 @@ This is the implementation. For how the pieces fit together and why the seams ar
 where they are, read [ARCHITECTURE.md](../../../ARCHITECTURE.md) first; for the
 protocols an application implements, see [`api_v2`](../api_v2/README.md).
 
+## Terminology
+
+| Term | Meaning |
+| --- | --- |
+| **Latent frame** | One temporal slice in the model's latent representation. It is not yet an RGB or RGBA image; decoding may produce one or more model frames from it. |
+| **AR step** or **AR chunk** | One autoregressive model iteration and the group of latent frames it produces. A chunk commonly contains four or eight latent frames, but the size is integration-specific. |
+| **Model frame** | One decoded RGB or RGBA image produced by the model, before UI composition. A model step may return several model frames together. |
+| **Frame** or **presented frame** | One model frame after the UI loop has composited its widgets or overlays. This is the frame written to a client window or output sink. |
+
 ## What is in here
 
 Finding and starting an application:
@@ -41,8 +50,9 @@ Presenting it:
 
 - `blit_model_output_to_screen_loop.py` is the UI loop a session gets when it
   registers none of its own.
-- `slangpy_ui_loop.py` and `slangpy_ui_renderer.py` are the UI loop for
-  applications that draw widgets over the model output.
+- `slangpy_ui_loop.py` and `slangpy_ui_renderer.py` provide retained SlangPy
+  widgets over the model output. `imgui_ui_loop.py` and `imgui_ui_renderer.py`
+  provide immediate Dear ImGui controls rendered through SlangPy.
 - `mp4_client_window.py` and `webrtc_client_window.py` are the two windows.
 - `mp4_output_sink.py`, `metrics_output_sink.py`, `video_encoder.py` and
   `video_tensor.py` are what output is written through.
@@ -52,6 +62,12 @@ Input:
 
 - `user_input_event.py` defines the concrete event types, `user_input_events.py` the
   batch of them a source hands over.
+- `input_timeline.py` advances modality-neutral, fixed-rate input windows and
+  catches a stale model clock up to newly accepted input.
+- `keyboard_input.py` buffers keyboard edges independently of that clock and
+  projects held state over each selected window. Other modalities should reuse
+  the window clock with their own semantics: held state for mouse buttons,
+  coalesced position for pointer motion, and accumulated impulses for wheels.
 
 ## The command line
 
@@ -78,7 +94,7 @@ These override whatever session the application asked for:
 | `--fps` | `frames_per_second_for_step`, which is also the rate an MP4 plays back at. |
 | `--layout` | Tensor layout to generate results in. |
 | `--backpressure-mode` | What the model thread does when the presentation queue is full. |
-| `--presentation-mode` | Whether the UI presents eagerly or only for new model frames. |
+| `--presentation-mode` | Whether the UI runs continuously or only for newly selected model frames. |
 
 Each defaults to asking for nothing, so a run that names none of them gets what
 the application generates. There is no argument for the UI tick rate, and none
@@ -90,6 +106,10 @@ results as they are published, not the UI loop's output, so a benchmark measures
 what the model generated while the window still sees one composited frame per
 tick. See [`configs/v2_model_benchmarks.json`](../../../configs/v2_model_benchmarks.json)
 and the [benchmark README](../../tools/benchmarks/README.md) for the suite.
+The runtime augments those model records with step wall time and
+presentation-queue depth/publish-wait measurements under the reserved
+`runtime_` metric prefix. UI and window timings are not folded into a later
+model record because they describe a different frame.
 
 ## Starting and stopping a run
 
@@ -113,7 +133,7 @@ rest.
 
 ## `EventBuffer`
 
-Input arrives once per tick on the main thread and is appended here. The buffer
+Input arrives once per tick on the UI thread and is appended here. The buffer
 keeps a flat list plus a cursor per registered reader: `read` returns everything
 that reader has not seen and moves its cursor to the end, and
 `collect_garbage` deletes the prefix every reader has passed. The UI loop is
@@ -131,9 +151,24 @@ neither thread waits on the other to notice.
 ## `PresentationManager`
 
 The model thread publishes a list of channels per step into a bounded queue
-(`max_pending`, two by default). The main thread calls `advance` once per tick,
+(`max_pending`, two by default). The UI thread calls `advance` once per tick,
 which walks the frames within the chunk it is already showing before taking
 another off the queue.
+
+When CUDA is available, the default `PresentationManager` creates a stream at
+the device's highest available priority. `run_session` keeps that one stream
+current for the entire UI-thread lifecycle, including session and window
+initialization, input collection, UI rendering, window writes, and cleanup.
+Constructing the manager with an explicit CPU device disables the CUDA stream.
+Stream priority lets short UI work overtake queued lower-priority kernels, but
+does not preempt a kernel that is already executing.
+
+Frame cadence initially uses `frames_per_second_for_step`, then follows the
+throughput of model steps completed over the trailing two seconds. The estimate
+uses time spent inside model steps, so presentation-queue backpressure cannot
+feed back into a progressively slower cadence. A late UI tick reanchors the next
+deadline; it never drains multiple model frames into back-to-back writes in one
+tick.
 
 `SessionDesc.backpressure_mode` decides what publishing does when the queue is
 full:
@@ -147,22 +182,28 @@ full:
 `SessionDesc.presentation_mode` decides what the UI does when no new frame is
 ready:
 
-- `ONLY_PRESENT_NEWEST` runs the UI loop every tick, re-presenting the newest
-  model frame.
-- `ONLY_PRESENT_NEW` runs the UI loop only on a tick where `advance` actually
-  moved to a new frame.
+- `CONTINUOUS` runs the UI loop every tick, re-presenting the newest
+  model frame with UI redrawing.
+- `ON_DEMAND` runs the UI loop only when `advance` moves to a new model frame.
 
 For output that has to be compared frame by frame, use `BLOCK` with
-`ONLY_PRESENT_NEW`: together they keep every frame and present each exactly once,
-in order. Steps that could not be kept are counted in `dropped_for_space` and
-`discarded_at_reset`, and logged when the run ends. Both count model steps rather
-than frames, so one step of twelve frames counts once.
+`ON_DEMAND`: together they keep every frame in the presentation manager
+and present each exactly once in order. Steps that could not be kept are counted
+in `dropped_for_space` and `discarded_at_reset`, and logged when the run ends.
+Both count model steps rather than frames, so one step of twelve frames counts
+once.
 
 ## Presenting and writing
 
 A UI loop reads model frames through `presented_model_frame` and
 `presented_model_frames`, composites whatever it wants, and returns one
 `StepResult` that `run_session` writes to the window.
+
+The ImGui and SlangPy UI loops prepare the optional model back buffer before
+composition: integer `[0, 255]` frames are normalized to the renderer's
+floating-point range, frames are moved to the renderer's device, and dimensions
+are resized to the rendered overlay. `PresentationManager.composite` then
+enforces matching dimensions and device instead of silently repairing them.
 
 The default UI loop, `BlitModelOutputToScreenLoop`, composites every model
 channel in list order as if they were image layers and reshapes the result into
@@ -183,6 +224,13 @@ has to finish on its own. The WebRTC window turns browser keyboard, mouse and
 focus events into input and a disconnecting browser into a close; because those
 arrive on the server's own thread, it queues them and hands them over in batches
 when the session asks.
+
+The UI thread owns WebRTC cadence. Each `write` synchronously materializes one
+owned video frame and admits it to a two-frame FIFO of unsent frames. The WebRTC
+track returns queued frames to aiortc immediately: it neither sleeps to pace
+them nor repeats the latest frame. If network or encoder congestion fills the
+FIFO, the next write replaces only its oldest unsent frame; a frame already
+handed to aiortc is never overwritten.
 
 What a sink expects of the pixel values it is handed is part of the result
 contract, in [`api_v2`](../api_v2/README.md#what-a-step-returns).
