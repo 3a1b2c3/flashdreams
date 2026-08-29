@@ -1159,7 +1159,20 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             return False
 
         try:
-            result = trigger_event(event_id=event_id, state=state)
+            trigger_kwargs: dict[str, Any] = {"event_id": event_id, "state": state}
+            raw_prompt = payload.get("prompt")
+            if raw_prompt is not None and "prompt" in inspect.signature(
+                trigger_event
+            ).parameters:
+                trigger_kwargs["prompt"] = raw_prompt
+                logger.opt(colors=True).info(
+                    "<magenta>WebRTC text_event received (direct trigger_event): "
+                    "event_id={!r} state={!r} prompt={!r}</magenta>",
+                    event_id,
+                    state,
+                    raw_prompt,
+                )
+            result = trigger_event(**trigger_kwargs)
             if inspect.isawaitable(result):
                 result = await result
         except Exception as exc:

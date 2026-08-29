@@ -622,14 +622,22 @@ class LingbotInferenceRuntime(
         self._world_scale = 1.0
 
     async def trigger_event(
-        self, *, event_id: str, state: str = "trigger"
+        self, *, event_id: str, state: str = "trigger", prompt: str | None = None
     ) -> dict[str, str | None]:
-        """Activate or clear a precomputed text event for subsequent chunks."""
+        """Activate or clear a precomputed text event for subsequent chunks.
+
+        ``prompt`` is only honored when ``event_id`` is the reserved
+        ``_USER_PROMPT_EVENT_ID`` sentinel -- a free-form prompt supplied at
+        request time rather than one of the precomputed catalog entries.
+        """
         if self._closed:
             raise LingbotRuntimeError("Runtime is closed.")
         if self._pipeline is None or self._model_session is None:
             raise LingbotRuntimeError("Runtime is not initialized.")
-        event_id, state = self._validate_event_request(event_id=event_id, state=state)
+        normalized_prompt = normalize_prompt_text(prompt) if prompt is not None else ""
+        is_user_prompt = event_id == _USER_PROMPT_EVENT_ID and bool(normalized_prompt)
+        if not is_user_prompt:
+            event_id, state = self._validate_event_request(event_id=event_id, state=state)
         async with self._step_lock:
             if self._closed:
                 raise LingbotRuntimeError("Runtime is closed.")
@@ -639,6 +647,7 @@ class LingbotInferenceRuntime(
                 self._trigger_event_sync_all_ranks,
                 event_id,
                 state,
+                normalized_prompt if is_user_prompt else None,
             )
 
     async def start_inference_session(self) -> LingbotWebRTCInferenceSession:
@@ -791,8 +800,9 @@ class LingbotInferenceRuntime(
         self,
         event_id: str,
         state: str = "trigger",
+        prompt: str | None = None,
     ) -> dict[str, str | None]:
-        return self._trigger_event_sync(event_id=event_id, state=state)
+        return self._trigger_event_sync(event_id=event_id, state=state, prompt=prompt)
 
     def _initialize_sync(self) -> None:
         if self._pipeline is not None:
@@ -1090,14 +1100,39 @@ class LingbotInferenceRuntime(
         *,
         event_id: str,
         state: str = "trigger",
+        prompt: str | None = None,
     ) -> dict[str, str | None]:
-        event_id, state = self._validate_event_request(event_id=event_id, state=state)
+        is_user_prompt = event_id == _USER_PROMPT_EVENT_ID and bool(prompt)
+        if not is_user_prompt:
+            event_id, state = self._validate_event_request(event_id=event_id, state=state)
         if state in {"clear", "release", "off", "none"}:
             if self._base_text_embeddings is None:
                 raise LingbotRuntimeError("Base prompt embeddings are not ready.")
             self._replace_rollout_text_embeddings(self._base_text_embeddings)
             self._active_event_id = None
             return {"active_event_id": None}
+        if is_user_prompt:
+            # Free-form prompt supplied dynamically, not a precomputed
+            # catalog entry -- encode it live (or reuse the cache if this
+            # exact text was already used earlier in the rollout).
+            embeddings = self._prompt_embeddings.get(prompt)
+            if embeddings is None:
+                logger.opt(colors=True).info(
+                    "<magenta>Lingbot encoding fresh prompt embedding "
+                    "(direct trigger_event): {!r}</magenta>",
+                    prompt,
+                )
+                embeddings = self._encode_text_embeddings_sync([prompt])
+                self._prompt_embeddings[prompt] = embeddings
+            else:
+                logger.opt(colors=True).info(
+                    "<magenta>Lingbot reusing cached prompt embedding "
+                    "(direct trigger_event): {!r}</magenta>",
+                    prompt,
+                )
+            self._replace_rollout_text_embeddings(embeddings)
+            self._active_event_id = event_id
+            return {"active_event_id": event_id}
         self._replace_rollout_text_embeddings(self._event_embeddings[event_id])
         self._active_event_id = event_id
         return {"active_event_id": event_id}
