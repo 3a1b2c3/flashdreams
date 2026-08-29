@@ -1159,12 +1159,8 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             return False
 
         try:
-            trigger_kwargs: dict[str, Any] = {"event_id": event_id, "state": state}
             raw_prompt = payload.get("prompt")
-            if raw_prompt is not None and "prompt" in inspect.signature(
-                trigger_event
-            ).parameters:
-                trigger_kwargs["prompt"] = raw_prompt
+            if raw_prompt is not None:
                 logger.opt(colors=True).info(
                     "<magenta>WebRTC text_event received (direct trigger_event): "
                     "event_id={!r} state={!r} prompt={!r}</magenta>",
@@ -1172,7 +1168,24 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                     state,
                     raw_prompt,
                 )
-            result = trigger_event(**trigger_kwargs)
+                if channel is not None:
+                    self._send_json(
+                        channel,
+                        {
+                            "type": "server_log",
+                            "message": (
+                                f"text_event received (direct trigger_event): "
+                                f"event_id={event_id!r} state={state!r} "
+                                f"prompt={raw_prompt!r}"
+                            ),
+                        },
+                    )
+            try:
+                result = trigger_event(event_id=event_id, state=state, prompt=raw_prompt)
+            except TypeError:
+                # This runtime's trigger_event() doesn't accept a prompt kwarg
+                # (older signature, or a different integration entirely).
+                result = trigger_event(event_id=event_id, state=state)
             if inspect.isawaitable(result):
                 result = await result
         except Exception as exc:
