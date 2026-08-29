@@ -267,8 +267,19 @@ def entrypoint(argv: list[str] | None = None) -> None:
     # ``--prompt`` and ``runner.pipeline.<encoder>:<concrete>``
     # selectors collapse to ``pipeline.<encoder>:<concrete>``. Nested
     # struct fields keep their own names for disambiguation.
+    # A single selected runner collapses ``union`` from a real subcommand
+    # ``Union`` down to one concrete type. ``SuppressFixed`` on that
+    # collapsed type still needs the ``runner`` field itself to carry a
+    # default (tyro can't infer one for a suppressed field), so wire in
+    # the resolved runner config directly when there's exactly one.
+    runner_field_spec: tuple = ()
+    if selected_runner_name is not None:
+        runner_default = parser_runners[selected_runner_name]
+        runner_field_spec = (
+            dataclasses.field(default_factory=lambda rc=runner_default: rc),
+        )
     cli_fields: list[tuple] = [
-        ("runner", Annotated[union, tyro.conf.arg(name="")]),
+        ("runner", Annotated[union, tyro.conf.arg(name="")], *runner_field_spec),
         (
             "no_instantiate",
             bool,

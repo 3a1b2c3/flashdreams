@@ -33,11 +33,17 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 echo "[5/7] Installing dependencies..."
 pip install "transformers>=5.0,<6" sentencepiece scipy opencv-python
 pip install aiohttp aiortc python-multipart loguru
-pip install tyro pydantic fastapi uvicorn pillow numpy gradio websockets
+pip install "tyro>=1.0,<2.0" pydantic fastapi uvicorn pillow numpy gradio websockets
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
-# Step 6: Clear caches
-echo "[6/6] Clearing caches..."
+# Step 6: Install flashdreams + lingbot editable, without disturbing the
+# pinned torch/torchaudio/transformers/tyro versions above.
+echo "[6/7] Installing flashdreams + lingbot (editable)..."
+pip install -e "$FLASHDREAMS_ROOT/flashdreams" --no-deps
+pip install -e "$HERE" --no-deps
+
+# Step 7: Clear caches
+echo "[7/7] Clearing caches..."
 find "$HERE" -type d -name __pycache__ -delete 2>/dev/null || true
 cd "$HERE"
 
