@@ -33,12 +33,20 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 echo "[5/7] Installing dependencies..."
 pip install "transformers>=5.0,<6" sentencepiece scipy opencv-python
 pip install aiohttp aiortc python-multipart loguru
-pip install "tyro>=1.0,<2.0" pydantic fastapi uvicorn pillow numpy gradio websockets
+# tyro 1.0.16 regresses the SuppressFixed subcommand-union path that
+# flashdreams-run's single-runner CLI parser depends on (raises "Field
+# runner is marked as Fixed or Suppress but is missing a default value");
+# 1.0.15 builds the same parser cleanly.
+pip install "tyro==1.0.15" pydantic fastapi uvicorn pillow numpy gradio websockets
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
 
 # Step 6: Install flashdreams + lingbot editable, without disturbing the
-# pinned torch/torchaudio/transformers/tyro versions above.
+# pinned torch/torchaudio/transformers/tyro versions above. Uninstall any
+# stale non-editable copy first -- a prior plain "pip install flashdreams"
+# leaves a static site-packages copy that silently shadows the editable
+# install and source edits stop taking effect.
 echo "[6/7] Installing flashdreams + lingbot (editable)..."
+pip uninstall -y flashdreams flashdreams-lingbot >/dev/null 2>&1 || true
 pip install -e "$FLASHDREAMS_ROOT/flashdreams" --no-deps
 pip install -e "$HERE" --no-deps
 
