@@ -218,54 +218,98 @@ environment, then use the real package.** A stub that "unblocks" an
 import silently ships broken functionality until something actually
 exercises it.
 
-## 10. Custom prompt: `Unknown event_id='user_prompt'`
+## 10. Custom prompt: `Unknown event_id='user_prompt'` (RESOLVED)
 
 The client's free-form custom-prompt field sends
 `{event_id: "user_prompt", state, prompt}` over the WebRTC data channel
 (`lingbot/webrtc/web/adapter.js`). This event id is deliberately *not*
 one of the precomputed catalog entries in `DEFAULT_TEXT_EVENTS`
-(portal/storm/fireworks/blue_balloon) — it's a reserved sentinel for a
-free-form prompt supplied at request time. Every validation layer in the
-pipeline defaulted to catalog-only membership checks and had to be
-special-cased for `event_id == "user_prompt"`, and the raw `prompt`
-string was getting silently dropped in more than one place before it
-ever reached that check. Four fixes, all now required together:
+(portal/storm/fireworks) — it's a reserved sentinel for a free-form
+prompt supplied at request time. Confirmed working end-to-end via real
+server logs on 2026-08-28.
 
-1. `flashdreams/flashdreams/serving/webrtc/manager.py`
-   `_handle_event_message` (shared framework layer, used by every
-   integration) hardcoded the session-branch payload to
-   `{"event_id": ..., "state": ...}`, dropping `prompt` from the raw
-   incoming message entirely.
-2. `lingbot/webrtc/session.py` `validate_user_event` also stripped
-   `prompt` from its returned payload dict, and delegated to
-   `_validate_event_request`, which rejects any `event_id` not in the
-   precomputed `_event_embeddings` catalog.
-3. `lingbot/input_mapping.py` `_text_event_update` — same shape of bug:
-   rejected any `event_id` not in `self._text_event_prompts`, and even
-   if it hadn't, it would have used the static catalog prompt for that
-   id rather than the dynamic one in the payload.
-4. `lingbot/demo/providers.py` `_apply_text_event` /
-   `_text_event_update` — an exact duplicate of #3 for the
-   replay/mp4 demo path (`LingbotInputProvider`), same fix needed.
+**The actual bug** — `flashdreams/flashdreams/serving/webrtc/manager.py`
+has *three separate dispatch branches* for an incoming `"event"`
+message, depending on which fields are set on `managed_session`:
 
-All four now special-case a reserved `_USER_PROMPT_EVENT_ID = "user_prompt"`
-constant (defined locally in each of the three lingbot files — no shared
-import, to avoid circular imports between `session.py` and
-`input_mapping.py`) to skip the catalog check and read the prompt
-straight from the payload.
+1. `if managed_session.inference_session is not None:` — the
+   session/mapping-based path (`validate_user_event` ->
+   `TextEventSelection.convert()` -> `input_mapping.py`'s
+   `_text_event_update`).
+2. The direct `runtime.trigger_event(event_id=..., state=...)` call for
+   runtimes without an inference session.
+3. `if managed_session.input_source is not None:` -> routes to
+   `_handle_shared_datachannel_payload` -> `_record_shared_event_payload`
+   — a **third, separate** dispatch mechanism, unrelated to the other
+   two, used by this deployment.
 
-**The actual embedding/encoding step needed no fix** —
-`session.py`'s `_apply_conditioning_update_sync` already correctly
-encodes arbitrary prompt text live via `_encode_text_embeddings_sync`
-when the prompt string isn't a cache hit against a precomputed catalog
-prompt. Only the validation/plumbing layers in front of it were
-stripping or rejecting the dynamic prompt before it could get there.
+Every one of these branches independently hardcoded its payload dict to
+`{"event_id": ..., "state": ...}`, dropping `prompt` before it ever
+reached validation — the exact same one-line bug, copy-pasted (or
+independently reinvented) four times across
+`manager.py`/`session.py`/`input_mapping.py`/`services.py`. Every fix
+before the real one was technically correct but targeted branches #1/#2,
+which were *not* the branch this deployment actually uses (#3) — so
+none of it changed the observed behavior, which looked exactly like a
+stale-deployment problem (identical error, unchanged after every push)
+because the code we kept "fixing" genuinely wasn't running.
 
-`logger.info()` calls were added at each of the four stages
-(`manager.py`, `session.py` x2, `input_mapping.py`) — gated to
-state-change points only, not per-frame — so future debugging can see
-exactly which stage a prompt reaches in server logs instead of guessing
-blind again.
+**What finally found it:** reproducing the failure *locally*, directly
+against the real (unmodified) `LingbotInferenceRuntime.trigger_event`,
+using a lightweight stub instance that bypasses the expensive
+`__init__` (`object.__new__(LingbotInferenceRuntime)` + manually setting
+just the handful of attributes the method touches, no model/GPU
+needed):
+
+```python
+runtime = object.__new__(LingbotInferenceRuntime)
+runtime._closed = False
+runtime._pipeline = object()          # just needs to be non-None
+runtime._model_session = object()
+runtime._event_embeddings = {"portal": "x", ...}
+# ... stub _step_lock / _worker with async no-ops ...
+await runtime.trigger_event(event_id="user_prompt", state="trigger", prompt=None)
+# -> raises the exact "Unknown event_id" error
+await runtime.trigger_event(event_id="user_prompt", state="trigger", prompt="1")
+# -> succeeds
+```
+
+That proved definitively that `prompt` was arriving as `None` at the
+one function known to raise this error — not a deployment/staleness
+problem at all — which redirected the search to *why* `prompt` was
+`None`, and turned up the fourth, never-before-checked call site in
+`_record_shared_event_payload`.
+
+**Lesson: when the exact same error survives multiple confirmed-correct
+fixes and multiple confirmed-fresh deployments, stop trusting logs from
+the live system and reproduce the failure locally against the real
+function with a minimal stub instead.** A live system has too many
+variables (which of several near-identical dispatch branches is even
+active, whether a restart really picked up new code, whether the
+browser reconnected to the new process) to reliably falsify a
+hypothesis. A five-line local repro against the unmodified function
+settled in one shot what ~20 rounds of "push, pull, restart, test on
+the live server" could not.
+
+All four call sites now special-case a reserved
+`_USER_PROMPT_EVENT_ID = "user_prompt"` constant (defined locally in
+each file — no shared import, to avoid circular imports between
+`session.py` and `input_mapping.py`) to skip the catalog check and read
+the prompt straight from the payload. `session.py`'s
+`_apply_conditioning_update_sync` (and the equivalent in
+`_trigger_event_sync` for the direct-`trigger_event` branch) needed no
+fix — both already correctly encode arbitrary prompt text live via
+`_encode_text_embeddings_sync`, caching by exact prompt string, when the
+text isn't a hit against the precomputed catalog embeddings. Only the
+validation/plumbing layers in front were stripping or rejecting the
+dynamic prompt before it could get there.
+
+`logger.opt(colors=True).info("<magenta>...</magenta>", ...)` calls were
+added at every stage across all three branches, plus mirrored to the
+browser's Client Logs panel via a `{"type": "server_log", "message":
+...}` WebRTC data-channel message (the client already handles this
+message type in `request_session.js`) — so confirming which stage a
+prompt reaches no longer requires terminal access at all.
 
 ## 11. GPU memory usage looks abnormally high
 
