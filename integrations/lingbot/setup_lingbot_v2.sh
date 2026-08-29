@@ -31,7 +31,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Step 5: Install all dependencies
 echo "[5/7] Installing dependencies..."
-pip install transformers==4.40.0 sentencepiece scipy opencv-python
+pip install "transformers>=5.0,<6" sentencepiece scipy opencv-python
 pip install aiohttp aiortc python-multipart loguru
 pip install tyro pydantic fastapi uvicorn pillow numpy gradio websockets
 pip install flash-attn==2.6.3 --no-build-isolation 2>/dev/null || pip install flash-attn==2.6.3 --only-binary :all: 2>/dev/null || true
