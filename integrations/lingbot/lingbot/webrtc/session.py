@@ -687,6 +687,9 @@ class LingbotInferenceRuntime(
             # doesn't go through the catalog membership check in
             # _validate_event_request. Still normalize state the same way.
             state = state if state in {"trigger", "hold", "on"} else "trigger"
+            logger.info(
+                "Lingbot custom prompt received: state={!r} prompt={!r}", state, prompt
+            )
             return {"event_id": event_id, "state": state, "prompt": prompt}
         event_id, state = self._validate_event_request(event_id=event_id, state=state)
         clears = state in {"clear", "release", "off", "none"}
@@ -1206,7 +1209,10 @@ class LingbotInferenceRuntime(
             return
         embeddings = self._prompt_embeddings.get(prompt)
         if embeddings is None:
+            logger.info("Lingbot encoding fresh prompt embedding: {!r}", prompt)
             embeddings = self._encode_text_embeddings_sync([prompt])
+        else:
+            logger.info("Lingbot reusing cached prompt embedding: {!r}", prompt)
         self._replace_rollout_text_embeddings(embeddings)
         self._prompt = prompt
         self._active_event_id = next(

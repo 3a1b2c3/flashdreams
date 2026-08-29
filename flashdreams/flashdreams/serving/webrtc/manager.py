@@ -1097,6 +1097,13 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             # applied by the next step, so there is no separate runtime call.
             clears = state in clear_states
             raw_prompt = payload.get("prompt")
+            if raw_prompt is not None:
+                logger.info(
+                    "WebRTC text_event received: event_id={!r} state={!r} prompt={!r}",
+                    event_id,
+                    state,
+                    raw_prompt,
+                )
             try:
                 event_payload = self._validate_user_event_payload(
                     managed_session=managed_session,

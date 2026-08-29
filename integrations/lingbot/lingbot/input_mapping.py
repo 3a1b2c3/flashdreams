@@ -24,6 +24,7 @@ from typing import Any
 
 import numpy as np
 import torch
+from loguru import logger
 
 from flashdreams.runtime.canonical import (
     CAMERA_COMMAND,
@@ -517,7 +518,13 @@ class LingbotInputMapping:
             # Free-form prompt supplied dynamically in the payload, not a
             # precomputed catalog entry.
             prompt = value.get("prompt") or self._base_prompt
+            logger.info(
+                "Lingbot text event applied: event_id={!r} prompt={!r}",
+                event_id,
+                prompt,
+            )
         else:
+            logger.info("Lingbot text event applied: event_id={!r}", event_id)
             prompt = (
                 self._base_prompt
                 if event_id is None
