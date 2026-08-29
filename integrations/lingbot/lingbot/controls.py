@@ -9,8 +9,16 @@ except (ImportError, ModuleNotFoundError, AttributeError):
     class CameraPoseIntegrator:
         def __init__(self):
             pass
+        def reset(self):
+            pass
+        def step(self, *args, **kwargs):
+            pass
+        def apply(self, *args, **kwargs):
+            pass
     class KeyboardResampler:
         def __init__(self):
+            pass
+        def step(self, *args, **kwargs):
             pass
     class PoseSegment:
         pass
