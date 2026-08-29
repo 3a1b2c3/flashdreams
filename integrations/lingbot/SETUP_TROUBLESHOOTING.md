@@ -278,3 +278,63 @@ smaller GPU. Possible causes to check first: duplicate model copies
 resident (e.g. both a base + reloaded checkpoint), no memory-efficient
 attention/offloading enabled by default, or accumulation across
 multiple rollout resets in one long-lived process.
+
+## 12. Zombie server processes silently eat the whole GPU AND serve stale code
+
+**Symptom:** code fixes are pushed, pulled, and the server is restarted
+repeatedly, but the exact same pre-fix error keeps appearing verbatim,
+no matter what changes. Eventually a genuine CUDA OOM shows up with
+almost the entire GPU "in use" (e.g. `585760768 bytes free` out of a
+`249.81 GiB` card) despite the model itself only needing ~110 GiB.
+
+**Root cause:** a previous `run.sh` process didn't fully exit (e.g. a
+`Ctrl+C` landed mid-shutdown, during `gc.collect()` in
+`flashdreams/serving/webrtc/bootstrap.py`) and kept running in the
+background, still holding its full GPU memory allocation. A *new*
+`run.sh` invocation starts a genuinely fresh process with the latest
+code, but if the old zombie is still alive, two things go wrong at
+once: (a) combined GPU memory from both processes exhausts the card,
+and (b) if the browser's WebRTC connection happens to be talking to the
+*old* process, every request runs pre-fix code forever, regardless of
+how many times the source gets updated and the (different, new)
+process gets restarted.
+
+**Diagnose — list every process actually holding GPU memory, not just
+what you think is running:**
+
+```bash
+nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv
+for pid in $(nvidia-smi --query-compute-apps=pid --format=csv,noheader); do
+  echo "PID $pid owner: $(ps -o user= -p "$pid" 2>/dev/null)"
+done
+```
+
+More than one `python` process listed here, especially with memory
+usage that roughly sums to the full card, is the tell.
+
+**Fix — find which PID (if any) is actually bound to the server port,
+kill every other one holding GPU memory, then restart clean:**
+
+```bash
+LIVE_PID=$(ss -ltnp 2>/dev/null | grep 8089 | grep -oP 'pid=\K[0-9]+' | head -1)
+echo "Live PID on port 8089: ${LIVE_PID:-unknown}"
+for pid in $(nvidia-smi --query-compute-apps=pid --format=csv,noheader); do
+  if [ "$pid" != "$LIVE_PID" ]; then
+    echo "Killing stale PID $pid..."
+    kill -9 "$pid"
+  fi
+done
+nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv
+```
+
+If `nvidia-smi` shows an empty process list afterward, the GPU is
+genuinely clean — restart `bash run.sh` and reconnect the browser tab
+(a hard refresh doesn't hurt either, to be sure it's not holding an
+old WebRTC connection open) before testing anything further.
+
+**Lesson: when a code fix provably doesn't change behavior after
+multiple push/pull/restart cycles, stop assuming the code is wrong and
+check for a zombie process first.** This one cost most of a debugging
+session because every signal pointed at "the fix isn't deployed" when
+the fix was deployed correctly the whole time — the browser just
+wasn't talking to it.
