@@ -1211,6 +1211,9 @@ class LingbotInferenceRuntime(
         if embeddings is None:
             logger.info("Lingbot encoding fresh prompt embedding: {!r}", prompt)
             embeddings = self._encode_text_embeddings_sync([prompt])
+            # Cache it so a repeat of this exact custom prompt within the
+            # same rollout is a cache hit too, same as a catalog event.
+            self._prompt_embeddings[prompt] = embeddings
         else:
             logger.info("Lingbot reusing cached prompt embedding: {!r}", prompt)
         self._replace_rollout_text_embeddings(embeddings)
