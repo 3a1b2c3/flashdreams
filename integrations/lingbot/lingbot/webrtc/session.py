@@ -636,7 +636,12 @@ class LingbotInferenceRuntime(
             raise LingbotRuntimeError("Runtime is not initialized.")
         normalized_prompt = normalize_prompt_text(prompt) if prompt is not None else ""
         is_user_prompt = event_id == _USER_PROMPT_EVENT_ID and bool(normalized_prompt)
-        if not is_user_prompt:
+        if is_user_prompt:
+            state = state.strip().lower() or "trigger"
+            if state not in {"trigger", "hold", "on"}:
+                state = "trigger"
+            event_id = event_id.strip()
+        else:
             event_id, state = self._validate_event_request(event_id=event_id, state=state)
         async with self._step_lock:
             if self._closed:
