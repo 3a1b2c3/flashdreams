@@ -1077,26 +1077,6 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
         channel = managed_session.control_channel
         event_id = str(payload.get("event_id", payload.get("id", ""))).strip()
         state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
-        logger.opt(colors=True).info(
-            "<magenta>_handle_event_message entry: event_id={!r} state={!r} "
-            "has_prompt={!r} inference_session={!r}</magenta>",
-            event_id,
-            state,
-            "prompt" in payload,
-            managed_session.inference_session is not None,
-        )
-        if channel is not None:
-            self._send_json(
-                channel,
-                {
-                    "type": "server_log",
-                    "message": (
-                        f"_handle_event_message entry: event_id={event_id!r} "
-                        f"state={state!r} has_prompt={'prompt' in payload!r} "
-                        f"inference_session={managed_session.inference_session is not None!r}"
-                    ),
-                },
-            )
         clear_states = {"clear", "release", "off", "none"}
         if not event_id and state not in clear_states:
             if channel is not None:
@@ -1117,25 +1097,6 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             # applied by the next step, so there is no separate runtime call.
             clears = state in clear_states
             raw_prompt = payload.get("prompt")
-            if raw_prompt is not None:
-                logger.opt(colors=True).info(
-                    "<magenta>WebRTC text_event received: event_id={!r} state={!r} "
-                    "prompt={!r}</magenta>",
-                    event_id,
-                    state,
-                    raw_prompt,
-                )
-                if channel is not None:
-                    self._send_json(
-                        channel,
-                        {
-                            "type": "server_log",
-                            "message": (
-                                f"text_event received: event_id={event_id!r} "
-                                f"state={state!r} prompt={raw_prompt!r}"
-                            ),
-                        },
-                    )
             try:
                 event_payload = self._validate_user_event_payload(
                     managed_session=managed_session,
@@ -1180,26 +1141,6 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
 
         try:
             raw_prompt = payload.get("prompt")
-            if raw_prompt is not None:
-                logger.opt(colors=True).info(
-                    "<magenta>WebRTC text_event received (direct trigger_event): "
-                    "event_id={!r} state={!r} prompt={!r}</magenta>",
-                    event_id,
-                    state,
-                    raw_prompt,
-                )
-                if channel is not None:
-                    self._send_json(
-                        channel,
-                        {
-                            "type": "server_log",
-                            "message": (
-                                f"text_event received (direct trigger_event): "
-                                f"event_id={event_id!r} state={state!r} "
-                                f"prompt={raw_prompt!r}"
-                            ),
-                        },
-                    )
             try:
                 result = trigger_event(event_id=event_id, state=state, prompt=raw_prompt)
             except TypeError:
