@@ -24,15 +24,24 @@ from typing import TYPE_CHECKING, Annotated
 import tyro
 from loguru import logger
 
-from flashdreams.infra.runner import Runner, RunnerConfig
-from flashdreams.infra.runner_io import runner_artifact_path
+try:
+    from flashdreams.infra.runner import Runner, RunnerConfig
+    from flashdreams.infra.runner_io import runner_artifact_path
+    from flashdreams.runtime.demo import DemoSpec, Mp4OutputSpec, OutputSpec
+    from flashdreams.runtime.demo.replay import run_replay_demo
+except ImportError:
+    Runner = object
+    RunnerConfig = object
+    runner_artifact_path = None
+    DemoSpec = object
+    Mp4OutputSpec = object
+    OutputSpec = object
+    run_replay_demo = None
 
 if TYPE_CHECKING:
     from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 else:
     VideoTensorLayout = str
-from flashdreams.runtime.demo import DemoSpec, Mp4OutputSpec, OutputSpec
-from flashdreams.runtime.demo.replay import run_replay_demo
 from lingbot.demo import LingbotDemoAdapter
 from lingbot.example_data import (
     EXAMPLE_DATA_AVAILABLE_IDXS,
