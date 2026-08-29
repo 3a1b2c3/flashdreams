@@ -241,6 +241,11 @@ body.is-ready-preview .firstFramePreview {
   gap: 8px;
 }
 
+.eventControls .promptControlGroup {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
 .eventButton {
   min-height: 34px;
   padding: 0 12px;

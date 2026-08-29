@@ -66,6 +66,8 @@ let addTextEventButton = null
 let eventControls = null
 let eventButtons = null
 let clearEventButton = null
+let livePromptInput = null
+let livePromptSubmitButton = null
 
 function makeSceneCard() {
   const panel = document.createElement("section")
@@ -118,6 +120,13 @@ function makeEventControls() {
   root.innerHTML = `
     <div class="eventButtons"></div>
     <button class="eventButton eventButtonClear" type="button">Clear</button>
+    <div class="promptControlGroup">
+      <label class="promptControl">
+        <span>Custom Prompt</span>
+        <textarea rows="2" maxlength="2000"></textarea>
+      </label>
+      <button class="promptSubmitButton" type="button">Send</button>
+    </div>
   `
   return root
 }
@@ -136,6 +145,8 @@ function bindElements() {
   addTextEventButton = sceneCard.querySelector(".textEventAddButton")
   eventButtons = eventControls.querySelector(".eventButtons")
   clearEventButton = eventControls.querySelector(".eventButtonClear")
+  livePromptInput = eventControls.querySelector(".promptControl textarea")
+  livePromptSubmitButton = eventControls.querySelector(".promptSubmitButton")
 }
 
 function makeTextEventId(label = "") {
@@ -502,7 +513,13 @@ function attachListeners() {
     context.releaseControls()
   })
   clearEventButton.addEventListener("click", () => sendTextEvent(activeEventId || "clear", "clear"))
-  for (const input of [firstFrameUrlInput, promptInput, addTextEventButton]) {
+  livePromptSubmitButton.addEventListener("click", () => {
+    const promptText = livePromptInput.value.trim()
+    if (promptText) {
+      sendTextEvent("user_prompt", "trigger", promptText)
+    }
+  })
+  for (const input of [firstFrameUrlInput, promptInput, addTextEventButton, livePromptInput]) {
     input.addEventListener("focus", context.releaseControls)
   }
 }
