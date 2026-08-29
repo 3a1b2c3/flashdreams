@@ -125,6 +125,7 @@ body.is-ready-preview .firstFramePreview {
 }
 
 .promptControl textarea,
+.promptControl input,
 .textEventPrompt,
 .textEventLabel,
 .urlControl input {
@@ -144,6 +145,7 @@ body.is-ready-preview .firstFramePreview {
 }
 
 .promptControl textarea:focus,
+.promptControl input:focus,
 .textEventPrompt:focus,
 .textEventLabel:focus,
 .urlControl input:focus {

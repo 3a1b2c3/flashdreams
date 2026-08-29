@@ -1096,6 +1096,7 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             # the mapping turns it into a session-global conditioning update
             # applied by the next step, so there is no separate runtime call.
             clears = state in clear_states
+            raw_prompt = payload.get("prompt")
             try:
                 event_payload = self._validate_user_event_payload(
                     managed_session=managed_session,
@@ -1103,6 +1104,7 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                     payload={
                         "event_id": None if clears else event_id,
                         "state": state,
+                        **({"prompt": raw_prompt} if raw_prompt is not None else {}),
                     },
                 )
                 self._record_user_event(

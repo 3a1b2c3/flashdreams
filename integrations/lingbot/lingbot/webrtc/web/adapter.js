@@ -123,7 +123,7 @@ function makeEventControls() {
     <div class="promptControlGroup">
       <label class="promptControl">
         <span>Custom Prompt</span>
-        <textarea rows="2" maxlength="2000"></textarea>
+        <input type="text" maxlength="2000">
       </label>
       <button class="promptSubmitButton" type="button">Send</button>
     </div>
@@ -145,7 +145,7 @@ function bindElements() {
   addTextEventButton = sceneCard.querySelector(".textEventAddButton")
   eventButtons = eventControls.querySelector(".eventButtons")
   clearEventButton = eventControls.querySelector(".eventButtonClear")
-  livePromptInput = eventControls.querySelector(".promptControl textarea")
+  livePromptInput = eventControls.querySelector(".promptControl input")
   livePromptSubmitButton = eventControls.querySelector(".promptSubmitButton")
 }
 
@@ -513,10 +513,17 @@ function attachListeners() {
     context.releaseControls()
   })
   clearEventButton.addEventListener("click", () => sendTextEvent(activeEventId || "clear", "clear"))
-  livePromptSubmitButton.addEventListener("click", () => {
+  const submitLivePrompt = () => {
     const promptText = livePromptInput.value.trim()
     if (promptText) {
       sendTextEvent("user_prompt", "trigger", promptText)
+    }
+  }
+  livePromptSubmitButton.addEventListener("click", submitLivePrompt)
+  livePromptInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      submitLivePrompt()
     }
   })
   for (const input of [firstFrameUrlInput, promptInput, addTextEventButton, livePromptInput]) {

@@ -160,6 +160,11 @@ DEFAULT_TEXT_EVENTS: tuple[TextEventSpec, ...] = (
 )
 """Default text events advertised by the interactive viewer."""
 
+_USER_PROMPT_EVENT_ID = "user_prompt"
+"""Reserved event id the client sends for a free-form custom prompt (not a
+precomputed catalog entry from :data:`DEFAULT_TEXT_EVENTS`); must match the
+literal used in ``lingbot/webrtc/web/adapter.js``."""
+
 
 def _content_type_for_image_path(path: Path) -> str:
     suffix = path.suffix.lower()
@@ -675,9 +680,20 @@ class LingbotInferenceRuntime(
         event_id_value = payload.get("event_id")
         event_id = "" if event_id_value is None else str(event_id_value)
         state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
+        prompt_value = payload.get("prompt")
+        prompt = normalize_prompt_text(str(prompt_value)) if prompt_value is not None else ""
+        if event_id == _USER_PROMPT_EVENT_ID and prompt:
+            # Free-form custom prompt: not a precomputed catalog event, so it
+            # doesn't go through the catalog membership check in
+            # _validate_event_request. Still normalize state the same way.
+            state = state if state in {"trigger", "hold", "on"} else "trigger"
+            return {"event_id": event_id, "state": state, "prompt": prompt}
         event_id, state = self._validate_event_request(event_id=event_id, state=state)
         clears = state in {"clear", "release", "off", "none"}
-        return {"event_id": None if clears else event_id, "state": state}
+        result: dict[str, Any] = {"event_id": None if clears else event_id, "state": state}
+        if prompt:
+            result["prompt"] = prompt
+        return result
 
     def _build_input_layers_sync(self, text_events: tuple[TextEventSpec, ...]) -> None:
         """Build the canonicalizer and mapping for the current rollout."""
