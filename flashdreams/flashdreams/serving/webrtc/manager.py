@@ -2017,6 +2017,25 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             )
             return False
         clears = state in clear_states
+        raw_prompt = payload.get("prompt")
+        if raw_prompt is not None:
+            logger.opt(colors=True).info(
+                "<magenta>Shared datachannel text_event received: event_id={!r} "
+                "state={!r} prompt={!r}</magenta>",
+                event_id,
+                state,
+                raw_prompt,
+            )
+            self._send_json(
+                channel,
+                {
+                    "type": "server_log",
+                    "message": (
+                        f"shared datachannel text_event received: "
+                        f"event_id={event_id!r} state={state!r} prompt={raw_prompt!r}"
+                    ),
+                },
+            )
         try:
             event_payload = self._validate_user_event_payload(
                 managed_session=managed_session,
@@ -2024,6 +2043,7 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                 payload={
                     "event_id": None if clears else event_id,
                     "state": state,
+                    **({"prompt": raw_prompt} if raw_prompt is not None else {}),
                 },
             )
             active_event_id = event_payload.get("event_id")
