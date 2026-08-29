@@ -11,5 +11,5 @@ python run_direct.py \
   --port=8089 \
   --device=cuda:0 \
   --example-idx=0 \
-  --warmup-chunks=0
+  --warmup-chunks=2
 
