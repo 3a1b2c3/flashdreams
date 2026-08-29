@@ -93,10 +93,13 @@ function makeSceneCard() {
     <div class="firstFrameUpdateRow">
       <span class="fieldStatus" role="status" hidden></span>
     </div>
-    <label class="promptControl">
-      <span>Prompt</span>
-      <textarea rows="4" maxlength="2000"></textarea>
-    </label>
+    <div class="promptControlGroup">
+      <label class="promptControl">
+        <span>Prompt</span>
+        <textarea rows="4" maxlength="2000"></textarea>
+      </label>
+      <button class="promptSubmitButton" type="button">Send</button>
+    </div>
     <div class="textEventEditor">
       <div class="textEventHeader">
         <span>Text Events</span>
@@ -443,9 +446,13 @@ async function updateFirstFrame() {
   }
 }
 
-function sendTextEvent(eventId, state) {
+function sendTextEvent(eventId, state, promptValue = null) {
   const label = state === "clear" ? "clear event" : `event:${eventId}`
-  if (!context.sendCommand({ type: "event", event_id: eventId, state }, label)) {
+  const payload = { type: "event", event_id: eventId, state }
+  if (promptValue !== null) {
+    payload.prompt = promptValue
+  }
+  if (!context.sendCommand(payload, label)) {
     return
   }
   setSessionLocked(true)
@@ -481,6 +488,13 @@ function attachListeners() {
   })
   firstFrameUrlUpdateButton.addEventListener("click", () => void updateFirstFrame())
   promptInput.addEventListener("input", () => { promptEdited = true })
+  const promptSubmitButton = sceneCard.querySelector(".promptSubmitButton")
+  promptSubmitButton.addEventListener("click", () => {
+    const promptText = promptInput.value.trim()
+    if (promptText) {
+      sendTextEvent("user_prompt", "trigger", promptText)
+    }
+  })
   addTextEventButton.addEventListener("click", () => {
     textEventDrafts.push(makeTextEventDraft())
     textEventsEdited = true

@@ -15,3 +15,4 @@ uv run flashdreams-run \
   --output.fps 16 \
   --output.video-height 352 \
   --output.video-width 640
+
