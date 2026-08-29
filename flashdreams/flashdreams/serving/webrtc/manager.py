@@ -1077,6 +1077,26 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
         channel = managed_session.control_channel
         event_id = str(payload.get("event_id", payload.get("id", ""))).strip()
         state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
+        logger.opt(colors=True).info(
+            "<magenta>_handle_event_message entry: event_id={!r} state={!r} "
+            "has_prompt={!r} inference_session={!r}</magenta>",
+            event_id,
+            state,
+            "prompt" in payload,
+            managed_session.inference_session is not None,
+        )
+        if channel is not None:
+            self._send_json(
+                channel,
+                {
+                    "type": "server_log",
+                    "message": (
+                        f"_handle_event_message entry: event_id={event_id!r} "
+                        f"state={state!r} has_prompt={'prompt' in payload!r} "
+                        f"inference_session={managed_session.inference_session is not None!r}"
+                    ),
+                },
+            )
         clear_states = {"clear", "release", "off", "none"}
         if not event_id and state not in clear_states:
             if channel is not None:
