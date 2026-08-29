@@ -1098,8 +1098,9 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             clears = state in clear_states
             raw_prompt = payload.get("prompt")
             if raw_prompt is not None:
-                logger.info(
-                    "WebRTC text_event received: event_id={!r} state={!r} prompt={!r}",
+                logger.opt(colors=True).info(
+                    "<magenta>WebRTC text_event received: event_id={!r} state={!r} "
+                    "prompt={!r}</magenta>",
                     event_id,
                     state,
                     raw_prompt,

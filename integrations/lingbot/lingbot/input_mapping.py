@@ -518,13 +518,17 @@ class LingbotInputMapping:
             # Free-form prompt supplied dynamically in the payload, not a
             # precomputed catalog entry.
             prompt = value.get("prompt") or self._base_prompt
-            logger.info(
-                "Lingbot text event applied: event_id={!r} prompt={!r}",
+            logger.opt(colors=True).info(
+                "<magenta>Lingbot text event applied: event_id={!r} "
+                "prompt={!r}</magenta>",
                 event_id,
                 prompt,
             )
         else:
-            logger.info("Lingbot text event applied: event_id={!r}", event_id)
+            logger.opt(colors=True).info(
+                "<magenta>Lingbot text event applied: event_id={!r}</magenta>",
+                event_id,
+            )
             prompt = (
                 self._base_prompt
                 if event_id is None
