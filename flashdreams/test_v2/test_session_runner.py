@@ -7,6 +7,8 @@ import logging
 import queue
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 import torch
@@ -672,6 +674,17 @@ def test_composite_rejects_frames_with_different_dimensions() -> None:
         manager.composite(bottom, overlay)
 
 
+def test_composite_clamps_alpha_before_interpolation() -> None:
+    manager = PresentationManager()
+    bottom = torch.full((3, 1, 2), -1.0)
+    overlay = torch.tensor([[[1.0, 1.0]], [[0.5, 0.5]], [[0.0, 0.0]], [[-0.5, 1.5]]])
+
+    composited = manager.composite(bottom, overlay)
+
+    assert torch.equal(composited[:, :, 0], bottom[:, :, 0])
+    assert torch.equal(composited[:, :, 1], overlay[:3, :, 1])
+
+
 def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
     log = CallLog()
 
@@ -796,6 +809,32 @@ def test_run_session_opens_window_with_the_resolved_session_desc() -> None:
     run_session(session, window, steps=1)
 
     assert window.session_desc is resolved
+
+
+def test_window_write_stays_in_the_presentation_context() -> None:
+    log = CallLog()
+    session = FakeSession(_session_desc(), log)
+
+    class ContextRecordingManager(PresentationManager):
+        active_depth = 0
+
+        @contextmanager
+        def presentation_context(self) -> Iterator[None]:
+            self.active_depth += 1
+            try:
+                yield
+            finally:
+                self.active_depth -= 1
+
+    manager = ContextRecordingManager()
+    session.__dict__["_presentation_manager"] = manager
+
+    class ContextCheckingWindow(RecordingClientWindow):
+        def write(self, result: StepResult) -> None:
+            assert manager.active_depth > 0
+            super().write(result)
+
+    run_session(session, ContextCheckingWindow(log), steps=1)
 
 
 def test_run_session_gives_the_first_step_input_already_collected() -> None:
