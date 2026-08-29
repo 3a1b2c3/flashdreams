@@ -149,14 +149,6 @@ DEFAULT_TEXT_EVENTS: tuple[TextEventSpec, ...] = (
             "and reflections across the scene."
         ),
     ),
-    TextEventSpec(
-        event_id="blue_balloon",
-        label="Blue Balloon",
-        prompt=(
-            "A large blue balloon drifts into view and floats gently through "
-            "the scene."
-        ),
-    ),
 )
 """Default text events advertised by the interactive viewer."""
 
