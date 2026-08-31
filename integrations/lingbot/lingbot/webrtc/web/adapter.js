@@ -31,8 +31,6 @@ const scenePresets = [
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
       { event_id: "jump", label: "Jump", prompt: "The jet ski leaps up off the water, the hull lifting clear of the surface before dropping back down with a splash." },
-      { event_id: "nosepop", label: "Nose Pop", prompt: "Pop the nose of the jet ski high into the air." },
-      { event_id: "slalom", label: "Slalom Weave", prompt: "Fast slalom weaving sharply left and right." },
       { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
       { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
       { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
