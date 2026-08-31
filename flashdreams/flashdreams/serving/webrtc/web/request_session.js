@@ -1183,6 +1183,7 @@ async function initialize() {
   window.requestAnimationFrame(drawIdleScene)
   startVideoFrameMonitor()
   if (manualConnectMode) {
+    connectButton.disabled = false
     logEvent("manual connect mode: click Connect Session to begin", { source: "client" })
     return
   }
