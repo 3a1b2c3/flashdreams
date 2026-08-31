@@ -642,6 +642,18 @@ function attachListeners() {
   presetSelect.addEventListener("change", (e) => {
     if (e.target.value) applyPreset(e.target.value)
   })
+  // Digit-key hotkeys 1-9 jump straight to that preset (in scenePresets
+  // order), so switching games doesn't require opening the dropdown.
+  window.addEventListener("keydown", (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
+    const activeTag = document.activeElement?.tagName
+    if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
+    const digit = Number(event.key)
+    if (!Number.isInteger(digit) || digit < 1 || digit > scenePresets.length) return
+    const index = digit - 1
+    presetSelect.value = String(index)
+    applyPreset(index)
+  })
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
     setFirstFrameInputMode("upload")

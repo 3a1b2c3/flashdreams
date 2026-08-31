@@ -16,7 +16,9 @@ Scene presets allow users to quickly load predefined scene configurations (promp
 ### Loading a Preset
 1. Open LingBot WebRTC interface (the "Dragon" preset is pre-selected by default)
 2. Find "Quick Start" dropdown in Initial Scene panel
-3. Select a different preset from the dropdown
+3. Select a different preset from the dropdown, or press a **digit key 1-9**
+   to jump straight to that preset (1 = first preset in the list, 2 =
+   second, etc.) — ignored while typing in a text field
 4. Preset prompt + events + start image auto-populate the form; the dropdown stays on the selected preset name
 
 ### Sharing a Preset via URL
