@@ -915,6 +915,8 @@ function markSessionConnected(pc, channel) {
     return
   }
   connected = true
+  connectButton.disabled = false
+  connectButton.textContent = "Disconnect"
   setStatus("Connected", "connected")
   setFlow("waiting for input")
   startHeartbeat()
@@ -935,6 +937,7 @@ function disconnectSession({ notify = true } = {}) {
   stopStatsPolling()
   connected = false
   connectButton.disabled = false
+  connectButton.textContent = "Connect Session"
   setPostprocessDisabled(false)
   stopPromptRecording()
   modelAdapter?.onDisconnect?.(modelContext)
@@ -1191,7 +1194,11 @@ async function initialize() {
 }
 
 connectButton.addEventListener("click", () => {
-  void connectSession()
+  if (connected) {
+    disconnectSession()
+  } else {
+    void connectSession()
+  }
 })
 remoteVideo.addEventListener("loadedmetadata", updateMetricsFromVideo)
 remoteVideo.addEventListener("playing", () => {
