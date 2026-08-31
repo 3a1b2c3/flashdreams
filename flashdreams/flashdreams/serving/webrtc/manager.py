@@ -1435,21 +1435,6 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
     def has_active_session(self) -> bool:
         return self._active_session is not None and not self._active_session.closed
 
-    def _active_session_is_stale(self) -> bool:
-        """Whether the active session has gone silent past the liveness timeout.
-
-        A safety net for the case where the background liveness-watchdog task
-        (or an ICE ``connectionstatechange`` event) fails to fire and release
-        a genuinely-abandoned session -- without this, a stuck session blocks
-        every future connection attempt with 409 until the process is
-        restarted.
-        """
-        if self._active_session is None:
-            return False
-        loop = asyncio.get_running_loop()
-        elapsed_s = loop.time() - self._active_session.last_client_message_at
-        return elapsed_s >= self.client_liveness_timeout_s
-
     async def _close_active_session_locked(self) -> None:
         """Close the active session. Caller must already hold ``_session_lock``."""
         if self._active_session is None:
