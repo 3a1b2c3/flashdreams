@@ -16,7 +16,7 @@ import argparse
 import dataclasses
 
 from flashdreams.scripts.cli import main
-from lingbot.config import RUNNER_LINGBOT_WORLD_FAST
+from lingbot.config import RUNNER_CONFIGS, RUNNER_LINGBOT_WORLD_FAST
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,13 +26,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--example-idx", type=int, default=0)
     parser.add_argument("--warmup-chunks", type=int, default=1)
+    parser.add_argument(
+        "--runner",
+        default=RUNNER_LINGBOT_WORLD_FAST.runner_name,
+        choices=sorted(RUNNER_CONFIGS),
+        help="Runner slug from lingbot.config.RUNNER_CONFIGS.",
+    )
     return parser.parse_args()
 
 
 def run() -> None:
     args = parse_args()
     config = dataclasses.replace(
-        RUNNER_LINGBOT_WORLD_FAST,
+        RUNNER_CONFIGS[args.runner],
         device=args.device,
         example_idx=args.example_idx,
     )
