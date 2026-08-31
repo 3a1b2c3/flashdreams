@@ -1520,23 +1520,19 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
 
         async with self._session_lock:
             if self._active_session is not None and not self._active_session.closed:
-                if self._active_session_is_stale():
-                    logger.warning(
-                        "Active WebRTC session silent for >= {}s; closing it "
-                        "to admit a new connection.",
-                        self.client_liveness_timeout_s,
-                    )
-                    await self._close_active_session_locked()
-                else:
-                    elapsed_s = (
-                        asyncio.get_running_loop().time()
-                        - self._active_session.last_client_message_at
-                    )
-                    raise SessionBusyError(
-                        f"{self.busy_message} (active session last heard from "
-                        f"client {elapsed_s:.1f}s ago; closes automatically at "
-                        f"{self.client_liveness_timeout_s:.0f}s of silence)"
-                    )
+                # A new connect attempt always preempts whatever session was
+                # here before, rather than 409ing -- the prior single-active-
+                # session guard relied on a background watchdog/ICE event to
+                # release a dead session, which was not firing reliably and
+                # required a manual server restart to recover from. This
+                # trades away blocking a second concurrent viewer (not a
+                # real concern for this single-operator demo) for never
+                # getting permanently stuck.
+                logger.warning(
+                    "New connect attempt while a session was still marked "
+                    "active; closing the previous session to admit it."
+                )
+                await self._close_active_session_locked()
 
             session_input = self._pending_session_input
             answer = await self._create_answer_with_runtime_ready_locked(
