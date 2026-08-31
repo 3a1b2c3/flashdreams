@@ -1435,6 +1435,29 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
     def has_active_session(self) -> bool:
         return self._active_session is not None and not self._active_session.closed
 
+    def _active_session_is_stale(self) -> bool:
+        """Whether the active session has gone silent past the liveness timeout.
+
+        A safety net for the case where the background liveness-watchdog task
+        (or an ICE ``connectionstatechange`` event) fails to fire and release
+        a genuinely-abandoned session -- without this, a stuck session blocks
+        every future connection attempt with 409 until the process is
+        restarted.
+        """
+        if self._active_session is None:
+            return False
+        loop = asyncio.get_running_loop()
+        elapsed_s = loop.time() - self._active_session.last_client_message_at
+        return elapsed_s >= self.client_liveness_timeout_s
+
+    async def _close_active_session_locked(self) -> None:
+        """Close the active session. Caller must already hold ``_session_lock``."""
+        if self._active_session is None:
+            return
+        active_session = self._active_session
+        self._active_session = None
+        await active_session.close()
+
     def is_runtime_ready(self) -> bool:
         return self._lifecycle.runtime_ready
 
@@ -1497,7 +1520,15 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
 
         async with self._session_lock:
             if self._active_session is not None and not self._active_session.closed:
-                raise SessionBusyError(self.busy_message)
+                if self._active_session_is_stale():
+                    logger.warning(
+                        "Active WebRTC session silent for >= {}s; closing it "
+                        "to admit a new connection.",
+                        self.client_liveness_timeout_s,
+                    )
+                    await self._close_active_session_locked()
+                else:
+                    raise SessionBusyError(self.busy_message)
 
             session_input = self._pending_session_input
             answer = await self._create_answer_with_runtime_ready_locked(
@@ -1714,11 +1745,7 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
 
     async def close_active_session(self) -> None:
         async with self._session_lock:
-            if self._active_session is None:
-                return
-            active_session = self._active_session
-            self._active_session = None
-            await active_session.close()
+            await self._close_active_session_locked()
 
     async def _client_liveness_watchdog(
         self, *, managed_session: ManagedWebRTCSession
