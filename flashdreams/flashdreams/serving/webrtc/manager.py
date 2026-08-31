@@ -695,11 +695,19 @@ class ManagedWebRTCSession:
             self.generation_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self.generation_task
-        if self.generation_task is None or self.generation_task.done():
-            reservation = self.reservation
-            self.reservation = None
-            if reservation is not None:
-                reservation.release()
+        # Always release, even when ``close()`` is invoked from within the
+        # generation task's own cleanup (self-close): in that case the task
+        # can't be cancelled/awaited above, but it's still safe to release
+        # now since the task is already in its final teardown and will not
+        # touch the reservation again. Gating this on ``generation_task.done()``
+        # silently skipped the release in that case (a task only reports
+        # ``done()`` after it returns, which is after this call), leaking
+        # the reservation forever and permanently 409ing every future
+        # connection attempt.
+        reservation = self.reservation
+        self.reservation = None
+        if reservation is not None:
+            reservation.release()
         self.generation_task = None
 
         await self.video_track.close()
