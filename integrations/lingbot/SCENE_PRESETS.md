@@ -121,24 +121,24 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 1. Dragon (default)
 - **Prompt**: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below."
-- **Events**: Steep Dive, Sharp Climb, Creature Roars, Fire Burst, Flock Passes, Lightning Storm, Through the Waterfall, Castle Gate Opens, Rival Creature Appears, Winds Calm.
-- Same scene as the app's example-00 default (`_DEFAULT_IMAGE_URL` in `session.py`); this preset just gives it a name, an event catalog, and auto-selects it on load.
+- **Events**: Jump, Portal, Storm, Fireworks.
+- Same scene as the app's example-00 default (`_DEFAULT_IMAGE_URL` in `session.py`); Portal/Storm/Fireworks are `DEFAULT_TEXT_EVENTS` from `session.py` (also on `main`), not invented for this preset. This preset just names the scene, adds Jump, and auto-selects it on load.
 
 ### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
-- **Events**: Spin 360, Nose Pop, Slalom Weave, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave.
+- **Events**: Jump, Nose Pop, Slalom Weave, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave.
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Events**: Punch Combo, Roundhouse Kick, Baton Strike, Grapple Takedown, Dodge Roll, Enemies Appear, Enemies Attack, Rain Intensifies, Fog Rolls In, Sirens Approach.
+- **Events**: Jump, Punch Combo, Roundhouse Kick, Baton Strike, Grapple Takedown, Dodge Roll, Rain Intensifies, Fog Rolls In.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
-- **Events**: Rapid Fire, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Storm Rolls In.
+- **Events**: Jump, Rapid Fire, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Storm Rolls In.
 
 ### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."
-- **Events**: Drift, Kick Up Sparks, Lock-Up Smoke, DRS Boost, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag.
+- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag.
 
 Noir Alley Combat, Water Blaster, Jet Ski Cruise, and Circuit Racer prompts/events are adapted from the richer layered scene definitions in `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json` (kept as reference copies under `lingbot/webrtc/web/assets/sources/` in this repo) down to this app's flatter prompt+events format. Their start images are hotlinked from that repo's `examples` branch on GitHub rather than committed here.
 

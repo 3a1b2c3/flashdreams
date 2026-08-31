@@ -7,6 +7,13 @@ function presetSlug(name) {
   return name.toLowerCase().trim().replace(/\s+/g, "-")
 }
 
+function presetOptionLabel(preset, index) {
+  // Matches the digit-key hotkeys wired up in attachListeners() (1-9, in
+  // scenePresets order); indices past 9 have no hotkey to show.
+  const hotkey = index < 9 ? `${index + 1}. ` : ""
+  return `${hotkey}${preset.name}`
+}
+
 function findPresetIndexBySlug(slug) {
   if (!slug) return -1
   const normalized = slug.toLowerCase().trim()
@@ -19,16 +26,10 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/Robbyant/lingbot-world-v2/main/examples/00/image.jpg",
     prompt: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below.",
     events: [
-      { event_id: "dive", label: "Steep Dive", prompt: "The creature folds its wings and drops into a steep, plunging dive toward the landscape below." },
-      { event_id: "climb", label: "Sharp Climb", prompt: "The creature beats its wings hard and climbs sharply, banking up toward the clouds." },
-      { event_id: "roar", label: "Creature Roars", prompt: "The creature throws back its head and lets out a thunderous roar that echoes off the floating islands." },
-      { event_id: "fireburst", label: "Fire Burst", prompt: "The creature exhales a burst of bright orange flame that lights up the sky ahead." },
-      { event_id: "flock", label: "Flock Passes", prompt: "A flock of smaller flying creatures streaks past in formation, wings beating hard." },
-      { event_id: "lightning", label: "Lightning Storm", prompt: "Dark storm clouds gather and lightning cracks across the sky between the floating islands." },
-      { event_id: "waterfall", label: "Through the Waterfall", prompt: "The flight path cuts straight through a cascading waterfall, spray bursting off the wings." },
-      { event_id: "gate", label: "Castle Gate Opens", prompt: "The immense gothic gate of the castle grinds open, torchlight spilling out into the dusk." },
-      { event_id: "otherdragon", label: "Rival Creature Appears", prompt: "Another winged creature bursts from behind a floating island, closing fast alongside." },
-      { event_id: "calm", label: "Winds Calm", prompt: "The wind eases and the flight levels out into smooth, gliding calm over the fantastical landscape." },
+      { event_id: "jump", label: "Jump", prompt: "The creature tucks its wings and launches into a sudden upward leap, gaining height in a single powerful beat." },
+      { event_id: "portal", label: "Portal", prompt: "A luminous magical portal opens in the scene, casting colored light and swirling particles into the environment." },
+      { event_id: "storm", label: "Storm", prompt: "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
+      { event_id: "fireworks", label: "Fireworks", prompt: "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." },
     ],
   },
   {
@@ -36,7 +37,7 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/jet-ski-cruise.jpg",
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
-      { event_id: "spin360", label: "Spin 360", prompt: "Whip the jet ski into a tight spinning 360." },
+      { event_id: "jump", label: "Jump", prompt: "The jet ski leaps up off the water, the hull lifting clear of the surface before dropping back down with a splash." },
       { event_id: "nosepop", label: "Nose Pop", prompt: "Pop the nose of the jet ski high into the air." },
       { event_id: "slalom", label: "Slalom Weave", prompt: "Fast slalom weaving sharply left and right." },
       { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
@@ -52,16 +53,14 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/noir-alley-combat.jpg",
     prompt: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     events: [
+      { event_id: "jump", label: "Jump", prompt: "The officer springs upward off both feet, leaping high off the wet asphalt before dropping back into a low crouch." },
       { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
       { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
       { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
       { event_id: "grapple", label: "Grapple Takedown", prompt: "Lunge forward, seize the opponent, and hurl them down onto the wet asphalt." },
       { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance." },
-      { event_id: "enemies", label: "Enemies Appear", prompt: "A group of armed figures appears down the alley, silhouetted against the neon glow, advancing." },
-      { event_id: "attack", label: "Enemies Attack", prompt: "The figures close the distance and attack all at once, fists and clubs swinging in." },
       { event_id: "rain", label: "Rain Intensifies", prompt: "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
       { event_id: "fog", label: "Fog Rolls In", prompt: "A thick fog rolls into the alley, blurring the neon signs and swallowing the far end of the street." },
-      { event_id: "sirens", label: "Sirens Approach", prompt: "Police sirens wail closer, red and blue light sweeping across the wet brick walls." },
     ],
   },
   {
@@ -69,6 +68,7 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/watergun.jpg",
     prompt: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     events: [
+      { event_id: "jump", label: "Jump", prompt: "The player leaps up and forward off the edge of the platform, sailing over a gap of open water before landing with a splash." },
       { event_id: "rapidfire", label: "Rapid Fire", prompt: "Pump and unload a rapid burst of water jets across the floats in a scatter of spray." },
       { event_id: "splash", label: "Splash Blast", prompt: "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead." },
       { event_id: "shield", label: "Raise Float Shield", prompt: "Haul up a clear inflatable board as a shield, incoming water jets hammering into it." },
@@ -86,10 +86,9 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/circuit.jpg",
     prompt: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs.",
     events: [
-      { event_id: "drift", label: "Drift", prompt: "The wheel snaps hard over and the car slews sideways in a smoking slide before snapping back straight." },
+      { event_id: "jump", label: "Jump", prompt: "The track kinks up into a ramp and the car launches off the crest into open sky before slamming back down with a hard jolt." },
       { event_id: "sparks", label: "Kick Up Sparks", prompt: "The floor grounds out on the asphalt, spraying a bright shower of orange sparks past the nose." },
       { event_id: "lockup", label: "Lock-Up Smoke", prompt: "The brakes lock hard into the corner, boiling thick white tyre smoke off the front wheels." },
-      { event_id: "drs", label: "DRS Boost", prompt: "The DRS flicks on and the car surges away down the straight as drag drops off." },
       { event_id: "crash", label: "Crash", prompt: "The car slams into the barrier, carbon-fibre debris flying as it grinds to a juddering halt." },
       { event_id: "rain", label: "Rain Sweeps In", prompt: "Dark storm clouds roll over and rain sweeps across the windscreen, the track glistening wet." },
       { event_id: "glare", label: "Sun Glare", prompt: "The low sun blazes straight into the windscreen, washing out the track ahead in blinding light." },
@@ -179,7 +178,7 @@ function makeSceneCard() {
       <div class="presetsRow">
         <select id="scenePresetsSelect">
           <option value="">-- Choose a preset --</option>
-          ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
+          ${scenePresets.map((p, i) => `<option value="${i}">${presetOptionLabel(p, i)}</option>`).join("")}
         </select>
         <button class="savePresetButton" type="button">Save</button>
       </div>
@@ -439,7 +438,7 @@ function saveCurrentPreset() {
 function updatePresetDropdown() {
   presetSelect.innerHTML = `
     <option value="">-- Choose a preset --</option>
-    ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
+    ${scenePresets.map((p, i) => `<option value="${i}">${presetOptionLabel(p, i)}</option>`).join("")}
   `
 }
 
