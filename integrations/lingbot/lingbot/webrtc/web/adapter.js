@@ -7,13 +7,6 @@ function presetSlug(name) {
   return name.toLowerCase().trim().replace(/\s+/g, "-")
 }
 
-function presetOptionLabel(preset, index) {
-  // Matches the digit-key hotkeys wired up in attachListeners() (1-9, in
-  // scenePresets order); indices past 9 have no hotkey to show.
-  const hotkey = index < 9 ? `${index + 1}. ` : ""
-  return `${hotkey}${preset.name}`
-}
-
 function findPresetIndexBySlug(slug) {
   if (!slug) return -1
   const normalized = slug.toLowerCase().trim()
@@ -178,7 +171,7 @@ function makeSceneCard() {
       <div class="presetsRow">
         <select id="scenePresetsSelect">
           <option value="">-- Choose a preset --</option>
-          ${scenePresets.map((p, i) => `<option value="${i}">${presetOptionLabel(p, i)}</option>`).join("")}
+          ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
         </select>
         <button class="savePresetButton" type="button">Save</button>
       </div>
@@ -405,19 +398,23 @@ function renderEventControls() {
   const catalog = Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
   eventControls.hidden = catalog.length === 0
   eventButtons.replaceChildren()
-  for (const item of catalog) {
+  catalog.forEach((item, index) => {
     const eventId = String(item.event_id || "").trim()
     if (!eventId) {
-      continue
+      return
     }
+    const label = String(item.label || eventId)
     const button = document.createElement("button")
     button.className = "eventButton"
     button.type = "button"
-    button.textContent = String(item.label || eventId)
+    // Only the first 9 events get a digit-key hotkey shown/wired up
+    // (see the keydown handler in attachListeners()); later ones still
+    // render as click-only buttons rather than being dropped.
+    button.textContent = index < 9 ? `${label} (${index + 1})` : label
     button.classList.toggle("is-active", activeEventId === eventId)
     button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
     eventButtons.append(button)
-  }
+  })
   clearEventButton.classList.toggle("is-active", activeEventId === null)
 }
 
@@ -438,7 +435,7 @@ function saveCurrentPreset() {
 function updatePresetDropdown() {
   presetSelect.innerHTML = `
     <option value="">-- Choose a preset --</option>
-    ${scenePresets.map((p, i) => `<option value="${i}">${presetOptionLabel(p, i)}</option>`).join("")}
+    ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
   `
 }
 
@@ -641,17 +638,19 @@ function attachListeners() {
   presetSelect.addEventListener("change", (e) => {
     if (e.target.value) applyPreset(e.target.value)
   })
-  // Digit-key hotkeys 1-9 jump straight to that preset (in scenePresets
-  // order), so switching games doesn't require opening the dropdown.
+  // Digit keys 1-9 trigger the matching in-game event button (see the
+  // "(N)" hotkey suffix rendered in renderEventControls()), rather than
+  // switching games -- this only fires once controls are actually live.
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
+    if (eventControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
+    const catalog = Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
     const digit = Number(event.key)
-    if (!Number.isInteger(digit) || digit < 1 || digit > scenePresets.length) return
-    const index = digit - 1
-    presetSelect.value = String(index)
-    applyPreset(index)
+    if (!Number.isInteger(digit) || digit < 1 || digit > 9 || digit > catalog.length) return
+    const eventId = String(catalog[digit - 1]?.event_id || "").trim()
+    if (eventId) sendTextEvent(eventId, "trigger")
   })
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
