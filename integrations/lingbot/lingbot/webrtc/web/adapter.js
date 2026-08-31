@@ -5,27 +5,19 @@ const mockMode = new URLSearchParams(window.location.search).has("mock")
 
 const scenePresets = [
   {
-    name: "Urban Drive",
-    prompt: "Drive through a cinematic city street at sunset.",
+    name: "Jet Ski Cruise",
+    prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
-      { event_id: "portal", label: "Portal", prompt: "A luminous portal opens." },
-      { event_id: "storm", label: "Storm", prompt: "A dramatic storm rolls in." },
-    ],
-  },
-  {
-    name: "Forest Path",
-    prompt: "Walk through an enchanted forest with mystical lighting.",
-    events: [
-      { event_id: "magic", label: "Magic", prompt: "Magical sparkles appear." },
-      { event_id: "trees", label: "Trees Sway", prompt: "Trees sway in the wind." },
-    ],
-  },
-  {
-    name: "Beach Sunset",
-    prompt: "Stroll along a pristine beach at golden hour.",
-    events: [
-      { event_id: "waves", label: "Waves", prompt: "Waves crash on shore." },
-      { event_id: "birds", label: "Birds", prompt: "Birds fly overhead." },
+      { event_id: "spin360", label: "Spin 360", prompt: "Whip the jet ski into a tight spinning 360." },
+      { event_id: "nosepop", label: "Nose Pop", prompt: "Pop the nose of the jet ski high into the air." },
+      { event_id: "slalom", label: "Slalom Weave", prompt: "Fast slalom weaving sharply left and right." },
+      { event_id: "superman", label: "Superman", prompt: "Stretch out flat off the back in a superman trick." },
+      { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
+      { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
+      { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
+      { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation." },
+      { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey." },
+      { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead." },
     ],
   },
 ]
