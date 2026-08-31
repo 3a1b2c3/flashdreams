@@ -219,6 +219,17 @@ class SingleSessionAdmissionPolicy:
         with self._lock:
             self._reserved = False
 
+    def force_release(self) -> None:
+        """Unconditionally clear the reservation flag.
+
+        For callers (e.g. a single-operator WebRTC demo server) that would
+        rather forcibly reclaim the one admission slot than stay stuck
+        forever if some code path failed to release it through the normal
+        ``SessionReservation.release()`` contract.
+        """
+        with self._lock:
+            self._reserved = False
+
     def _is_healthy(self) -> bool:
         if self._health_check is None:
             return True
