@@ -1787,7 +1787,7 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             payload = json.loads(raw_message)
         except json.JSONDecodeError:
             self._send_json(channel, make_error_payload("Invalid JSON payload."))
-            return
+            return 1
 
         if not isinstance(payload, dict):
             self._send_json(

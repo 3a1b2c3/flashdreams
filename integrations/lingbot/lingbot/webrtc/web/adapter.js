@@ -3,6 +3,33 @@
 
 const mockMode = new URLSearchParams(window.location.search).has("mock")
 
+const scenePresets = [
+  {
+    name: "Urban Drive",
+    prompt: "Drive through a cinematic city street at sunset.",
+    events: [
+      { event_id: "portal", label: "Portal", prompt: "A luminous portal opens." },
+      { event_id: "storm", label: "Storm", prompt: "A dramatic storm rolls in." },
+    ],
+  },
+  {
+    name: "Forest Path",
+    prompt: "Walk through an enchanted forest with mystical lighting.",
+    events: [
+      { event_id: "magic", label: "Magic", prompt: "Magical sparkles appear." },
+      { event_id: "trees", label: "Trees Sway", prompt: "Trees sway in the wind." },
+    ],
+  },
+  {
+    name: "Beach Sunset",
+    prompt: "Stroll along a pristine beach at golden hour.",
+    events: [
+      { event_id: "waves", label: "Waves", prompt: "Waves crash on shore." },
+      { event_id: "birds", label: "Birds", prompt: "Birds fly overhead." },
+    ],
+  },
+]
+
 const controls = [
   {
     label: "Drive / Turn",
@@ -52,6 +79,8 @@ let textEventSequence = 0
 
 let preview = null
 let sceneCard = null
+let presetSelect = null
+let savePresetButton = null
 let firstFrameSourceRow = null
 let uploadModeButton = null
 let urlModeButton = null
@@ -75,6 +104,16 @@ function makeSceneCard() {
   panel.setAttribute("aria-label", "Initial Scene")
   panel.innerHTML = `
     <span class="panelLabel">Initial Scene</span>
+    <div class="presetsControl">
+      <label for="scenePresetsSelect">Quick Start</label>
+      <div class="presetsRow">
+        <select id="scenePresetsSelect">
+          <option value="">-- Choose a preset --</option>
+          ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
+        </select>
+        <button class="savePresetButton" type="button">Save</button>
+      </div>
+    </div>
     <div class="firstFrameSourceRow" data-mode="url">
       <div class="sourcePane sourcePaneUpload">
         <button class="sourceModeButton uploadModeButton" type="button">Upload</button>
@@ -132,6 +171,8 @@ function makeEventControls() {
 }
 
 function bindElements() {
+  presetSelect = sceneCard.querySelector("#scenePresetsSelect")
+  savePresetButton = sceneCard.querySelector(".savePresetButton")
   firstFrameSourceRow = sceneCard.querySelector(".firstFrameSourceRow")
   uploadModeButton = sceneCard.querySelector(".uploadModeButton")
   urlModeButton = sceneCard.querySelector(".urlModeButton")
@@ -311,6 +352,51 @@ function renderEventControls() {
   clearEventButton.classList.toggle("is-active", activeEventId === null)
 }
 
+function saveCurrentPreset() {
+  const name = prompt("Preset name:", "My Scene").trim()
+  if (!name) return
+  const preset = {
+    name,
+    prompt: promptInput.value.trim(),
+    events: textEventDrafts.map(d => ({ event_id: d.event_id, label: d.label, prompt: d.prompt }))
+  }
+  scenePresets.push(preset)
+  localStorage.setItem("lingbot-presets", JSON.stringify(scenePresets))
+  updatePresetDropdown()
+  alert(`Preset "${name}" saved!`)
+}
+
+function updatePresetDropdown() {
+  presetSelect.innerHTML = `
+    <option value="">-- Choose a preset --</option>
+    ${scenePresets.map((p, i) => `<option value="${i}">${p.name}</option>`).join("")}
+  `
+}
+
+function loadSavedPresets() {
+  try {
+    const saved = localStorage.getItem("lingbot-presets")
+    if (saved) {
+      const customPresets = JSON.parse(saved)
+      scenePresets.push(...customPresets)
+    }
+  } catch (err) {
+    console.error("Failed to load saved presets:", err)
+  }
+}
+
+function applyPreset(presetIndex) {
+  const preset = scenePresets[Number(presetIndex)]
+  if (!preset) return
+  promptInput.value = preset.prompt
+  promptEdited = true
+  textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
+  textEventsEdited = true
+  renderTextEventEditor()
+  presetSelect.value = ""
+  context.releaseControls()
+}
+
 function applyInitialScene(scene) {
   initialScene = scene
   if (!promptEdited && typeof scene.prompt === "string") {
@@ -470,6 +556,10 @@ function sendTextEvent(eventId, state, promptValue = null) {
 }
 
 function attachListeners() {
+  presetSelect.addEventListener("change", (e) => {
+    if (e.target.value) applyPreset(e.target.value)
+  })
+  savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
     setFirstFrameInputMode("upload")
     context.releaseControls()
@@ -538,6 +628,7 @@ export default {
 
   async mount(sharedContext) {
     context = sharedContext
+    loadSavedPresets()
     preview = document.createElement("img")
     preview.className = "firstFramePreview"
     preview.alt = ""
@@ -548,6 +639,7 @@ export default {
     context.slots.panel.append(sceneCard)
     context.slots.controls.append(eventControls)
     bindElements()
+    updatePresetDropdown()
     setFirstFrameInputMode("url")
     attachListeners()
     try {
