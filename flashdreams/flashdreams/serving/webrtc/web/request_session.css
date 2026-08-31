@@ -266,12 +266,6 @@ body[data-status="error"] .statusDot {
   opacity: 0.52;
 }
 
-body[data-status="connected"] .connectButton,
-body[data-status="waiting"] .connectButton,
-body[data-status="generating"] .connectButton {
-  display: none;
-}
-
 .flowLine {
   display: grid;
   grid-template-columns: auto 1fr;
