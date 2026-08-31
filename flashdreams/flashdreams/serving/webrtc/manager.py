@@ -1528,7 +1528,15 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
                     )
                     await self._close_active_session_locked()
                 else:
-                    raise SessionBusyError(self.busy_message)
+                    elapsed_s = (
+                        asyncio.get_running_loop().time()
+                        - self._active_session.last_client_message_at
+                    )
+                    raise SessionBusyError(
+                        f"{self.busy_message} (active session last heard from "
+                        f"client {elapsed_s:.1f}s ago; closes automatically at "
+                        f"{self.client_liveness_timeout_s:.0f}s of silence)"
+                    )
 
             session_input = self._pending_session_input
             answer = await self._create_answer_with_runtime_ready_locked(
