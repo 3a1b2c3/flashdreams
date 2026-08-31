@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const mockMode = new URLSearchParams(window.location.search).has("mock")
+// ?manual skips the automatic connect-on-load attempt (still available via
+// the Connect button) -- avoids a stray/restored tab silently racing into
+// the single active WebRTC session and locking out the tab you meant to use.
+const manualConnectMode = new URLSearchParams(window.location.search).has("manual")
 
 /**
  * @typedef {Object} WebRTCModelAdapter
@@ -1178,6 +1182,10 @@ async function initialize() {
   attachPointerControls()
   window.requestAnimationFrame(drawIdleScene)
   startVideoFrameMonitor()
+  if (manualConnectMode) {
+    logEvent("manual connect mode: click Connect Session to begin", { source: "client" })
+    return
+  }
   await connectSession({ attemptsRemaining: autoConnectMaxAttempts })
 }
 

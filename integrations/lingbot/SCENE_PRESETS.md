@@ -19,6 +19,15 @@ Scene presets allow users to quickly load predefined scene configurations (promp
 3. Select a different preset from the dropdown
 4. Preset prompt + events + start image auto-populate the form; the dropdown stays on the selected preset name
 
+### Sharing a Preset via URL
+Add `?preset=<slug>` to the page URL to land directly on a specific built-in
+preset instead of the "Dragon" default — the slug is the preset name,
+lowercased with spaces replaced by hyphens (e.g. `Water Blaster` →
+`water-blaster`). Example: `http://<host>:8089/request_session?preset=circuit-racer`.
+Unknown/missing slugs fall back to the default preset. This only shares
+*which game loads*, not a live/running session — WebRTC still allows only
+one active session per server process.
+
 ### Saving a Preset
 1. Edit prompt and text events in the Initial Scene panel
 2. Click "Save" button next to Quick Start dropdown

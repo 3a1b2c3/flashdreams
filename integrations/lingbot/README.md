@@ -248,6 +248,13 @@ Then open:
 - [http://localhost:8089/request_session](http://localhost:8089/request_session)
 - [http://localhost:8089/healthz](http://localhost:8089/healthz) (`runtime_ready` indicates preload completion)
 
+By default the page auto-connects on load. Only one WebRTC session is allowed
+per server process (a second connect attempt gets `409: A Lingbot session is
+already active.`), so a stray/restored browser tab can silently grab the
+session and lock out the tab you meant to use. Append `?manual` to the URL
+to disable auto-connect and use the "Connect Session" button explicitly
+instead.
+
 ### Runtime requirements
 
 - CUDA-capable GPU.

@@ -3,6 +3,16 @@
 
 const mockMode = new URLSearchParams(window.location.search).has("mock")
 
+function presetSlug(name) {
+  return name.toLowerCase().trim().replace(/\s+/g, "-")
+}
+
+function findPresetIndexBySlug(slug) {
+  if (!slug) return -1
+  const normalized = slug.toLowerCase().trim()
+  return scenePresets.findIndex((preset) => presetSlug(preset.name) === normalized)
+}
+
 const scenePresets = [
   {
     name: "Dragon",
@@ -448,6 +458,7 @@ function loadSavedPresets() {
 function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
+  context.logEvent(`preset selected: ${preset.name}`, { source: "client" })
   promptInput.value = preset.prompt
   promptEdited = true
   textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
@@ -714,8 +725,13 @@ export default {
     updatePresetDropdown()
     setFirstFrameInputMode("url")
     attachListeners()
-    presetSelect.value = "0"
-    applyPreset(0)
+    // ?preset=<slug> (e.g. "water-blaster") shares a direct link to a
+    // specific game; falls back to index 0 ("Dragon") otherwise.
+    const requestedPreset = new URLSearchParams(window.location.search).get("preset")
+    const presetIndex = findPresetIndexBySlug(requestedPreset)
+    const defaultPresetIndex = presetIndex >= 0 ? presetIndex : 0
+    presetSelect.value = String(defaultPresetIndex)
+    applyPreset(defaultPresetIndex)
     try {
       await loadInitialScene()
     } catch (error) {
