@@ -5,8 +5,25 @@ const mockMode = new URLSearchParams(window.location.search).has("mock")
 
 const scenePresets = [
   {
+    name: "Dragon",
+    image: "https://raw.githubusercontent.com/Robbyant/lingbot-world-v2/main/examples/00/image.jpg",
+    prompt: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below.",
+    events: [
+      { event_id: "dive", label: "Steep Dive", prompt: "The creature folds its wings and drops into a steep, plunging dive toward the landscape below." },
+      { event_id: "climb", label: "Sharp Climb", prompt: "The creature beats its wings hard and climbs sharply, banking up toward the clouds." },
+      { event_id: "roar", label: "Creature Roars", prompt: "The creature throws back its head and lets out a thunderous roar that echoes off the floating islands." },
+      { event_id: "fireburst", label: "Fire Burst", prompt: "The creature exhales a burst of bright orange flame that lights up the sky ahead." },
+      { event_id: "flock", label: "Flock Passes", prompt: "A flock of smaller flying creatures streaks past in formation, wings beating hard." },
+      { event_id: "lightning", label: "Lightning Storm", prompt: "Dark storm clouds gather and lightning cracks across the sky between the floating islands." },
+      { event_id: "waterfall", label: "Through the Waterfall", prompt: "The flight path cuts straight through a cascading waterfall, spray bursting off the wings." },
+      { event_id: "gate", label: "Castle Gate Opens", prompt: "The immense gothic gate of the castle grinds open, torchlight spilling out into the dusk." },
+      { event_id: "otherdragon", label: "Rival Creature Appears", prompt: "Another winged creature bursts from behind a floating island, closing fast alongside." },
+      { event_id: "calm", label: "Winds Calm", prompt: "The wind eases and the flight levels out into smooth, gliding calm over the fantastical landscape." },
+    ],
+  },
+  {
     name: "Jet Ski Cruise",
-    image: "/model-static/assets/jet-ski-cruise.jpg",
+    image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/jet-ski-cruise.jpg",
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
       { event_id: "spin360", label: "Spin 360", prompt: "Whip the jet ski into a tight spinning 360." },
@@ -22,42 +39,42 @@ const scenePresets = [
     ],
   },
   {
-    name: "GTA Street Cruise",
-    image: "/model-static/assets/gta-car.jpg",
-    prompt: "A sun-baked city street lined with palm trees and pastel storefronts at golden hour. A teal-green 1964 lowrider convertible with gleaming chrome wire wheels cruising down the wide asphalt.",
+    name: "Noir Alley Combat",
+    image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/noir-alley-combat.jpg",
+    prompt: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     events: [
-      { event_id: "hydraulics", label: "Hydraulics Bounce", prompt: "The lowrider's hydraulics kick hard, hopping the front end up and slamming back down." },
-      { event_id: "honk", label: "Honk Horn", prompt: "A loud blaring horn blasts out and echoes off the storefronts." },
-      { event_id: "headlights", label: "Headlights", prompt: "The headlights snap on, throwing bright cones of light down the street." },
-      { event_id: "spraytag", label: "Spray Tag", prompt: "A burst of bright green spray paint tags the wall ahead." },
-      { event_id: "rival", label: "Rival Rolls Up", prompt: "A rival crimson-red lowrider rolls up alongside, engine growling." },
-      { event_id: "policechase", label: "Police Chase", prompt: "Police cruisers race in with sirens wailing and lights flashing." },
-      { event_id: "nightfall", label: "Nightfall", prompt: "The warm sunset drains away as night falls and neon signs flicker on." },
-      { event_id: "rain", label: "Rainstorm", prompt: "Dark clouds roll in and rain slicks the asphalt under the streetlights." },
-      { event_id: "fireworks", label: "Fireworks", prompt: "Bright fireworks burst overhead, lighting up the skyline." },
-      { event_id: "crowd", label: "Crowd Gathers", prompt: "A crowd gathers on the sidewalk, cheering and waving as the car rolls past." },
+      { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
+      { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
+      { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
+      { event_id: "grapple", label: "Grapple Takedown", prompt: "Lunge forward, seize the opponent, and hurl them down onto the wet asphalt." },
+      { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance." },
+      { event_id: "enemies", label: "Enemies Appear", prompt: "A group of armed figures appears down the alley, silhouetted against the neon glow, advancing." },
+      { event_id: "attack", label: "Enemies Attack", prompt: "The figures close the distance and attack all at once, fists and clubs swinging in." },
+      { event_id: "rain", label: "Rain Intensifies", prompt: "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
+      { event_id: "fog", label: "Fog Rolls In", prompt: "A thick fog rolls into the alley, blurring the neon signs and swallowing the far end of the street." },
+      { event_id: "sirens", label: "Sirens Approach", prompt: "Police sirens wail closer, red and blue light sweeping across the wet brick walls." },
     ],
   },
   {
-    name: "Rodeo Bull Ride",
-    image: "/model-static/assets/rodeo.jpg",
-    prompt: "A dusty floodlit rodeo arena at dusk. A cowboy in a wide-brimmed hat and chaps gripping the rope one-handed on the back of a massive bucking bull.",
+    name: "Water Blaster",
+    image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/watergun.jpg",
+    prompt: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     events: [
-      { event_id: "buck", label: "Bull Bucks Violently", prompt: "The bull explodes upward, kicking its hind legs high and slamming back down again and again." },
-      { event_id: "spin", label: "Bull Spins Hard", prompt: "The bull whips into a tight, fast spin, cranking around its own axis in a spray of dirt." },
-      { event_id: "spur", label: "Spur the Bull", prompt: "The cowboy digs his heels in hard, urging the bull to buck even more violently." },
-      { event_id: "wavehat", label: "Wave Hat", prompt: "The cowboy sweeps his hat off and waves it high overhead toward the crowd." },
-      { event_id: "thrown", label: "Thrown Off", prompt: "The bull heaves in a savage twist and flings the cowboy clear off its back into the dirt." },
-      { event_id: "duststorm", label: "Dust Storm", prompt: "A thick wall of dust rolls across the arena, wind kicking up swirling clouds." },
-      { event_id: "crowd", label: "Crowd Erupts", prompt: "The packed grandstands surge to their feet, arms thrown up and hats waving wildly." },
-      { event_id: "clown", label: "Rodeo Clown Distracts", prompt: "A rodeo clown in a painted face darts out waving a red flag to draw the bull's attention." },
-      { event_id: "fire", label: "Arena Fire", prompt: "Flames erupt across the arena dirt ahead, orange fire and black smoke rising." },
-      { event_id: "stands", label: "Bull Stands Still", prompt: "The bull plants all four hooves and holds still, sides heaving but no longer bucking." },
+      { event_id: "rapidfire", label: "Rapid Fire", prompt: "Pump and unload a rapid burst of water jets across the floats in a scatter of spray." },
+      { event_id: "splash", label: "Splash Blast", prompt: "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead." },
+      { event_id: "shield", label: "Raise Float Shield", prompt: "Haul up a clear inflatable board as a shield, incoming water jets hammering into it." },
+      { event_id: "slime", label: "Green Slime Blast", prompt: "Suck up dark green lake water and unload it as a thick glowing green slime stream." },
+      { event_id: "dive", label: "Dive", prompt: "Plunge underwater, murky green light and rising bubbles closing over the frame." },
+      { event_id: "ambush", label: "Rival Blaster Ambush", prompt: "A rival pops up from behind a platform and opens fire with their own water blaster." },
+      { event_id: "soakers", label: "Bathers Get Super Soakers", prompt: "Every bather in the park raises a huge super soaker and opens fire at once." },
+      { event_id: "crocodile", label: "Crocodile Lunges", prompt: "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera." },
+      { event_id: "wavesurge", label: "Wave Surge", prompt: "The calm lake churns into rolling swells, the inflatable platforms pitching hard." },
+      { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds sweep across the sky, rain pockmarking the lake and the water turning choppy." },
     ],
   },
   {
     name: "Circuit Racer",
-    image: "/model-static/assets/circuit.jpg",
+    image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/circuit.jpg",
     prompt: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs.",
     events: [
       { event_id: "drift", label: "Drift", prompt: "The wheel snaps hard over and the car slews sideways in a smoking slide before snapping back straight." },
@@ -429,32 +446,6 @@ function loadSavedPresets() {
   }
 }
 
-async function applyPresetImage(imagePath) {
-  // Preset thumbnails ship as static assets served by this same process
-  // (/model-static/...). Loading them as an "uploaded" file (raw bytes in
-  // the multipart form) instead of the "url" mode avoids the server's
-  // remote-fetch SSRF guard, which rejects non-public-routable hosts --
-  // this server's own LAN-private address would otherwise be rejected as
-  // an image_url target.
-  const response = await fetch(imagePath)
-  if (!response.ok) {
-    throw new Error(`preset image fetch failed (${response.status})`)
-  }
-  const blob = await response.blob()
-  const filename = imagePath.split("/").pop() || "preset.jpg"
-  const file = new File([blob], filename, { type: blob.type || "image/jpeg" })
-  setFirstFrameInputMode("upload")
-  selectedFirstFrameFile = file
-  firstFrameSelectionCommitted = false
-  if (selectedFirstFrameUrl) URL.revokeObjectURL(selectedFirstFrameUrl)
-  selectedFirstFrameUrl = URL.createObjectURL(file)
-  firstFrameName.textContent = file.name
-  firstFrameInput.value = ""
-  firstFrameUrlInput.value = ""
-  firstFrameUrlEdited = false
-  setFirstFrameStatus("Image not updated", "pending")
-}
-
 function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
@@ -464,9 +455,12 @@ function applyPreset(presetIndex) {
   textEventsEdited = true
   renderTextEventEditor()
   if (preset.image) {
-    applyPresetImage(preset.image).catch((err) => {
-      console.error("Failed to load preset image:", err)
-    })
+    clearSelectedFile()
+    setFirstFrameInputMode("url")
+    firstFrameUrlInput.value = preset.image
+    firstFrameUrlEdited = true
+    firstFrameName.textContent = "Upload Image"
+    setFirstFrameStatus("URL not updated", "pending")
   }
   context.releaseControls()
 }
@@ -716,6 +710,8 @@ export default {
     updatePresetDropdown()
     setFirstFrameInputMode("url")
     attachListeners()
+    presetSelect.value = "0"
+    applyPreset(0)
     try {
       await loadInitialScene()
     } catch (error) {

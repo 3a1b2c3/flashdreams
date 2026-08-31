@@ -4,18 +4,20 @@
 Scene presets allow users to quickly load predefined scene configurations (prompt + events) into the LingBot initial scene panel.
 
 ## Features
-- **Built-in presets**: 4 default scene presets (Jet Ski Cruise, GTA Street Cruise, Rodeo Bull Ride, Circuit Racer)
+- **Built-in presets**: 5 default scene presets (Dragon, Jet Ski Cruise, Noir Alley Combat, Water Blaster, Circuit Racer)
+- **Default on load**: "Dragon" auto-applies when the page opens (no manual selection needed)
 - **Save custom presets**: Save current scene configuration as a new preset
 - **Persistent storage**: Presets saved in browser localStorage
 - **Quick access**: Dropdown selector in "Quick Start" section
+- **Images**: each built-in preset's start image is a public `raw.githubusercontent.com` URL (no binaries committed to this repo)
 
 ## Usage
 
 ### Loading a Preset
-1. Open LingBot WebRTC interface
+1. Open LingBot WebRTC interface (the "Dragon" preset is pre-selected by default)
 2. Find "Quick Start" dropdown in Initial Scene panel
-3. Select a preset from the dropdown
-4. Preset prompt + events auto-populate the form; the dropdown stays on the selected preset name
+3. Select a different preset from the dropdown
+4. Preset prompt + events + start image auto-populate the form; the dropdown stays on the selected preset name
 
 ### Saving a Preset
 1. Edit prompt and text events in the Initial Scene panel
@@ -44,6 +46,60 @@ Presets are stored as JSON array in `localStorage["lingbot-presets"]`:
 ]
 ```
 
+## Adding a New Built-in Preset (Game)
+
+Built-in presets live in the `scenePresets` array at the top of
+`integrations/lingbot/lingbot/webrtc/web/adapter.js`. To add one:
+
+1. **Write the base prompt** (1-3 sentences): subject + environment + style,
+   third person (or first person for cockpit/POV scenes like Circuit
+   Racer/Water Blaster). No camera-motion or input language — this app
+   drives movement via the `w/a/s/d/q/e/i/j/k/l` keys and text events, not
+   prose.
+2. **Write 8-10 events**: each a short one-sentence imperative/descriptive
+   clause (`{ event_id, label, prompt }`). `event_id` is a short lowercase
+   token, unique within that preset's own `events` array (ids can repeat
+   *across* presets — each preset's list is independent). Mix
+   character-triggered actions (tricks, attacks) with environment beats
+   (weather, other characters/vehicles appearing).
+   - If you have access to `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json`
+     (a richer, layered `base`/`camera`/`movement`/`events` scene format
+     used by a different app), you can mine its `scene.base.default` and
+     `scene.events[].detail` text for content and compress it down to this
+     flatter prompt+events shape — drop the camera/movement layers and any
+     `EXACTLY ONE ...` frame-count guard clauses, since this app doesn't use
+     that layering. Reference copies of a few are kept in
+     `lingbot/webrtc/web/assets/sources/` for exactly this purpose.
+3. **Pick a start image**: use a public, already-hosted `https://` URL
+   (e.g. a `raw.githubusercontent.com` link) rather than committing a new
+   binary to this repo. The server validates any URL submitted through the
+   "Update" button (`_validate_remote_url` in `lingbot/webrtc/session.py`)
+   and **rejects non-publicly-routable hosts** (private/LAN IPs, localhost)
+   as an SSRF guard — so an image served by this same box's own private IP
+   won't work as a preset `image` URL, but any normal public host will.
+4. **Add the object** to `scenePresets`:
+   ```js
+   {
+     name: "My Game",
+     image: "https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>.jpg",
+     prompt: "...",
+     events: [
+       { event_id: "thing1", label: "Thing One", prompt: "..." },
+       // ...
+     ],
+   },
+   ```
+5. **(Optional) Make it the default**: the preset at index `0` is
+   auto-applied on page load via `presetSelect.value = "0"; applyPreset(0)`
+   in `mount()` — reorder the array (or edit those two lines) to change
+   which preset that is.
+6. **Reload the page** — `adapter.js` is served straight off disk on every
+   request (`add_static` in `flashdreams/serving/webrtc/server.py`), so a
+   browser refresh picks up the change with no server restart needed, as
+   long as you're running an editable (`pip install -e`) install.
+7. Update the **Built-in Presets** list below and the preset count in
+   **Features** to keep this doc in sync.
+
 ## Storage Location
 - **Browser**: localStorage under key `lingbot-presets`
 - **Persistence**: Survives page refresh, tab close
@@ -52,21 +108,28 @@ Presets are stored as JSON array in `localStorage["lingbot-presets"]`:
 
 ## Built-in Presets
 
-### 1. Jet Ski Cruise
+### 1. Dragon (default)
+- **Prompt**: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below."
+- **Events**: Steep Dive, Sharp Climb, Creature Roars, Fire Burst, Flock Passes, Lightning Storm, Through the Waterfall, Castle Gate Opens, Rival Creature Appears, Winds Calm.
+- Same scene as the app's example-00 default (`_DEFAULT_IMAGE_URL` in `session.py`); this preset just gives it a name, an event catalog, and auto-selects it on load.
+
+### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
 - **Events**: Spin 360, Nose Pop, Slalom Weave, Superman, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave.
 
-### 2. GTA Street Cruise
-- **Prompt**: "A sun-baked city street lined with palm trees and pastel storefronts at golden hour. A teal-green 1964 lowrider convertible with gleaming chrome wire wheels cruising down the wide asphalt."
-- **Events**: Hydraulics Bounce, Honk Horn, Headlights, Spray Tag, Rival Rolls Up, Police Chase, Nightfall, Rainstorm, Fireworks, Crowd Gathers.
+### 3. Noir Alley Combat
+- **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
+- **Events**: Punch Combo, Roundhouse Kick, Baton Strike, Grapple Takedown, Dodge Roll, Enemies Appear, Enemies Attack, Rain Intensifies, Fog Rolls In, Sirens Approach.
 
-### 3. Rodeo Bull Ride
-- **Prompt**: "A dusty floodlit rodeo arena at dusk. A cowboy in a wide-brimmed hat and chaps gripping the rope one-handed on the back of a massive bucking bull."
-- **Events**: Bull Bucks Violently, Bull Spins Hard, Spur the Bull, Wave Hat, Thrown Off, Dust Storm, Crowd Erupts, Rodeo Clown Distracts, Arena Fire, Bull Stands Still.
+### 4. Water Blaster
+- **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
+- **Events**: Rapid Fire, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Storm Rolls In.
 
-### 4. Circuit Racer
+### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."
 - **Events**: Drift, Kick Up Sparks, Lock-Up Smoke, DRS Boost, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag.
+
+Noir Alley Combat, Water Blaster, Jet Ski Cruise, and Circuit Racer prompts/events are adapted from the richer layered scene definitions in `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json` (kept as reference copies under `lingbot/webrtc/web/assets/sources/` in this repo) down to this app's flatter prompt+events format. Their start images are hotlinked from that repo's `examples` branch on GitHub rather than committed here.
 
 ## Browser Console Access
 
@@ -82,9 +145,10 @@ localStorage.removeItem("lingbot-presets")
 
 ## Implementation Files
 - **UI**: `integrations/lingbot/lingbot/webrtc/web/adapter.js`
-  - Lines 6-67: Preset data definitions (`scenePresets`)
+  - Top of file: Preset data definitions (`scenePresets`)
   - `makeSceneCard()`: Scene card HTML with dropdown + Save button
   - `saveCurrentPreset()` / `updatePresetDropdown()` / `loadSavedPresets()` / `applyPreset()`: Load/Save preset functions
+  - `mount()`: selects + applies preset index 0 ("Dragon") on load, before `loadInitialScene()` runs
   - `presetSelect.addEventListener` / `savePresetButton.addEventListener`: Event listeners
 
 ## Future Enhancements
