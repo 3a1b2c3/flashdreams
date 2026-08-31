@@ -103,6 +103,20 @@ class RuntimeHost:
         self._unhealthy_reason = reason
         self._unhealthy_error = error
 
+    def force_healthy(self) -> None:
+        """Clear the unhealthy latch.
+
+        ``mark_unhealthy`` is deliberately permanent -- once cleanup after a
+        crash fails, the host stops admitting new sessions since GPU/model
+        state may be corrupted. For a single-operator server where an
+        operator would rather keep testing (accepting that risk) than have
+        every connection permanently rejected until a manual process
+        restart, this clears the latch so admission can resume.
+        """
+        self._healthy = True
+        self._unhealthy_reason = None
+        self._unhealthy_error = None
+
     def preload(self) -> None:
         """Initialize optional distributed state and preload runtime resources."""
         self._call_optional_runtime_hook("initialize_distributed")

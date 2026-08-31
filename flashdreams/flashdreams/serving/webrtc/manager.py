@@ -1555,15 +1555,25 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
         reservation = context.admission.try_reserve()
         if reservation is None:
             # We already know there's no legitimately active session (the
-            # ``_active_session`` check above just passed), so a held
-            # admission slot at this point can only be a leaked reservation
-            # from a prior session whose owning code path failed to call
-            # ``.release()`` -- force it open and retry once rather than
-            # permanently 409ing every future connection.
+            # ``_active_session`` check above just passed), so a failed
+            # reservation at this point can only be either a leaked
+            # reservation from a prior session that failed to call
+            # ``.release()``, or the shared host having latched itself
+            # unhealthy after a crash's cleanup failed (``mark_unhealthy``
+            # is deliberately permanent -- see ``RuntimeHost``). For a
+            # single-operator server, force both open and retry once rather
+            # than permanently 409ing every future connection; this accepts
+            # the risk of continuing on a host whose GPU/model state may not
+            # have been fully cleaned up after that crash.
             logger.warning(
-                "Admission slot held with no active session; force-releasing "
-                "and retrying."
+                "Admission unavailable with no active session (host "
+                "unhealthy: {}); force-clearing and retrying.",
+                self._shared_host.unhealthy_reason
+                if self._shared_host is not None
+                else None,
             )
+            if self._shared_host is not None:
+                self._shared_host.force_healthy()
             context.admission.force_release()
             reservation = context.admission.try_reserve()
         if reservation is None:
