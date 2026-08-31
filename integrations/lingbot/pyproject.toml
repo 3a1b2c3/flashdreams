@@ -64,6 +64,7 @@ exclude = ["tests"]
 "lingbot.webrtc.web" = [
     "adapter.css",
     "adapter.js",
+    "assets/*.jpg",
 ]
 
 [tool.uv]

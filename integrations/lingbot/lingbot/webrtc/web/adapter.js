@@ -6,6 +6,7 @@ const mockMode = new URLSearchParams(window.location.search).has("mock")
 const scenePresets = [
   {
     name: "Jet Ski Cruise",
+    image: "/model-static/assets/jet-ski-cruise.jpg",
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
       { event_id: "spin360", label: "Spin 360", prompt: "Whip the jet ski into a tight spinning 360." },
@@ -22,6 +23,7 @@ const scenePresets = [
   },
   {
     name: "GTA Street Cruise",
+    image: "/model-static/assets/gta-car.jpg",
     prompt: "A sun-baked city street lined with palm trees and pastel storefronts at golden hour. A teal-green 1964 lowrider convertible with gleaming chrome wire wheels cruising down the wide asphalt.",
     events: [
       { event_id: "hydraulics", label: "Hydraulics Bounce", prompt: "The lowrider's hydraulics kick hard, hopping the front end up and slamming back down." },
@@ -38,6 +40,7 @@ const scenePresets = [
   },
   {
     name: "Rodeo Bull Ride",
+    image: "/model-static/assets/rodeo.jpg",
     prompt: "A dusty floodlit rodeo arena at dusk. A cowboy in a wide-brimmed hat and chaps gripping the rope one-handed on the back of a massive bucking bull.",
     events: [
       { event_id: "buck", label: "Bull Bucks Violently", prompt: "The bull explodes upward, kicking its hind legs high and slamming back down again and again." },
@@ -54,6 +57,7 @@ const scenePresets = [
   },
   {
     name: "Circuit Racer",
+    image: "/model-static/assets/circuit.jpg",
     prompt: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs.",
     events: [
       { event_id: "drift", label: "Drift", prompt: "The wheel snaps hard over and the car slews sideways in a smoking slide before snapping back straight." },
@@ -425,6 +429,32 @@ function loadSavedPresets() {
   }
 }
 
+async function applyPresetImage(imagePath) {
+  // Preset thumbnails ship as static assets served by this same process
+  // (/model-static/...). Loading them as an "uploaded" file (raw bytes in
+  // the multipart form) instead of the "url" mode avoids the server's
+  // remote-fetch SSRF guard, which rejects non-public-routable hosts --
+  // this server's own LAN-private address would otherwise be rejected as
+  // an image_url target.
+  const response = await fetch(imagePath)
+  if (!response.ok) {
+    throw new Error(`preset image fetch failed (${response.status})`)
+  }
+  const blob = await response.blob()
+  const filename = imagePath.split("/").pop() || "preset.jpg"
+  const file = new File([blob], filename, { type: blob.type || "image/jpeg" })
+  setFirstFrameInputMode("upload")
+  selectedFirstFrameFile = file
+  firstFrameSelectionCommitted = false
+  if (selectedFirstFrameUrl) URL.revokeObjectURL(selectedFirstFrameUrl)
+  selectedFirstFrameUrl = URL.createObjectURL(file)
+  firstFrameName.textContent = file.name
+  firstFrameInput.value = ""
+  firstFrameUrlInput.value = ""
+  firstFrameUrlEdited = false
+  setFirstFrameStatus("Image not updated", "pending")
+}
+
 function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
@@ -433,6 +463,11 @@ function applyPreset(presetIndex) {
   textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
   textEventsEdited = true
   renderTextEventEditor()
+  if (preset.image) {
+    applyPresetImage(preset.image).catch((err) => {
+      console.error("Failed to load preset image:", err)
+    })
+  }
   context.releaseControls()
 }
 
