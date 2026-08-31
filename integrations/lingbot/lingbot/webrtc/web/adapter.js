@@ -29,7 +29,6 @@ const scenePresets = [
       { event_id: "spin360", label: "Spin 360", prompt: "Whip the jet ski into a tight spinning 360." },
       { event_id: "nosepop", label: "Nose Pop", prompt: "Pop the nose of the jet ski high into the air." },
       { event_id: "slalom", label: "Slalom Weave", prompt: "Fast slalom weaving sharply left and right." },
-      { event_id: "superman", label: "Superman", prompt: "Stretch out flat off the back in a superman trick." },
       { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
       { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
       { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
@@ -461,6 +460,11 @@ function applyPreset(presetIndex) {
     firstFrameUrlEdited = true
     firstFrameName.textContent = "Upload Image"
     setFirstFrameStatus("URL not updated", "pending")
+    // Show the preset's image immediately, ahead of the "Update" commit
+    // step -- picking a preset should visibly change the panel, not just
+    // silently populate the URL field.
+    preview.src = preset.image
+    document.body.classList.toggle("is-ready-preview", !context.isVideoVisible())
   }
   context.releaseControls()
 }
