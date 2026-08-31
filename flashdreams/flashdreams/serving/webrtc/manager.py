@@ -1554,6 +1554,19 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
         context = self._shared_run_context(loop)
         reservation = context.admission.try_reserve()
         if reservation is None:
+            # We already know there's no legitimately active session (the
+            # ``_active_session`` check above just passed), so a held
+            # admission slot at this point can only be a leaked reservation
+            # from a prior session whose owning code path failed to call
+            # ``.release()`` -- force it open and retry once rather than
+            # permanently 409ing every future connection.
+            logger.warning(
+                "Admission slot held with no active session; force-releasing "
+                "and retrying."
+            )
+            context.admission.force_release()
+            reservation = context.admission.try_reserve()
+        if reservation is None:
             raise SessionBusyError(self.busy_message)
         try:
             await self._reset_runtime_for_session(
