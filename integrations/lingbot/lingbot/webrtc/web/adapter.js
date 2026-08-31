@@ -20,6 +20,54 @@ const scenePresets = [
       { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead." },
     ],
   },
+  {
+    name: "GTA Street Cruise",
+    prompt: "A sun-baked city street lined with palm trees and pastel storefronts at golden hour. A teal-green 1964 lowrider convertible with gleaming chrome wire wheels cruising down the wide asphalt.",
+    events: [
+      { event_id: "hydraulics", label: "Hydraulics Bounce", prompt: "The lowrider's hydraulics kick hard, hopping the front end up and slamming back down." },
+      { event_id: "honk", label: "Honk Horn", prompt: "A loud blaring horn blasts out and echoes off the storefronts." },
+      { event_id: "headlights", label: "Headlights", prompt: "The headlights snap on, throwing bright cones of light down the street." },
+      { event_id: "spraytag", label: "Spray Tag", prompt: "A burst of bright green spray paint tags the wall ahead." },
+      { event_id: "rival", label: "Rival Rolls Up", prompt: "A rival crimson-red lowrider rolls up alongside, engine growling." },
+      { event_id: "policechase", label: "Police Chase", prompt: "Police cruisers race in with sirens wailing and lights flashing." },
+      { event_id: "nightfall", label: "Nightfall", prompt: "The warm sunset drains away as night falls and neon signs flicker on." },
+      { event_id: "rain", label: "Rainstorm", prompt: "Dark clouds roll in and rain slicks the asphalt under the streetlights." },
+      { event_id: "fireworks", label: "Fireworks", prompt: "Bright fireworks burst overhead, lighting up the skyline." },
+      { event_id: "crowd", label: "Crowd Gathers", prompt: "A crowd gathers on the sidewalk, cheering and waving as the car rolls past." },
+    ],
+  },
+  {
+    name: "Rodeo Bull Ride",
+    prompt: "A dusty floodlit rodeo arena at dusk. A cowboy in a wide-brimmed hat and chaps gripping the rope one-handed on the back of a massive bucking bull.",
+    events: [
+      { event_id: "buck", label: "Bull Bucks Violently", prompt: "The bull explodes upward, kicking its hind legs high and slamming back down again and again." },
+      { event_id: "spin", label: "Bull Spins Hard", prompt: "The bull whips into a tight, fast spin, cranking around its own axis in a spray of dirt." },
+      { event_id: "spur", label: "Spur the Bull", prompt: "The cowboy digs his heels in hard, urging the bull to buck even more violently." },
+      { event_id: "wavehat", label: "Wave Hat", prompt: "The cowboy sweeps his hat off and waves it high overhead toward the crowd." },
+      { event_id: "thrown", label: "Thrown Off", prompt: "The bull heaves in a savage twist and flings the cowboy clear off its back into the dirt." },
+      { event_id: "duststorm", label: "Dust Storm", prompt: "A thick wall of dust rolls across the arena, wind kicking up swirling clouds." },
+      { event_id: "crowd", label: "Crowd Erupts", prompt: "The packed grandstands surge to their feet, arms thrown up and hats waving wildly." },
+      { event_id: "clown", label: "Rodeo Clown Distracts", prompt: "A rodeo clown in a painted face darts out waving a red flag to draw the bull's attention." },
+      { event_id: "fire", label: "Arena Fire", prompt: "Flames erupt across the arena dirt ahead, orange fire and black smoke rising." },
+      { event_id: "stands", label: "Bull Stands Still", prompt: "The bull plants all four hooves and holds still, sides heaving but no longer bucking." },
+    ],
+  },
+  {
+    name: "Circuit Racer",
+    prompt: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs.",
+    events: [
+      { event_id: "drift", label: "Drift", prompt: "The wheel snaps hard over and the car slews sideways in a smoking slide before snapping back straight." },
+      { event_id: "sparks", label: "Kick Up Sparks", prompt: "The floor grounds out on the asphalt, spraying a bright shower of orange sparks past the nose." },
+      { event_id: "lockup", label: "Lock-Up Smoke", prompt: "The brakes lock hard into the corner, boiling thick white tyre smoke off the front wheels." },
+      { event_id: "drs", label: "DRS Boost", prompt: "The DRS flicks on and the car surges away down the straight as drag drops off." },
+      { event_id: "crash", label: "Crash", prompt: "The car slams into the barrier, carbon-fibre debris flying as it grinds to a juddering halt." },
+      { event_id: "rain", label: "Rain Sweeps In", prompt: "Dark storm clouds roll over and rain sweeps across the windscreen, the track glistening wet." },
+      { event_id: "glare", label: "Sun Glare", prompt: "The low sun blazes straight into the windscreen, washing out the track ahead in blinding light." },
+      { event_id: "tunnel", label: "Tunnel Section", prompt: "The track dives into a dark tunnel, strings of overhead lights strobing past overhead." },
+      { event_id: "roadfire", label: "Road Fire", prompt: "A wall of orange flame and black smoke erupts across the track directly ahead." },
+      { event_id: "flag", label: "Checkered Flag", prompt: "The car sweeps across the start-finish line as a marshal waves the chequered flag overhead." },
+    ],
+  },
 ]
 
 const controls = [
@@ -385,7 +433,6 @@ function applyPreset(presetIndex) {
   textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
   textEventsEdited = true
   renderTextEventEditor()
-  presetSelect.value = ""
   context.releaseControls()
 }
 

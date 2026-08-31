@@ -18,7 +18,8 @@ find "$FLASHDREAMS_ROOT" -type d -name "*.egg-info" -delete 2>/dev/null || true
 
 # Step 2: Create venv with Python
 echo "[2/7] Creating Python venv..."
-python -m venv .venv
+command -v python3 >/dev/null 2>&1 && PYTHON_BIN=python3 || PYTHON_BIN=python
+"$PYTHON_BIN" -m venv .venv
 source .venv/bin/activate
 
 # Step 3: Upgrade pip
@@ -61,16 +62,23 @@ import torch, torchaudio
 print(f'torch {torch.__version__} / torchaudio {torchaudio.__version__} OK')
 "
 
-# Step 6: Install flashdreams + lingbot editable, without disturbing the
-# pinned torch/torchaudio/transformers/tyro versions above. Uninstall any
-# stale non-editable copy first -- a prior plain "pip install flashdreams"
+# Step 6: Install flashdreams + lingbot editable. Deliberately WITHOUT
+# --no-deps this time: flashdreams' own pyproject.toml declares core deps
+# (boto3, botocore, einops, filelock, ftfy, huggingface-hub, nvidia-ml-py,
+# psutil, pyyaml, safetensors, tqdm, urllib3, ...) that step 5 above does
+# not hand-list, and that list has drifted out of sync before, causing a
+# ModuleNotFoundError whack-a-mole at runtime. pip only reinstalls a
+# dependency if the currently-installed version fails its version
+# specifier, so this will not disturb the pinned torch/tyro/transformers
+# installed above -- it only fills in the gaps. Uninstall any stale
+# non-editable copy first -- a prior plain "pip install flashdreams"
 # leaves a static site-packages copy that silently shadows the editable
 # install and source edits stop taking effect.
 echo "[6/7] Installing flashdreams + lingbot (editable)..."
 pip uninstall -y flashdreams flashdreams-lingbot flashdreams-cam2v >/dev/null 2>&1 || true
-pip install -e "$FLASHDREAMS_ROOT/flashdreams" --no-deps
-pip install -e "$FLASHDREAMS_ROOT/apps/cam2v" --no-deps
-pip install -e "$HERE" --no-deps
+pip install -e "$FLASHDREAMS_ROOT/flashdreams"
+pip install -e "$FLASHDREAMS_ROOT/apps/cam2v"
+pip install -e "$HERE"
 
 # Step 7: Clear caches
 echo "[7/7] Clearing caches..."
