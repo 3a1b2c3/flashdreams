@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from importlib.resources import as_file
@@ -12,6 +14,11 @@ from typing import Any, Protocol
 
 from aiohttp import web
 from loguru import logger
+
+_PROCESS_STARTED_AT = time.time()
+"""Captured at import time -- lets ``/healthz`` show a live process's actual
+start time, so a browser-only check (no SSH access needed) can confirm
+whether a restart picked up a given code change."""
 
 
 class SessionBusyError(RuntimeError):
@@ -88,6 +95,9 @@ def create_webrtc_app(
                 "status": "ok",
                 "runtime_ready": manager.is_runtime_ready(),
                 "session_active": manager.has_active_session(),
+                "pid": os.getpid(),
+                "process_started_at": _PROCESS_STARTED_AT,
+                "process_uptime_s": round(time.time() - _PROCESS_STARTED_AT, 1),
             }
         )
 
