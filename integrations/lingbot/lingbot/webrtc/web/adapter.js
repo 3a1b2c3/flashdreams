@@ -740,7 +740,7 @@ export default {
   },
 
   async beforeConnect() {
-    await uploadSessionInput()
+    await uploadSessionInput({ includeFirstFrame: true })
   },
 
   onActionSent() {
