@@ -50,7 +50,6 @@ const scenePresets = [
       { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
       { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
       { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
-      { event_id: "grapple", label: "Grapple Takedown", prompt: "Lunge forward, seize the opponent, and hurl them down onto the wet asphalt." },
       { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance." },
       { event_id: "rain", label: "Rain Intensifies", prompt: "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
       { event_id: "fog", label: "Fog Rolls In", prompt: "A thick fog rolls into the alley, blurring the neon signs and swallowing the far end of the street." },
@@ -478,6 +477,10 @@ function applyPreset(presetIndex) {
   textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
   textEventsEdited = true
   renderTextEventEditor()
+  // Also refresh the live Player Controls buttons immediately, not just
+  // the editable Text Events list -- otherwise switching games mid-session
+  // only updates on the next connect/upload, not on selection itself.
+  renderEventControls()
   if (preset.image) {
     clearSelectedFile()
     setFirstFrameInputMode("url")

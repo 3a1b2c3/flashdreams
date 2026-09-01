@@ -136,7 +136,7 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Events**: Jump, Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Grapple Takedown, Dodge Roll, Rain Intensifies, Fog Rolls In.
+- **Events**: Jump, Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies, Fog Rolls In.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
