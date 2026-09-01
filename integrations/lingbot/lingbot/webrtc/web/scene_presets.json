@@ -72,16 +72,17 @@
     "prompt": "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The player leaps up and forward off the edge of the platform, sailing over a gap of open water, then lands with a splash and stands back upright." },
-      { "event_id": "crouch", "label": "Crouch", "prompt": "The player crouches down behind the raised edge of an inflatable platform for cover, only the top of the water blaster peeking over." },
-      { "event_id": "splash", "label": "Splash Blast", "prompt": "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead." },
-      { "event_id": "shield", "label": "Raise Float Shield", "prompt": "Haul up a clear inflatable board as a shield, incoming water jets hammering into it." },
-      { "event_id": "slime", "label": "Green Slime Blast", "prompt": "Suck up dark green lake water and unload it as a thick glowing green slime stream." },
-      { "event_id": "dive", "label": "Dive", "prompt": "Plunge underwater, murky green light and rising bubbles closing over the frame." }
+      { "event_id": "crouch", "label": "Crouch", "prompt": "The player crouches down behind the raised edge of an inflatable platform for cover, only the top of the water blaster peeking over.", "health": 3 },
+      { "event_id": "splash", "label": "Splash Blast", "prompt": "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead.", "health": 5 },
+      { "event_id": "shield", "label": "Raise Float Shield", "prompt": "Haul up a clear inflatable board as a shield, incoming water jets hammering into it.", "health": 10 },
+      { "event_id": "slime", "label": "Green Slime Blast", "prompt": "Suck up dark green lake water and unload it as a thick glowing green slime stream.", "health": 5 },
+      { "event_id": "dive", "label": "Dive", "prompt": "Plunge underwater, murky green light and rising bubbles closing over the frame.", "health": 8 }
     ],
     "directorEvents": [
+      { "event_id": "cooler", "label": "Ice Cooler Floats By", "prompt": "A bright floating cooler bobs past packed with cold drinks; the player grabs it and takes a refreshing break before diving back in.", "health": 15 },
       { "event_id": "ambush", "label": "Rival Blaster Ambush", "prompt": "A rival pops up from behind a platform and opens fire with their own water blaster.", "health": -12 },
       { "event_id": "soakers", "label": "Bathers Get Super Soakers", "prompt": "Every bather in the park raises a huge super soaker and opens fire at once.", "health": -12 },
-      { "event_id": "crocodile", "label": "Crocodile Lunges", "prompt": "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera.", "health": -20 },
+      { "event_id": "crocodile", "label": "Crocodile Lunges", "prompt": "A big crocodile surges up out of the green quarry water beside the inflatable floats, jaws gaping wide as it lunges straight at the camera in a burst of spray and thrashing water, snapping close before it twists and slides back below the surface.", "health": -20 },
       { "event_id": "balloon", "label": "Giant Balloon Drops", "prompt": "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." }
     ],
     "hud": { "maxHealth": 100 }
