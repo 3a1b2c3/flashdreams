@@ -34,12 +34,15 @@ just without a shown hotkey.
 Each preset's events are split into two categories, matching the original
 REACTOR case files' `actor: "character"` (player-triggered) vs.
 `actor: "environment"` (narrative/pacing) events:
-- **Player Controls** — always visible, the regular action buttons.
+- **Player Controls** — the regular action buttons.
 - **Director Controls** — a separate panel with the environment/pacing
-  events (weather, hazards, wildlife, etc.), only reachable when the page
-  URL includes `?director` (e.g. `?manual&director`). When present, a
-  toggle button appears in each panel ("Director Controls →" /
-  "← Player Controls") to switch between them — only one is shown at a
+  events (weather, hazards, wildlife, etc.). Reached either by adding
+  `?director` to the page URL (e.g. `?manual&director`) — which lands
+  directly on Director Controls with Player Controls hidden — or by
+  clicking the **"Enable Director Mode"** button that appears in Player
+  Controls for any preset that has director events (no URL edit needed).
+  Once on, a toggle button in each panel ("Director Controls →" /
+  "← Player Controls") switches between them — only one is shown at a
   time. Hotkey letters are assigned across *both* panels together (player
   first) so a letter never maps to two different events even though only
   one panel is visible at once.

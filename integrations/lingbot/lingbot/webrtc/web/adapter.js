@@ -5,7 +5,9 @@ const mockMode = new URLSearchParams(window.location.search).has("mock")
 // ?director shows the separate Director Controls panel (environment/pacing
 // events, e.g. weather and hazards) alongside Player Controls -- hidden by
 // default since this is a second operator's role, not the regular player's.
-const directorMode = new URLSearchParams(window.location.search).has("director")
+// Also toggleable at runtime via the "Director Mode" button (no URL edit
+// needed); mutable for that reason.
+let directorMode = new URLSearchParams(window.location.search).has("director")
 
 // Letter hotkeys for event buttons, in assignment order. Excludes the
 // reserved movement keys (w/a/s/d/q/e/i/j/k/l) and "c" (Clear's own
@@ -197,7 +199,11 @@ let directorControls = null
 let directorButtons = null
 let toPlayerViewButton = null
 let toDirectorViewButton = null
-let showingDirectorControls = false
+let enableDirectorModeButton = null
+// Landing on the page with ?director already set jumps straight to the
+// Director Controls view (Player Controls hidden) instead of requiring an
+// extra click on the toggle button.
+let showingDirectorControls = directorMode
 let currentPreset = null
 
 function makeSceneCard() {
@@ -262,6 +268,7 @@ function makeEventControls() {
     <div class="eventButtons"></div>
     <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
     <button class="viewToggleButton" type="button" hidden>Director Controls &rarr;</button>
+    <button class="enableDirectorModeButton" type="button" hidden>Enable Director Mode</button>
     <div class="promptControlGroup">
       <label class="promptControl">
         <span>Custom Prompt</span>
@@ -305,6 +312,7 @@ function bindElements() {
   directorButtons = directorControls.querySelector(".directorButtons")
   toPlayerViewButton = directorControls.querySelector(".viewToggleButton")
   toDirectorViewButton = eventControls.querySelector(".viewToggleButton")
+  enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   livePromptInput = eventControls.querySelector(".promptControl input")
   livePromptSubmitButton = eventControls.querySelector(".promptSubmitButton")
 }
@@ -519,12 +527,24 @@ function renderEventControls() {
 
   // In director mode, only one of the two panels is shown at a time,
   // switched via the toggle buttons in each panel's footer -- otherwise
-  // (the common case) only Player Controls ever exists.
+  // (the common case) only Player Controls ever exists. When director mode
+  // isn't on yet but this preset actually has director events, offer the
+  // "Enable Director Mode" button instead of requiring a URL edit.
   const hasDirectorContent = directorMode && directorItems.length > 0
+  enableDirectorModeButton.hidden = directorMode || directorItems.length === 0
   toDirectorViewButton.hidden = !hasDirectorContent
   if (!hasDirectorContent) showingDirectorControls = false
   eventControls.hidden = playerItems.length === 0 || (hasDirectorContent && showingDirectorControls)
   directorControls.hidden = !hasDirectorContent || !showingDirectorControls
+}
+
+function enableDirectorMode() {
+  directorMode = true
+  showingDirectorControls = true
+  const url = new URL(window.location.href)
+  url.searchParams.set("director", "")
+  window.history.replaceState(null, "", url)
+  renderEventControls()
 }
 
 function setDirectorView(showDirector) {
@@ -787,6 +807,7 @@ function attachListeners() {
   })
   toDirectorViewButton.addEventListener("click", () => setDirectorView(true))
   toPlayerViewButton.addEventListener("click", () => setDirectorView(false))
+  enableDirectorModeButton.addEventListener("click", enableDirectorMode)
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
     setFirstFrameInputMode("upload")
