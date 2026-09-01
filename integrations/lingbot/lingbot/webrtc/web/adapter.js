@@ -260,6 +260,10 @@ function bindElements() {
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
   healthBar = eventControls.querySelector(".healthBar")
+  // Also moved ahead of the movement grid, right after the toggle (so
+  // order is: toggle, health bar, movement grid, then the rest of this
+  // panel's own content).
+  if (movementControlRows) movementControlRows.before(healthBar)
   healthBarFill = eventControls.querySelector(".healthBarFill")
   healthBarValue = eventControls.querySelector(".healthBarValue")
   healthBarLabelText = eventControls.querySelector(".healthBarLabelText")
