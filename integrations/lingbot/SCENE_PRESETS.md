@@ -177,7 +177,7 @@ one:
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Events**: Jump, Crouch, Draw Pistol, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies.
+- **Events**: Jump, Crouch, Draw Pistol, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies, Enemies Appear, Enemies Attack.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."

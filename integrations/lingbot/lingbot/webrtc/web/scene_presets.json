@@ -47,7 +47,9 @@
       { "event_id": "dodge", "label": "Dodge Roll", "prompt": "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance.", "health": 10 }
     ],
     "directorEvents": [
-      { "event_id": "rain", "label": "Rain Intensifies", "prompt": "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." }
+      { "event_id": "rain", "label": "Rain Intensifies", "prompt": "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
+      { "event_id": "enemiesappear", "label": "Enemies Appear", "prompt": "A group of dark, armed figures appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer." },
+      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." }
     ],
     "hud": { "maxHealth": 100 }
   },
