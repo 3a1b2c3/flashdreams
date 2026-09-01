@@ -33,21 +33,23 @@ just without a shown hotkey.
 ### Director Controls
 Each preset's events are split into two categories, matching the original
 REACTOR case files' `actor: "character"` (player-triggered) vs.
-`actor: "environment"` (narrative/pacing) events:
-- **Player Controls** — the regular action buttons.
-- **Director Controls** — a separate panel with the environment/pacing
-  events (weather, hazards, wildlife, etc.). Reached either by adding
-  `?director` to the page URL (e.g. `?manual&director`) — which lands
-  directly on Director Controls with Player Controls hidden — or by
-  clicking the **"Enable Director Mode"** button that appears in Player
-  Controls for any preset that has director events (no URL edit needed).
-  Once on, a toggle button in each panel ("Director Controls →" /
-  "← Player Controls") switches between them — only one is shown at a
-  time. Hotkey letters are assigned across *both* panels together (player
-  first) so a letter never maps to two different events even though only
-  one panel is visible at once.
+`actor: "environment"` (narrative/pacing) events. Both live in the *same*
+Player/Director Controls panel, switched with a **Player / Director tab
+bar** at the top of the panel — not two separate panels:
+- **Player** tab — the regular action buttons + a "Custom Prompt" box.
+- **Director** tab — the environment/pacing events (weather, hazards,
+  wildlife, etc.) + its own separate "Director Prompt" box, so a director
+  can send free-form direction text independently of the player's prompt.
 
-Both panels' events are always uploaded to the server together regardless
+The tab bar only appears once director mode is on, reached either by
+adding `?director` to the page URL (e.g. `?manual&director`) — which lands
+directly on the Director tab — or by clicking **"Enable Director Mode"**
+in Player Controls for any preset that has director events (no URL edit
+needed). Hotkey letters are assigned across *both* tabs' events together
+(player first) so a letter never maps to two different events even though
+only one tab's buttons are visible at once.
+
+Both tabs' events are always uploaded to the server together regardless
 of `?director` — the shared WebRTC protocol has no player/director
 distinction, so this split is purely a client-side UI/visibility choice.
 

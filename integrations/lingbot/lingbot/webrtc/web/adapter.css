@@ -42,20 +42,28 @@ body.is-ready-preview .firstFramePreview {
 
 .sceneCard[hidden],
 .eventControls[hidden],
-.directorControls[hidden] {
+.eventButtons[hidden],
+.promptControlGroup[hidden],
+.controlsTabBar[hidden] {
   display: none;
 }
 
-.directorControls {
-  position: absolute;
-  top: clamp(120px, 15vh, 168px);
-  right: clamp(18px, 3vw, 52px);
-  display: grid;
-  gap: 12px;
-  width: min(360px, calc(100vw - 36px));
-  max-height: min(520px, calc(100vh - 224px));
-  padding: 16px 18px 18px;
-  overflow: auto;
+.controlsTabBar {
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+}
+
+.controlsTab {
+  flex: 1;
+  padding: 6px 10px;
+  opacity: 0.6;
+}
+
+.controlsTab.is-active {
+  opacity: 1;
+  border-bottom: 2px solid currentColor;
 }
 
 .firstFrameSourceRow {

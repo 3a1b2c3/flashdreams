@@ -195,11 +195,15 @@ let eventButtons = null
 let clearEventButton = null
 let livePromptInput = null
 let livePromptSubmitButton = null
-let directorControls = null
 let directorButtons = null
-let toPlayerViewButton = null
-let toDirectorViewButton = null
+let controlsTabBar = null
+let controlsTabPlayer = null
+let controlsTabDirector = null
 let enableDirectorModeButton = null
+let playerPromptGroup = null
+let directorPromptGroup = null
+let directorPromptInput = null
+let directorPromptSubmitButton = null
 // Landing on the page with ?director already set jumps straight to the
 // Director Controls view (Player Controls hidden) instead of requiring an
 // extra click on the toggle button.
@@ -265,30 +269,28 @@ function makeEventControls() {
   root.className = "eventControls"
   root.hidden = true
   root.innerHTML = `
+    <div class="controlsTabBar" hidden>
+      <button class="controlsTab controlsTabPlayer is-active" type="button">Player</button>
+      <button class="controlsTab controlsTabDirector" type="button">Director</button>
+    </div>
     <div class="eventButtons"></div>
+    <div class="eventButtons directorButtons" hidden></div>
     <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
-    <button class="viewToggleButton" type="button" hidden>Director Controls &rarr;</button>
     <button class="enableDirectorModeButton" type="button" hidden>Enable Director Mode</button>
-    <div class="promptControlGroup">
+    <div class="promptControlGroup playerPromptGroup">
       <label class="promptControl">
         <span>Custom Prompt</span>
         <input type="text" maxlength="2000">
       </label>
       <button class="promptSubmitButton" type="button">Send</button>
     </div>
-  `
-  return root
-}
-
-function makeDirectorControls() {
-  const root = document.createElement("section")
-  root.className = "directorControls overlayPanel"
-  root.setAttribute("aria-label", "Director Controls")
-  root.hidden = true
-  root.innerHTML = `
-    <span class="panelLabel">Director Controls</span>
-    <div class="eventButtons directorButtons"></div>
-    <button class="viewToggleButton" type="button">&larr; Player Controls</button>
+    <div class="promptControlGroup directorPromptGroup" hidden>
+      <label class="promptControl">
+        <span>Director Prompt</span>
+        <input type="text" maxlength="2000">
+      </label>
+      <button class="promptSubmitButton" type="button">Send</button>
+    </div>
   `
   return root
 }
@@ -309,12 +311,17 @@ function bindElements() {
   addTextEventButton = sceneCard.querySelector(".textEventAddButton")
   eventButtons = eventControls.querySelector(".eventButtons")
   clearEventButton = eventControls.querySelector(".eventButtonClear")
-  directorButtons = directorControls.querySelector(".directorButtons")
-  toPlayerViewButton = directorControls.querySelector(".viewToggleButton")
-  toDirectorViewButton = eventControls.querySelector(".viewToggleButton")
+  directorButtons = eventControls.querySelector(".directorButtons")
+  controlsTabBar = eventControls.querySelector(".controlsTabBar")
+  controlsTabPlayer = eventControls.querySelector(".controlsTabPlayer")
+  controlsTabDirector = eventControls.querySelector(".controlsTabDirector")
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
-  livePromptInput = eventControls.querySelector(".promptControl input")
-  livePromptSubmitButton = eventControls.querySelector(".promptSubmitButton")
+  playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
+  livePromptInput = eventControls.querySelector(".playerPromptGroup .promptControl input")
+  livePromptSubmitButton = eventControls.querySelector(".playerPromptGroup .promptSubmitButton")
+  directorPromptGroup = eventControls.querySelector(".directorPromptGroup")
+  directorPromptInput = eventControls.querySelector(".directorPromptGroup .promptControl input")
+  directorPromptSubmitButton = eventControls.querySelector(".directorPromptGroup .promptSubmitButton")
 }
 
 function makeTextEventId(label = "") {
@@ -525,17 +532,24 @@ function renderEventControls() {
     directorButtons.append(button)
   }
 
-  // In director mode, only one of the two panels is shown at a time,
-  // switched via the toggle buttons in each panel's footer -- otherwise
-  // (the common case) only Player Controls ever exists. When director mode
-  // isn't on yet but this preset actually has director events, offer the
-  // "Enable Director Mode" button instead of requiring a URL edit.
+  // In director mode, Player and Director share one panel with a tab bar
+  // on top switching which button grid (and which custom-prompt box) is
+  // visible -- otherwise (the common case) it's just Player Controls with
+  // no tabs at all. When director mode isn't on yet but this preset
+  // actually has director events, offer "Enable Director Mode" instead of
+  // requiring a URL edit.
   const hasDirectorContent = directorMode && directorItems.length > 0
   enableDirectorModeButton.hidden = directorMode || directorItems.length === 0
-  toDirectorViewButton.hidden = !hasDirectorContent
+  controlsTabBar.hidden = !hasDirectorContent
   if (!hasDirectorContent) showingDirectorControls = false
-  eventControls.hidden = playerItems.length === 0 || (hasDirectorContent && showingDirectorControls)
-  directorControls.hidden = !hasDirectorContent || !showingDirectorControls
+  const showDirector = hasDirectorContent && showingDirectorControls
+  controlsTabPlayer.classList.toggle("is-active", !showDirector)
+  controlsTabDirector.classList.toggle("is-active", showDirector)
+  eventButtons.hidden = showDirector
+  directorButtons.hidden = !showDirector
+  directorPromptGroup.hidden = !showDirector
+  playerPromptGroup.hidden = showDirector
+  eventControls.hidden = playerItems.length === 0 && directorItems.length === 0
 }
 
 function enableDirectorMode() {
@@ -794,7 +808,7 @@ function attachListeners() {
   // whichever of Player/Director Controls is currently shown.
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
-    if (eventControls.hidden && directorControls.hidden) return
+    if (eventControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
     const key = event.key.toLowerCase()
@@ -805,8 +819,8 @@ function attachListeners() {
     const eventId = eventHotkeyMap.get(key)
     if (eventId) sendTextEvent(eventId, "trigger")
   })
-  toDirectorViewButton.addEventListener("click", () => setDirectorView(true))
-  toPlayerViewButton.addEventListener("click", () => setDirectorView(false))
+  controlsTabDirector.addEventListener("click", () => setDirectorView(true))
+  controlsTabPlayer.addEventListener("click", () => setDirectorView(false))
   enableDirectorModeButton.addEventListener("click", enableDirectorMode)
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
@@ -865,7 +879,20 @@ function attachListeners() {
       submitLivePrompt()
     }
   })
-  for (const input of [firstFrameUrlInput, promptInput, addTextEventButton, livePromptInput]) {
+  const submitDirectorPrompt = () => {
+    const promptText = directorPromptInput.value.trim()
+    if (promptText) {
+      sendTextEvent("user_prompt", "trigger", promptText)
+    }
+  }
+  directorPromptSubmitButton.addEventListener("click", submitDirectorPrompt)
+  directorPromptInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      submitDirectorPrompt()
+    }
+  })
+  for (const input of [firstFrameUrlInput, promptInput, addTextEventButton, livePromptInput, directorPromptInput]) {
     input.addEventListener("focus", context.releaseControls)
   }
 }
@@ -884,10 +911,8 @@ export default {
     preview.setAttribute("aria-hidden", "true")
     sceneCard = makeSceneCard()
     eventControls = makeEventControls()
-    directorControls = makeDirectorControls()
     context.slots.stage.append(preview)
     context.slots.panel.append(sceneCard)
-    context.slots.panel.append(directorControls)
     context.slots.controls.append(eventControls)
     bindElements()
     updatePresetDropdown()
