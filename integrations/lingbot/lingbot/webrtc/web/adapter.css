@@ -28,6 +28,37 @@ body.is-ready-preview .firstFramePreview {
   opacity: 1;
 }
 
+.healthBar {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.healthBarLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.healthBarTrack {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.healthBarFill {
+  height: 100%;
+  width: 100%;
+  background: #4caf50;
+  transition: width 200ms ease, background-color 200ms ease;
+}
+
+.healthBarFill.is-low {
+  background: #e53935;
+}
+
 .sceneCard {
   position: absolute;
   top: clamp(120px, 15vh, 168px);

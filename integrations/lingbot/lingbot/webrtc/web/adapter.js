@@ -856,6 +856,7 @@ function sendTextEvent(eventId, state, promptValue = null) {
   if (!context.sendCommand(payload, label)) {
     return
   }
+  if (state === "trigger") applyHealthDelta(getEventHealthDelta(eventId))
   setSessionLocked(true)
 }
 
