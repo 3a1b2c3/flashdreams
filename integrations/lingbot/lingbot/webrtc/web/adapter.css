@@ -351,6 +351,19 @@ body.is-ready-preview .firstFramePreview {
   color: #dff7ff;
 }
 
+.eventButtonHealth {
+  margin-left: 6px;
+  font-weight: 800;
+}
+
+.eventButtonHealth.is-negative {
+  color: #ff8a8a;
+}
+
+.eventButtonHealth.is-positive {
+  color: #8ef01c;
+}
+
 @media (min-width: 901px) {
   .sceneCard,
   .controlCard {

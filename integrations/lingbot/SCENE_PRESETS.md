@@ -62,6 +62,11 @@ Both tabs' events are always uploaded to the server together regardless
 of `?director` — the shared WebRTC protocol has no player/director
 distinction, so this split is purely a client-side UI/visibility choice.
 
+Hand-added events (via "Add" in the Initial Scene panel's Text Events
+list, not from a built-in preset) default to Player and can be flipped to
+Director with the **Director** checkbox on that event's own row — the live
+Player/Director Controls buttons update immediately when toggled.
+
 ### Sharing a Preset via URL
 Add `?preset=<slug>` to the page URL to land directly on a specific built-in
 preset instead of the "Dragon" default — the slug is the preset name,
@@ -91,12 +96,18 @@ Presets are stored as JSON array in `localStorage["lingbot-presets"]`:
       {
         "event_id": "unique-id",
         "label": "Event Label",
-        "prompt": "Event prompt text"
+        "prompt": "Event prompt text",
+        "health": -10
       }
-    ]
+    ],
+    "directorEvents": [],
+    "hud": { "maxHealth": 100 }
   }
 ]
 ```
+
+`health` is optional (omit for no health effect); `directorEvents` uses the
+same shape as `events`.
 
 ## Adding a New Built-in Preset (Game)
 
@@ -111,16 +122,22 @@ one:
    Racer/Water Blaster). No camera-motion or input language — this app
    drives movement via the `w/a/s/d/q/e/i/j/k/l` keys and text events, not
    prose.
-2. **Write 8-10 events**: each a short one-sentence imperative/descriptive
-   clause (`{ event_id, label, prompt }`). `event_id` is a short lowercase
-   token, unique within that preset's own `events`/`directorEvents` arrays
-   combined (ids can repeat *across* presets — each preset's list is
+2. **Write events**: each a short one-sentence imperative/descriptive
+   clause (`{ event_id, label, prompt, health? }`). `event_id` is a short
+   lowercase token, unique within that preset's own `events`/`directorEvents`
+   arrays combined (ids can repeat *across* presets — each preset's list is
    independent). Mix character-triggered actions (tricks, attacks) — put
-   these in `events` — with environment beats (weather, other
-   characters/vehicles appearing) — put these in `directorEvents` (see
-   "Director Controls" above). **`events.length + directorEvents.length`
-   must not exceed 12** — that's a hard server-side cap
-   (`_MAX_TEXT_EVENTS` in `session.py`); going over it makes every connect
+   these in `events`, **at least 5 of them** — with environment beats
+   (weather, other characters/vehicles appearing) — put these in
+   `directorEvents` (see "Director Controls" above). Add an optional numeric
+   `health` field where it makes narrative sense — negative for a hit/risk
+   (e.g. a hazard or a combat move), positive for a recovery/reward beat,
+   omit it entirely for a purely cosmetic trick with no stakes. **`events.length
+   + directorEvents.length` must not exceed 12** — that's a hard server-side
+   cap (`_MAX_TEXT_EVENTS` in `session.py`) applied to the *combined* total,
+   not separately per category, since the server has no player/director
+   concept at all (only a generic `category` string tag) — both arrays
+   upload together as one flat list; going over it makes every connect
    attempt fail with "At most 12 text events are supported." `applyPreset()`
    also logs a client-side warning at selection time if a preset is over
    budget, so this should be caught before it reaches a failed connect.
@@ -172,26 +189,39 @@ one:
 
 ## Built-in Presets
 
+Event counts below are `player + director = total` (against the 12-event
+combined cap — see step 2 under "Adding a New Built-in Preset"). Every
+built-in preset has at least 5 player events.
+
 ### 1. Dragon (default)
 - **Prompt**: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below."
-- **Events**: Jump, Portal, Storm, Fireworks.
-- Same scene as the app's example-00 default (`_DEFAULT_IMAGE_URL` in `session.py`); Portal/Storm/Fireworks are `DEFAULT_TEXT_EVENTS` from `session.py` (also on `main`), not invented for this preset. This preset just names the scene, adds Jump, and auto-selects it on load.
+- **Player events (5)**: Jump, Portal, Storm, Fireworks, Barrel Roll.
+- **Director events (6)**: Rival Dragon Appears, Wind Gust Rocks Mount, Castle Guards Fire Arrows, Meteor Shower, Aurora Lights the Sky, Griffin Gives Chase.
+- 5 + 6 = 11 total. Portal/Storm/Fireworks are `DEFAULT_TEXT_EVENTS` from `session.py` (also on `main`), not invented for this preset — Jump, Barrel Roll, and all director events are additions specific to this preset (no source JSON exists for Dragon; the app's own example-00 default). Auto-selects on load.
 
 ### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
-- **Events**: Jump, Crouch, One-Hand Wave, Donut Spray, Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Volcanic Island Erupts, Fuel Runs Low, Thrown from the Jet Ski. (12 total — the server's hard cap; Shark Appears, Whale Breaches, Island Appears, and Sea Turtle were cut to fit.)
+- **Player events (5)**: Jump, One-Hand Wave, Spin 360, Superman, Jump Off.
+- **Director events (7)**: Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Fuel Runs Low, Thrown from the Jet Ski.
+- 5 + 7 = 12 total (at the cap).
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Events**: Jump, Crouch, Draw Pistol, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies, Enemies Appear, Enemies Attack.
+- **Player events (7)**: Jump, Draw Pistol (now also fires a shot), Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll.
+- **Director events (3)**: Player Falls to Ground, Enemies Appear, Enemies Attack.
+- 7 + 3 = 10 total.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
-- **Events**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Giant Balloon Drops, Float Deflates.
+- **Player events (6)**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive.
+- **Director events (4)**: Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Giant Balloon Drops.
+- 6 + 4 = 10 total.
 
 ### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."
-- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag, Rabbit on the Track, Puddle on the Track, Oil Slick Ahead. (12 total — the server's hard cap; Clear Dry Track was cut to fit.)
+- **Player events (5)**: Jump, Kick Up Sparks, Lock-Up Smoke, Drift, DRS Boost.
+- **Director events (7)**: Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag, Puddle on the Track, Oil Slick Ahead.
+- 5 + 7 = 12 total (at the cap).
 
 Noir Alley Combat, Water Blaster, Jet Ski Cruise, and Circuit Racer prompts/events are adapted from the richer layered scene definitions in `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json` (kept as reference copies under `lingbot/webrtc/web/assets/sources/` in this repo) down to this app's flatter prompt+events format. Their start images are hotlinked from that repo's `examples` branch on GitHub rather than committed here.
 

@@ -28,8 +28,8 @@
       { "event_id": "jump", "label": "Jump", "prompt": "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
       { "event_id": "onehand", "label": "One-Hand Wave", "prompt": "Lift one hand and wave it high overhead." },
       { "event_id": "spin360", "label": "Spin 360", "prompt": "Whip the jet ski into a tight spinning 360, the hull skating around and sweeping a full ring of spray across the water, then settle back facing forward." },
-      { "event_id": "superman", "label": "Superman", "prompt": "Stretch out flat off the back of the jet ski, gripping the seat with both hands as the legs stream out behind, holding the pose as the craft skims forward, then pull back up into the seat." },
-      { "event_id": "jumpoff", "label": "Jump Off", "prompt": "Stand up and leap clean off the jet ski, splashing down into the water and swimming alongside as the now-riderless jet ski coasts to a stop nearby.", "health": -10 }
+      { "event_id": "jumpoff", "label": "Jump Off", "prompt": "Stand up and leap clean off the jet ski, splashing down into the water and swimming alongside as the now-riderless jet ski coasts to a stop nearby.", "health": -10 },
+      { "event_id": "jumpbackon", "label": "Jump Back On", "prompt": "Swim the last stroke to the drifting jet ski, grab the handlebars and haul back up out of the water onto the seat, settling into riding position and gunning the throttle to surge forward again.", "health": 15 }
     ],
     "directorEvents": [
       { "event_id": "dolphins", "label": "Dolphins Leap", "prompt": "Sleek dolphins surface and leap in formation.", "health": 5 },
@@ -57,8 +57,10 @@
     ],
     "directorEvents": [
       { "event_id": "falls", "label": "Player Falls to Ground", "prompt": "The officer's footing slips on the wet asphalt and they go down hard, sprawling onto the ground before pushing back up.", "health": -10 },
-      { "event_id": "enemiesappear", "label": "Enemies Appear", "prompt": "A group of dark, armed figures appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer." },
-      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." }
+      { "event_id": "enemyappears", "label": "Enemy Appears", "prompt": "A single dark, armed figure appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer. Exactly one figure -- no second figure, no group." },
+      { "event_id": "enemyattacks", "label": "Enemy Attacks", "prompt": "The figure closes the distance and attacks the officer, fists swinging in from the darkness. Exactly one attacker -- no second figure, no group." },
+      { "event_id": "chicken", "label": "Chicken Walks In", "prompt": "A live chicken struts calmly into the alley, clucking and pecking at the wet asphalt, weaving between the puddles." },
+      { "event_id": "drone", "label": "Drone Appears", "prompt": "A small surveillance drone descends into the alley, its spotlight sweeping across the wet brick walls and rain." }
     ],
     "hud": { "maxHealth": 100 }
   },

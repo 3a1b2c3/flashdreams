@@ -485,10 +485,16 @@ function renderHealthBar() {
   healthBarValue.textContent = `${Math.round(currentHealth)}/${Math.round(maxHealth)}`
 }
 
-function applyHealthDelta(delta) {
+function applyHealthDelta(delta, label = "") {
   if (!Number.isFinite(delta) || delta === 0) return
   currentHealth = Math.max(0, Math.min(maxHealth, currentHealth + delta))
   renderHealthBar()
+  const sign = delta > 0 ? "+" : ""
+  const healthLabel = healthBarLabelText?.textContent || "health"
+  context?.logEvent(
+    `${label ? `${label}: ` : ""}${healthLabel.toLowerCase()} ${sign}${delta} (now ${Math.round(currentHealth)}/${Math.round(maxHealth)})`,
+    { source: "client" },
+  )
 }
 
 function isDirectorEventId(eventId) {
@@ -503,7 +509,7 @@ function eventIsDirector(item) {
   return typeof item.isDirector === "boolean" ? item.isDirector : isDirectorEventId(item.event_id)
 }
 
-function makeEventButton(item, hotkeyLetter) {
+function makeEventButton(item, hotkeyLetter, healthDelta = 0) {
   const eventId = String(item.event_id || "").trim()
   if (!eventId) return null
   const label = String(item.label || eventId)
@@ -512,7 +518,13 @@ function makeEventButton(item, hotkeyLetter) {
   button.type = "button"
   const hotkeyText =
     hotkeyLetter === "space" ? "Space" : hotkeyLetter === "control" ? "Ctrl" : hotkeyLetter ? hotkeyLetter.toUpperCase() : null
-  button.textContent = hotkeyText ? `${label} (${hotkeyText})` : label
+  button.append(document.createTextNode(hotkeyText ? `${label} (${hotkeyText})` : label))
+  if (Number.isFinite(healthDelta) && healthDelta !== 0) {
+    const healthTag = document.createElement("span")
+    healthTag.className = `eventButtonHealth ${healthDelta > 0 ? "is-positive" : "is-negative"}`
+    healthTag.textContent = healthDelta > 0 ? `+${healthDelta}` : String(healthDelta)
+    button.append(healthTag)
+  }
   button.classList.toggle("is-active", activeEventId === eventId)
   button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
   return button
@@ -558,9 +570,10 @@ function renderEventControls() {
   directorButtons.replaceChildren()
   for (const item of directorItems) {
     const letter = nextLetter()
-    const button = makeEventButton(item, letter)
+    const eventId = String(item.event_id || "").trim()
+    const button = makeEventButton(item, letter, getEventHealthDelta(eventId))
     if (!button) continue
-    if (letter) eventHotkeyMap.set(letter, String(item.event_id).trim())
+    if (letter) eventHotkeyMap.set(letter, eventId)
     directorButtons.append(button)
   }
 
@@ -841,7 +854,13 @@ function sendTextEvent(eventId, state, promptValue = null) {
   if (!context.sendCommand(payload, label)) {
     return
   }
-  if (state === "trigger") applyHealthDelta(getEventHealthDelta(eventId))
+  if (state === "trigger") {
+    const eventLabel =
+      currentPreset?.events?.find((item) => item.event_id === eventId)?.label
+        ?? currentPreset?.directorEvents?.find((item) => item.event_id === eventId)?.label
+        ?? eventId
+    applyHealthDelta(getEventHealthDelta(eventId), eventLabel)
+  }
   setSessionLocked(true)
 }
 
@@ -952,7 +971,7 @@ function attachListeners() {
 
 export default {
   modelName: "Lingbot",
-  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v3", import.meta.url).href,
+  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v4", import.meta.url).href,
   controls,
 
   async mount(sharedContext) {
