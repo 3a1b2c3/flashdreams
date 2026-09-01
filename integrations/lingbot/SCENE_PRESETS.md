@@ -25,12 +25,16 @@ Once connected, each preset's events are playable via keyboard —
 Controls events use letter-key shortcuts** from a fixed pool (`b, f, g,
 h, m, n, o, p, r, t, u, v, x, y, z`) that deliberately excludes the
 movement keys (w/a/s/d/q/e/i/j/k/l) so hotkeys never collide with driving
-input. Every event button shows its hotkey (e.g. "Jump (1)", "Storm Rolls
-In (B)"). Press **c** to Clear the active event — present and wired the
-same way on every game, since Clear isn't part of any preset's catalog.
-Ignored while typing in a text field. Player events beyond 9 or director
-events beyond the 15-letter pool still work by click, just without a
-shown hotkey.
+input. **Jump** always gets **Space** and **Crouch** always gets **Ctrl**
+instead of a digit, matching common game convention — both also render as
+their own row right next to the movement key grid instead of the general
+event button list, since they're movement actions, not narrative
+triggers. Every other event button shows its assigned digit/letter hotkey
+(e.g. "Portal (1)", "Storm Rolls In (B)"). Press **c** to Clear the active
+event — present and wired the same way on every game, since Clear isn't
+part of any preset's catalog. Ignored while typing in a text field. Player
+events beyond the digit pool or director events beyond the 15-letter pool
+still work by click, just without a shown hotkey.
 
 ### Director Controls
 Each preset's events are split into two categories, matching the original
