@@ -20,15 +20,17 @@ Scene presets allow users to quickly load predefined scene configurations (promp
 4. Preset prompt + events + start image auto-populate the form; the dropdown stays on the selected preset name
 
 ### In-Game Event Hotkeys
-Once connected, each preset's events are playable with **letter-key
-hotkeys** — every event button shows its letter (e.g. "Portal (B)").
-Letters are assigned in order from a fixed pool (`b, f, g, h, m, n, o, p,
-r, t, u, v, x, y, z`) that deliberately excludes the movement keys
-(w/a/s/d/q/e/i/j/k/l) so hotkeys never collide with driving input. Press
-**c** to Clear the active event — present and wired the same way on every
-game, since Clear isn't part of any preset's catalog. Ignored while typing
-in a text field. Events beyond the 15-letter pool still work by click,
-just without a shown hotkey.
+Once connected, each preset's events are playable via keyboard —
+**Player Controls events use digit-key shortcuts (1-9)**, **Director
+Controls events use letter-key shortcuts** from a fixed pool (`b, f, g,
+h, m, n, o, p, r, t, u, v, x, y, z`) that deliberately excludes the
+movement keys (w/a/s/d/q/e/i/j/k/l) so hotkeys never collide with driving
+input. Every event button shows its hotkey (e.g. "Jump (1)", "Storm Rolls
+In (B)"). Press **c** to Clear the active event — present and wired the
+same way on every game, since Clear isn't part of any preset's catalog.
+Ignored while typing in a text field. Player events beyond 9 or director
+events beyond the 15-letter pool still work by click, just without a
+shown hotkey.
 
 ### Director Controls
 Each preset's events are split into two categories, matching the original
@@ -48,9 +50,9 @@ The toggle only appears once director mode is on, reached either by adding
 `?director` to the page URL (e.g. `?manual&director`) — which starts the
 toggle already on — or by clicking **"Enable Director Mode"** in Player
 Controls for any preset that has director events (no URL edit needed).
-Hotkey letters are assigned across *both* sides' events together (player
-first) so a letter never maps to two different events even though only
-one side's buttons are visible at once.
+Player events get digit hotkeys, director events get letter hotkeys, so
+the two never collide even though only one side's buttons are visible at
+once. The health bar stays visible in both Player and Director Controls.
 
 Both tabs' events are always uploaded to the server together regardless
 of `?director` — the shared WebRTC protocol has no player/director

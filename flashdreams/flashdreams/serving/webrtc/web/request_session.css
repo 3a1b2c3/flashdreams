@@ -304,7 +304,7 @@ body[data-status="error"] .statusDot {
   white-space: nowrap;
 }
 
-.controlCard h2 span,
+.controlCard h2 .panelAccentBar,
 .logCard h2 span {
   width: 3px;
   height: 22px;

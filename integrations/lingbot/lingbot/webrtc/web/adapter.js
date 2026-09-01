@@ -487,20 +487,22 @@ function renderEventControls() {
   const playerItems = catalog.filter((item) => !isDirectorEventId(item.event_id))
   const directorItems = catalog.filter((item) => isDirectorEventId(item.event_id))
 
-  // Letter hotkeys are assigned sequentially across BOTH panels together
-  // (player first, then director) so a letter never maps to two different
-  // events even when both panels are visible at once. Events past the
-  // pool size still render, just without a hotkey.
+  // Player events get digit hotkeys (1-9), director events get letter
+  // hotkeys from EVENT_HOTKEY_LETTERS -- the two keyspaces never collide,
+  // so both live in the same eventHotkeyMap. Events past either pool's
+  // size still render, just without a hotkey.
   eventHotkeyMap = new Map()
+  let digitIndex = 0
+  const nextDigit = () => (digitIndex < 9 ? String(++digitIndex) : null)
   let letterIndex = 0
   const nextLetter = () => EVENT_HOTKEY_LETTERS[letterIndex++] ?? null
 
   eventButtons.replaceChildren()
   for (const item of playerItems) {
-    const letter = nextLetter()
-    const button = makeEventButton(item, letter)
+    const digit = nextDigit()
+    const button = makeEventButton(item, digit)
     if (!button) continue
-    if (letter) eventHotkeyMap.set(letter, String(item.event_id).trim())
+    if (digit) eventHotkeyMap.set(digit, String(item.event_id).trim())
     eventButtons.append(button)
   }
   clearEventButton.classList.toggle("is-active", activeEventId === null)
@@ -533,7 +535,6 @@ function renderEventControls() {
   directorPromptGroup.hidden = !showDirector
   playerPromptGroup.hidden = showDirector
   if (movementControlRows) movementControlRows.hidden = showDirector
-  if (healthBar) healthBar.hidden = showDirector
   eventControls.hidden = playerItems.length === 0 && directorItems.length === 0
 }
 
@@ -798,11 +799,11 @@ function attachListeners() {
   presetSelect.addEventListener("change", (e) => {
     if (e.target.value) applyPreset(e.target.value)
   })
-  // Letter keys trigger the matching event button (see the "(X)" hotkey
-  // suffix rendered in renderEventControls() / eventHotkeyMap), "c"
-  // triggers Clear (present on every game, not tied to any preset's
-  // catalog) -- this only fires once controls are actually live, on
-  // whichever of Player/Director Controls is currently shown.
+  // Digit keys (1-9) trigger player events, letter keys trigger director
+  // events (see the "(X)" hotkey suffix rendered in renderEventControls()
+  // / eventHotkeyMap), "c" triggers Clear (present on every game, not tied
+  // to any preset's catalog) -- this only fires once controls are
+  // actually live.
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
     if (eventControls.hidden) return
