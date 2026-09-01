@@ -38,6 +38,15 @@ const scenePresets = [
       { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation." },
       { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey." },
       { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead." },
+      // Director/environment events (from the original case's "director" pacing note).
+      { event_id: "sharklunge", label: "Shark Lunges", prompt: "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray." },
+      { event_id: "waterspout", label: "Waterspout Forms", prompt: "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist." },
+      { event_id: "whale", label: "Whale Breaches", prompt: "A massive whale breaches out of the deep, crashing back down in an explosion of white spray." },
+      { event_id: "island", label: "Island Appears", prompt: "A rocky island rises into view on the horizon, growing larger as the jet ski cruises toward it." },
+      { event_id: "turtle", label: "Sea Turtle", prompt: "A large green sea turtle glides gently through the clear water just ahead of the jet ski." },
+      { event_id: "volcano", label: "Volcanic Island Erupts", prompt: "The distant island erupts into a volcano, glowing lava streaming down its slopes and ash rising into the sky." },
+      { event_id: "lowfuel", label: "Fuel Runs Low", prompt: "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power." },
+      { event_id: "thrown", label: "Thrown from the Jet Ski", prompt: "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water." },
     ],
   },
   {
@@ -70,7 +79,11 @@ const scenePresets = [
       { event_id: "soakers", label: "Bathers Get Super Soakers", prompt: "Every bather in the park raises a huge super soaker and opens fire at once." },
       { event_id: "crocodile", label: "Crocodile Lunges", prompt: "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera." },
       { event_id: "wavesurge", label: "Wave Surge", prompt: "The calm lake churns into rolling swells, the inflatable platforms pitching hard." },
-      { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds sweep across the sky, rain pockmarking the lake and the water turning choppy." },
+      // Director/environment events.
+      { event_id: "rivalshoots", label: "Rival Shoots Back", prompt: "A rival player returns fire, a hard jet of water streaming straight back across the lens." },
+      { event_id: "falls", label: "Player Falls In", prompt: "A swimmer on the floats loses their footing and topples into the water with a big splash." },
+      { event_id: "balloon", label: "Giant Balloon Drops", prompt: "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." },
+      { event_id: "deflate", label: "Float Deflates", prompt: "One of the large inflatable platforms splits and rapidly deflates, sinking below the surface." },
     ],
   },
   {
@@ -87,6 +100,11 @@ const scenePresets = [
       { event_id: "tunnel", label: "Tunnel Section", prompt: "The track dives into a dark tunnel, strings of overhead lights strobing past overhead." },
       { event_id: "roadfire", label: "Road Fire", prompt: "A wall of orange flame and black smoke erupts across the track directly ahead." },
       { event_id: "flag", label: "Checkered Flag", prompt: "The car sweeps across the start-finish line as a marshal waves the chequered flag overhead." },
+      // Director/environment events.
+      { event_id: "rabbit", label: "Rabbit on the Track", prompt: "A rabbit darts out onto the track ahead and stops directly in the car's path." },
+      { event_id: "puddle", label: "Puddle on the Track", prompt: "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it." },
+      { event_id: "oilslick", label: "Oil Slick Ahead", prompt: "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it." },
+      { event_id: "cleardry", label: "Clear Dry Track", prompt: "The clouds break and the circuit runs clear and dry ahead, bright daylight over dry grey tarmac." },
     ],
   },
 ]

@@ -132,7 +132,7 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
-- **Events**: Jump, Crouch, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave.
+- **Events**: Jump, Crouch, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Whale Breaches, Island Appears, Sea Turtle, Volcanic Island Erupts, Fuel Runs Low, Thrown from the Jet Ski.
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
@@ -140,11 +140,11 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
-- **Events**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Storm Rolls In.
+- **Events**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Rival Shoots Back, Player Falls In, Giant Balloon Drops, Float Deflates.
 
 ### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."
-- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag.
+- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag, Rabbit on the Track, Puddle on the Track, Oil Slick Ahead, Clear Dry Track.
 
 Noir Alley Combat, Water Blaster, Jet Ski Cruise, and Circuit Racer prompts/events are adapted from the richer layered scene definitions in `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json` (kept as reference copies under `lingbot/webrtc/web/assets/sources/` in this repo) down to this app's flatter prompt+events format. Their start images are hotlinked from that repo's `examples` branch on GitHub rather than committed here.
 
