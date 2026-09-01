@@ -317,6 +317,10 @@ body[data-status="error"] .statusDot {
   gap: 12px;
 }
 
+.controlRows[hidden] {
+  display: none;
+}
+
 .controlRow {
   display: grid;
   grid-template-columns: 176px 1fr;
