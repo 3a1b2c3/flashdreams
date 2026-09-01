@@ -565,7 +565,7 @@ function renderEventControls() {
   for (const item of playerItems) {
     const eventId = String(item.event_id || "").trim()
     const hotkey = eventId === "jump" ? "space" : eventId === "crouch" ? "control" : nextDigit()
-    const button = makeEventButton(item, hotkey)
+    const button = makeEventButton(item, hotkey, getEventHealthDelta(eventId))
     if (!button) continue
     if (hotkey) eventHotkeyMap.set(hotkey, eventId)
     const container = MOVEMENT_ACTION_EVENT_IDS.has(eventId) ? actionButtons : eventButtons
