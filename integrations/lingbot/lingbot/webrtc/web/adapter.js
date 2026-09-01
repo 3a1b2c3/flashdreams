@@ -2,6 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const mockMode = new URLSearchParams(window.location.search).has("mock")
+// ?director shows the separate Director Controls panel (environment/pacing
+// events, e.g. weather and hazards) alongside Player Controls -- hidden by
+// default since this is a second operator's role, not the regular player's.
+const directorMode = new URLSearchParams(window.location.search).has("director")
+
+// Letter hotkeys for event buttons, in assignment order. Excludes the
+// reserved movement keys (w/a/s/d/q/e/i/j/k/l) and "c" (Clear's own
+// hotkey) so they never collide with driving input or each other. Letters
+// run out before director-heavy presets do -- events past the pool size
+// simply render without a hotkey, same as the old 9-key digit cap.
+const EVENT_HOTKEY_LETTERS = ["b", "f", "g", "h", "m", "n", "o", "p", "r", "t", "u", "v", "x", "y", "z"]
 
 function presetSlug(name) {
   return name.toLowerCase().trim().replace(/\s+/g, "-")
@@ -20,6 +31,8 @@ const scenePresets = [
     prompt: "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below.",
     events: [
       { event_id: "jump", label: "Jump", prompt: "The creature tucks its wings and launches into a sudden upward leap, gaining height in a single powerful beat." },
+    ],
+    directorEvents: [
       { event_id: "portal", label: "Portal", prompt: "A luminous magical portal opens in the scene, casting colored light and swirling particles into the environment." },
       { event_id: "storm", label: "Storm", prompt: "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
       { event_id: "fireworks", label: "Fireworks", prompt: "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." },
@@ -30,15 +43,17 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/jet-ski-cruise.jpg",
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
-      { event_id: "jump", label: "Jump", prompt: "The jet ski leaps up off the water, the hull lifting clear of the surface before dropping back down with a splash." },
+      { event_id: "jump", label: "Jump", prompt: "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
       { event_id: "crouch", label: "Crouch", prompt: "The rider crouches down low, bending into a compact, hunched stance close to the jet ski." },
       { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
       { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
+    ],
+    // Director/environment events (from the original case's "director" pacing note).
+    directorEvents: [
       { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
       { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation." },
       { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey." },
       { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead." },
-      // Director/environment events (from the original case's "director" pacing note).
       { event_id: "sharklunge", label: "Shark Lunges", prompt: "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray." },
       { event_id: "waterspout", label: "Waterspout Forms", prompt: "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist." },
       { event_id: "whale", label: "Whale Breaches", prompt: "A massive whale breaches out of the deep, crashing back down in an explosion of white spray." },
@@ -54,14 +69,16 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/noir-alley-combat.jpg",
     prompt: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     events: [
-      { event_id: "jump", label: "Jump", prompt: "The officer springs upward off both feet, leaping high off the wet asphalt before dropping back into a low crouch." },
+      { event_id: "jump", label: "Jump", prompt: "The officer springs upward off both feet, leaping high off the wet asphalt, then lands and rises back to a normal upright stance." },
+      { event_id: "pistol", label: "Draw Pistol", prompt: "The officer draws a sidearm pistol from its holster, raising it two-handed and aiming it straight ahead down the alley." },
       { event_id: "crouch", label: "Crouch", prompt: "The officer drops into a low, compact crouch, close to the wet asphalt." },
       { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
       { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
       { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
       { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance." },
+    ],
+    directorEvents: [
       { event_id: "rain", label: "Rain Intensifies", prompt: "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
-      { event_id: "fog", label: "Fog Rolls In", prompt: "A thick fog rolls into the alley, blurring the neon signs and swallowing the far end of the street." },
     ],
   },
   {
@@ -69,19 +86,18 @@ const scenePresets = [
     image: "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/watergun.jpg",
     prompt: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     events: [
-      { event_id: "jump", label: "Jump", prompt: "The player leaps up and forward off the edge of the platform, sailing over a gap of open water before landing with a splash." },
+      { event_id: "jump", label: "Jump", prompt: "The player leaps up and forward off the edge of the platform, sailing over a gap of open water, then lands with a splash and stands back upright." },
       { event_id: "crouch", label: "Crouch", prompt: "The player crouches down behind the raised edge of an inflatable platform for cover, only the top of the water blaster peeking over." },
       { event_id: "splash", label: "Splash Blast", prompt: "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead." },
       { event_id: "shield", label: "Raise Float Shield", prompt: "Haul up a clear inflatable board as a shield, incoming water jets hammering into it." },
       { event_id: "slime", label: "Green Slime Blast", prompt: "Suck up dark green lake water and unload it as a thick glowing green slime stream." },
       { event_id: "dive", label: "Dive", prompt: "Plunge underwater, murky green light and rising bubbles closing over the frame." },
+    ],
+    directorEvents: [
       { event_id: "ambush", label: "Rival Blaster Ambush", prompt: "A rival pops up from behind a platform and opens fire with their own water blaster." },
       { event_id: "soakers", label: "Bathers Get Super Soakers", prompt: "Every bather in the park raises a huge super soaker and opens fire at once." },
       { event_id: "crocodile", label: "Crocodile Lunges", prompt: "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera." },
       { event_id: "wavesurge", label: "Wave Surge", prompt: "The calm lake churns into rolling swells, the inflatable platforms pitching hard." },
-      // Director/environment events.
-      { event_id: "rivalshoots", label: "Rival Shoots Back", prompt: "A rival player returns fire, a hard jet of water streaming straight back across the lens." },
-      { event_id: "falls", label: "Player Falls In", prompt: "A swimmer on the floats loses their footing and topples into the water with a big splash." },
       { event_id: "balloon", label: "Giant Balloon Drops", prompt: "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." },
       { event_id: "deflate", label: "Float Deflates", prompt: "One of the large inflatable platforms splits and rapidly deflates, sinking below the surface." },
     ],
@@ -95,12 +111,13 @@ const scenePresets = [
       { event_id: "sparks", label: "Kick Up Sparks", prompt: "The floor grounds out on the asphalt, spraying a bright shower of orange sparks past the nose." },
       { event_id: "lockup", label: "Lock-Up Smoke", prompt: "The brakes lock hard into the corner, boiling thick white tyre smoke off the front wheels." },
       { event_id: "crash", label: "Crash", prompt: "The car slams into the barrier, carbon-fibre debris flying as it grinds to a juddering halt." },
+    ],
+    directorEvents: [
       { event_id: "rain", label: "Rain Sweeps In", prompt: "Dark storm clouds roll over and rain sweeps across the windscreen, the track glistening wet." },
       { event_id: "glare", label: "Sun Glare", prompt: "The low sun blazes straight into the windscreen, washing out the track ahead in blinding light." },
       { event_id: "tunnel", label: "Tunnel Section", prompt: "The track dives into a dark tunnel, strings of overhead lights strobing past overhead." },
       { event_id: "roadfire", label: "Road Fire", prompt: "A wall of orange flame and black smoke erupts across the track directly ahead." },
       { event_id: "flag", label: "Checkered Flag", prompt: "The car sweeps across the start-finish line as a marshal waves the chequered flag overhead." },
-      // Director/environment events.
       { event_id: "rabbit", label: "Rabbit on the Track", prompt: "A rabbit darts out onto the track ahead and stops directly in the car's path." },
       { event_id: "puddle", label: "Puddle on the Track", prompt: "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it." },
       { event_id: "oilslick", label: "Oil Slick Ahead", prompt: "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it." },
@@ -176,6 +193,12 @@ let eventButtons = null
 let clearEventButton = null
 let livePromptInput = null
 let livePromptSubmitButton = null
+let directorControls = null
+let directorButtons = null
+let toPlayerViewButton = null
+let toDirectorViewButton = null
+let showingDirectorControls = false
+let currentPreset = null
 
 function makeSceneCard() {
   const panel = document.createElement("section")
@@ -237,7 +260,8 @@ function makeEventControls() {
   root.hidden = true
   root.innerHTML = `
     <div class="eventButtons"></div>
-    <button class="eventButton eventButtonClear" type="button">Clear (0)</button>
+    <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
+    <button class="viewToggleButton" type="button" hidden>Director Controls &rarr;</button>
     <div class="promptControlGroup">
       <label class="promptControl">
         <span>Custom Prompt</span>
@@ -245,6 +269,19 @@ function makeEventControls() {
       </label>
       <button class="promptSubmitButton" type="button">Send</button>
     </div>
+  `
+  return root
+}
+
+function makeDirectorControls() {
+  const root = document.createElement("section")
+  root.className = "directorControls overlayPanel"
+  root.setAttribute("aria-label", "Director Controls")
+  root.hidden = true
+  root.innerHTML = `
+    <span class="panelLabel">Director Controls</span>
+    <div class="eventButtons directorButtons"></div>
+    <button class="viewToggleButton" type="button">&larr; Player Controls</button>
   `
   return root
 }
@@ -265,6 +302,9 @@ function bindElements() {
   addTextEventButton = sceneCard.querySelector(".textEventAddButton")
   eventButtons = eventControls.querySelector(".eventButtons")
   clearEventButton = eventControls.querySelector(".eventButtonClear")
+  directorButtons = directorControls.querySelector(".directorButtons")
+  toPlayerViewButton = directorControls.querySelector(".viewToggleButton")
+  toDirectorViewButton = eventControls.querySelector(".viewToggleButton")
   livePromptInput = eventControls.querySelector(".promptControl input")
   livePromptSubmitButton = eventControls.querySelector(".promptSubmitButton")
 }
@@ -419,6 +459,25 @@ function collectTextEvents() {
   return events
 }
 
+let eventHotkeyMap = new Map()
+
+function isDirectorEventId(eventId) {
+  return Boolean(currentPreset?.directorEvents?.some((item) => item.event_id === eventId))
+}
+
+function makeEventButton(item, hotkeyLetter) {
+  const eventId = String(item.event_id || "").trim()
+  if (!eventId) return null
+  const label = String(item.label || eventId)
+  const button = document.createElement("button")
+  button.className = "eventButton"
+  button.type = "button"
+  button.textContent = hotkeyLetter ? `${label} (${hotkeyLetter.toUpperCase()})` : label
+  button.classList.toggle("is-active", activeEventId === eventId)
+  button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
+  return button
+}
+
 function renderEventControls() {
   // A picked preset's events (textEventDrafts, not yet pushed to the
   // server via connect/Send) must take priority over the server's last-
@@ -428,26 +487,49 @@ function renderEventControls() {
   const catalog = textEventsEdited
     ? textEventDrafts
     : Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
-  eventControls.hidden = catalog.length === 0
+  const playerItems = catalog.filter((item) => !isDirectorEventId(item.event_id))
+  const directorItems = catalog.filter((item) => isDirectorEventId(item.event_id))
+
+  // Letter hotkeys are assigned sequentially across BOTH panels together
+  // (player first, then director) so a letter never maps to two different
+  // events even when both panels are visible at once. Events past the
+  // pool size still render, just without a hotkey.
+  eventHotkeyMap = new Map()
+  let letterIndex = 0
+  const nextLetter = () => EVENT_HOTKEY_LETTERS[letterIndex++] ?? null
+
   eventButtons.replaceChildren()
-  catalog.forEach((item, index) => {
-    const eventId = String(item.event_id || "").trim()
-    if (!eventId) {
-      return
-    }
-    const label = String(item.label || eventId)
-    const button = document.createElement("button")
-    button.className = "eventButton"
-    button.type = "button"
-    // Only the first 9 events get a digit-key hotkey shown/wired up
-    // (see the keydown handler in attachListeners()); later ones still
-    // render as click-only buttons rather than being dropped.
-    button.textContent = index < 9 ? `${label} (${index + 1})` : label
-    button.classList.toggle("is-active", activeEventId === eventId)
-    button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
+  for (const item of playerItems) {
+    const letter = nextLetter()
+    const button = makeEventButton(item, letter)
+    if (!button) continue
+    if (letter) eventHotkeyMap.set(letter, String(item.event_id).trim())
     eventButtons.append(button)
-  })
+  }
   clearEventButton.classList.toggle("is-active", activeEventId === null)
+
+  directorButtons.replaceChildren()
+  for (const item of directorItems) {
+    const letter = nextLetter()
+    const button = makeEventButton(item, letter)
+    if (!button) continue
+    if (letter) eventHotkeyMap.set(letter, String(item.event_id).trim())
+    directorButtons.append(button)
+  }
+
+  // In director mode, only one of the two panels is shown at a time,
+  // switched via the toggle buttons in each panel's footer -- otherwise
+  // (the common case) only Player Controls ever exists.
+  const hasDirectorContent = directorMode && directorItems.length > 0
+  toDirectorViewButton.hidden = !hasDirectorContent
+  if (!hasDirectorContent) showingDirectorControls = false
+  eventControls.hidden = playerItems.length === 0 || (hasDirectorContent && showingDirectorControls)
+  directorControls.hidden = !hasDirectorContent || !showingDirectorControls
+}
+
+function setDirectorView(showDirector) {
+  showingDirectorControls = showDirector
+  renderEventControls()
 }
 
 function saveCurrentPreset() {
@@ -486,13 +568,21 @@ function loadSavedPresets() {
 function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
+  currentPreset = preset
   context.logEvent(`preset selected: ${preset.name}`, { source: "client" })
   const url = new URL(window.location.href)
   url.searchParams.set("preset", presetSlug(preset.name))
   window.history.replaceState(null, "", url)
   promptInput.value = preset.prompt
   promptEdited = true
-  textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
+  // The full catalog (player + director) always uploads to the server --
+  // "director" is a client-side UI distinction only (which panel a button
+  // renders in, and whether that panel is visible at all), the shared
+  // WebRTC protocol has no such concept, so both must be known server-side
+  // for either panel's buttons to actually do anything once clicked.
+  textEventDrafts = [...preset.events, ...(preset.directorEvents ?? [])].map((item) =>
+    makeTextEventDraft(item)
+  )
   textEventsEdited = true
   renderTextEventEditor()
   // Also refresh the live Player Controls buttons immediately, not just
@@ -677,25 +767,26 @@ function attachListeners() {
   presetSelect.addEventListener("change", (e) => {
     if (e.target.value) applyPreset(e.target.value)
   })
-  // Digit keys 1-9 trigger the matching in-game event button (see the
-  // "(N)" hotkey suffix rendered in renderEventControls()), 0 triggers
-  // Clear (present on every game, not tied to any preset's catalog) --
-  // this only fires once controls are actually live.
+  // Letter keys trigger the matching event button (see the "(X)" hotkey
+  // suffix rendered in renderEventControls() / eventHotkeyMap), "c"
+  // triggers Clear (present on every game, not tied to any preset's
+  // catalog) -- this only fires once controls are actually live, on
+  // whichever of Player/Director Controls is currently shown.
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
-    if (eventControls.hidden) return
+    if (eventControls.hidden && directorControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
-    if (event.key === "0") {
+    const key = event.key.toLowerCase()
+    if (key === "c") {
       sendTextEvent(activeEventId || "clear", "clear")
       return
     }
-    const catalog = Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
-    const digit = Number(event.key)
-    if (!Number.isInteger(digit) || digit < 1 || digit > 9 || digit > catalog.length) return
-    const eventId = String(catalog[digit - 1]?.event_id || "").trim()
+    const eventId = eventHotkeyMap.get(key)
     if (eventId) sendTextEvent(eventId, "trigger")
   })
+  toDirectorViewButton.addEventListener("click", () => setDirectorView(true))
+  toPlayerViewButton.addEventListener("click", () => setDirectorView(false))
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
     setFirstFrameInputMode("upload")
@@ -772,8 +863,10 @@ export default {
     preview.setAttribute("aria-hidden", "true")
     sceneCard = makeSceneCard()
     eventControls = makeEventControls()
+    directorControls = makeDirectorControls()
     context.slots.stage.append(preview)
     context.slots.panel.append(sceneCard)
+    context.slots.panel.append(directorControls)
     context.slots.controls.append(eventControls)
     bindElements()
     updatePresetDropdown()

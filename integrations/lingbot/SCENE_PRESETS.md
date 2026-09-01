@@ -20,12 +20,33 @@ Scene presets allow users to quickly load predefined scene configurations (promp
 4. Preset prompt + events + start image auto-populate the form; the dropdown stays on the selected preset name
 
 ### In-Game Event Hotkeys
-Once connected, the first 9 events in the active preset's catalog are
-playable with **digit keys 1-9** — each event button shows its number
-(e.g. "Portal (1)"). Press **0** to Clear the active event — present and
-wired the same way on every game, since Clear isn't part of any preset's
-catalog. Ignored while typing in a text field. This is a per-game hotkey
-for triggering events, not a way to switch games.
+Once connected, each preset's events are playable with **letter-key
+hotkeys** — every event button shows its letter (e.g. "Portal (B)").
+Letters are assigned in order from a fixed pool (`b, f, g, h, m, n, o, p,
+r, t, u, v, x, y, z`) that deliberately excludes the movement keys
+(w/a/s/d/q/e/i/j/k/l) so hotkeys never collide with driving input. Press
+**c** to Clear the active event — present and wired the same way on every
+game, since Clear isn't part of any preset's catalog. Ignored while typing
+in a text field. Events beyond the 15-letter pool still work by click,
+just without a shown hotkey.
+
+### Director Controls
+Each preset's events are split into two categories, matching the original
+REACTOR case files' `actor: "character"` (player-triggered) vs.
+`actor: "environment"` (narrative/pacing) events:
+- **Player Controls** — always visible, the regular action buttons.
+- **Director Controls** — a separate panel with the environment/pacing
+  events (weather, hazards, wildlife, etc.), only reachable when the page
+  URL includes `?director` (e.g. `?manual&director`). When present, a
+  toggle button appears in each panel ("Director Controls →" /
+  "← Player Controls") to switch between them — only one is shown at a
+  time. Hotkey letters are assigned across *both* panels together (player
+  first) so a letter never maps to two different events even though only
+  one panel is visible at once.
+
+Both panels' events are always uploaded to the server together regardless
+of `?director` — the shared WebRTC protocol has no player/director
+distinction, so this split is purely a client-side UI/visibility choice.
 
 ### Sharing a Preset via URL
 Add `?preset=<slug>` to the page URL to land directly on a specific built-in
@@ -136,11 +157,11 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Events**: Jump, Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies, Fog Rolls In.
+- **Events**: Jump, Crouch, Draw Pistol, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll, Rain Intensifies.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."
-- **Events**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Rival Shoots Back, Player Falls In, Giant Balloon Drops, Float Deflates.
+- **Events**: Jump, Crouch, Splash Blast, Raise Float Shield, Green Slime Blast, Dive, Rival Blaster Ambush, Bathers Get Super Soakers, Crocodile Lunges, Wave Surge, Giant Balloon Drops, Float Deflates.
 
 ### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."

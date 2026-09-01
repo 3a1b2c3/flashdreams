@@ -78,7 +78,7 @@ from flashdreams.serving.webrtc.runtime import (
     WebRTCControlSignal,
     WebRTCRuntimeConfig,
 )
-from flashdreams.serving.webrtc.server import SessionBusyError
+from flashdreams.serving.webrtc.server import SessionBusyError, SessionNotActiveError
 from flashdreams.serving.webrtc.services import (
     WEBRTC_SKIPPED_INPUTS_METADATA_KEY,
     WEBRTC_SKIPPED_WINDOW_METADATA_KEY,
@@ -2056,6 +2056,73 @@ class BaseWebRTCSessionManager(Generic[_RuntimeT, _RuntimeConfigT]):
             ),
         )
         return True
+
+    async def trigger_event(self, payload: dict[str, Any]) -> dict[str, object]:
+        """Trigger a text event on the active session via a plain HTTP call.
+
+        A lightweight alternative to the datachannel event path (used by
+        the connected peer's own control channel) -- lets a second,
+        video-free client (e.g. a "director" role) drive events on the one
+        live session without needing its own ``RTCPeerConnection``. Counts
+        as client activity the same way a datachannel message does, so it
+        also keeps the liveness watchdog from treating the session as
+        abandoned while only this HTTP path is being used.
+        """
+        managed_session = self._active_session
+        if managed_session is None or managed_session.closed:
+            raise SessionNotActiveError("No active session to send this event to.")
+
+        loop = asyncio.get_running_loop()
+        managed_session.last_client_message_at = loop.time()
+        if managed_session.transport is not None:
+            managed_session.transport.mark_client_message(
+                managed_session.last_client_message_at
+            )
+
+        event_id = str(payload.get("event_id", payload.get("id", ""))).strip()
+        state = str(payload.get("state", "trigger")).strip().lower() or "trigger"
+        clear_states = {"clear", "release", "off", "none"}
+        if not event_id and state not in clear_states:
+            raise ValueError(
+                "Payload must include non-empty 'event_id' unless state "
+                "clears the active event."
+            )
+
+        clears = state in clear_states
+        raw_prompt = payload.get("prompt")
+        event_payload = self._validate_user_event_payload(
+            managed_session=managed_session,
+            event_type="text_event",
+            payload={
+                "event_id": None if clears else event_id,
+                "state": state,
+                **({"prompt": raw_prompt} if raw_prompt is not None else {}),
+            },
+        )
+        active_event_id = event_payload.get("event_id")
+        ack_event_id = None if active_event_id is None else str(active_event_id)
+
+        input_source = managed_session.input_source
+        if input_source is not None:
+            input_source.record_user_event(
+                timestamp_s=loop.time(),
+                event_type="text_event",
+                payload=event_payload,
+                source_event_id=ack_event_id,
+            )
+        else:
+            self._record_user_event(
+                managed_session=managed_session,
+                timestamp_s=loop.time(),
+                event_type="text_event",
+                payload=event_payload,
+            )
+        managed_session.first_action_received.set()
+        return {
+            "event_id": ack_event_id,
+            "state": event_payload.get("state", state),
+            "active_event_id": ack_event_id,
+        }
 
     async def _run_realtime_driver_session(
         self,
