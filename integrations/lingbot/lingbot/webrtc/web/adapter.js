@@ -481,7 +481,8 @@ function makeEventButton(item, hotkeyLetter) {
   const button = document.createElement("button")
   button.className = "eventButton"
   button.type = "button"
-  const hotkeyText = hotkeyLetter === "space" ? "Space" : hotkeyLetter ? hotkeyLetter.toUpperCase() : null
+  const hotkeyText =
+    hotkeyLetter === "space" ? "Space" : hotkeyLetter === "control" ? "Ctrl" : hotkeyLetter ? hotkeyLetter.toUpperCase() : null
   button.textContent = hotkeyText ? `${label} (${hotkeyText})` : label
   button.classList.toggle("is-active", activeEventId === eventId)
   button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
@@ -502,9 +503,10 @@ function renderEventControls() {
 
   // Player events get digit hotkeys (1-9), director events get letter
   // hotkeys from EVENT_HOTKEY_LETTERS -- the two keyspaces never collide,
-  // so both live in the same eventHotkeyMap. Jump always gets the space
-  // bar instead of a digit. Events past either pool's size still render,
-  // just without a hotkey.
+  // so both live in the same eventHotkeyMap. Jump always gets Space and
+  // Crouch always gets Ctrl instead of a digit, matching common game
+  // convention. Events past either pool's size still render, just without
+  // a hotkey.
   eventHotkeyMap = new Map()
   let digitIndex = 0
   const nextDigit = () => (digitIndex < 9 ? String(++digitIndex) : null)
@@ -515,7 +517,7 @@ function renderEventControls() {
   actionButtons.replaceChildren()
   for (const item of playerItems) {
     const eventId = String(item.event_id || "").trim()
-    const hotkey = eventId === "jump" ? "space" : nextDigit()
+    const hotkey = eventId === "jump" ? "space" : eventId === "crouch" ? "control" : nextDigit()
     const button = makeEventButton(item, hotkey)
     if (!button) continue
     if (hotkey) eventHotkeyMap.set(hotkey, eventId)
@@ -823,11 +825,14 @@ function attachListeners() {
   // to any preset's catalog) -- this only fires once controls are
   // actually live.
   window.addEventListener("keydown", (event) => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
+    // Control itself is a valid hotkey (Crouch) -- only block it as a
+    // held modifier for some other key (e.g. Ctrl+C), same as Meta/Alt.
+    if (event.metaKey || event.altKey || event.repeat) return
+    if (event.ctrlKey && event.key !== "Control") return
     if (eventControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
-    const key = event.key === " " ? "space" : event.key.toLowerCase()
+    const key = event.key === " " ? "space" : event.key === "Control" ? "control" : event.key.toLowerCase()
     if (key === "c") {
       sendTextEvent(activeEventId || "clear", "clear")
       return
