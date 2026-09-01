@@ -22,8 +22,10 @@ Scene presets allow users to quickly load predefined scene configurations (promp
 ### In-Game Event Hotkeys
 Once connected, the first 9 events in the active preset's catalog are
 playable with **digit keys 1-9** — each event button shows its number
-(e.g. "Portal (1)"). Ignored while typing in a text field. This is a
-per-game hotkey for triggering events, not a way to switch games.
+(e.g. "Portal (1)"). Press **0** to Clear the active event — present and
+wired the same way on every game, since Clear isn't part of any preset's
+catalog. Ignored while typing in a text field. This is a per-game hotkey
+for triggering events, not a way to switch games.
 
 ### Sharing a Preset via URL
 Add `?preset=<slug>` to the page URL to land directly on a specific built-in

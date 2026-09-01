@@ -218,7 +218,7 @@ function makeEventControls() {
   root.hidden = true
   root.innerHTML = `
     <div class="eventButtons"></div>
-    <button class="eventButton eventButtonClear" type="button">Clear</button>
+    <button class="eventButton eventButtonClear" type="button">Clear (0)</button>
     <div class="promptControlGroup">
       <label class="promptControl">
         <span>Custom Prompt</span>
@@ -453,6 +453,9 @@ function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
   context.logEvent(`preset selected: ${preset.name}`, { source: "client" })
+  const url = new URL(window.location.href)
+  url.searchParams.set("preset", presetSlug(preset.name))
+  window.history.replaceState(null, "", url)
   promptInput.value = preset.prompt
   promptEdited = true
   textEventDrafts = preset.events.map((item) => makeTextEventDraft(item))
@@ -637,13 +640,18 @@ function attachListeners() {
     if (e.target.value) applyPreset(e.target.value)
   })
   // Digit keys 1-9 trigger the matching in-game event button (see the
-  // "(N)" hotkey suffix rendered in renderEventControls()), rather than
-  // switching games -- this only fires once controls are actually live.
+  // "(N)" hotkey suffix rendered in renderEventControls()), 0 triggers
+  // Clear (present on every game, not tied to any preset's catalog) --
+  // this only fires once controls are actually live.
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
     if (eventControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
+    if (event.key === "0") {
+      sendTextEvent(activeEventId || "clear", "clear")
+      return
+    }
     const catalog = Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
     const digit = Number(event.key)
     if (!Number.isInteger(digit) || digit < 1 || digit > 9 || digit > catalog.length) return
