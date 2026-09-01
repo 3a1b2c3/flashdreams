@@ -16,6 +16,11 @@ let directorMode = new URLSearchParams(window.location.search).has("director")
 // simply render without a hotkey, same as the old 9-key digit cap.
 const EVENT_HOTKEY_LETTERS = ["b", "f", "g", "h", "m", "n", "o", "p", "r", "t", "u", "v", "x", "y", "z"]
 
+// Jump/Crouch are player movement actions, not narrative/pacing triggers --
+// rendered in their own row next to the movement key grid instead of the
+// general event button list.
+const MOVEMENT_ACTION_EVENT_IDS = new Set(["jump", "crouch"])
+
 function presetSlug(name) {
   return name.toLowerCase().trim().replace(/\s+/g, "-")
 }
@@ -109,6 +114,7 @@ let textEventList = null
 let addTextEventButton = null
 let eventControls = null
 let eventButtons = null
+let actionButtons = null
 let clearEventButton = null
 let livePromptInput = null
 let livePromptSubmitButton = null
@@ -212,6 +218,7 @@ function makeEventControls() {
       </div>
       <div class="healthBarTrack"><div class="healthBarFill"></div></div>
     </div>
+    <div class="eventButtons actionButtons" hidden></div>
     <div class="eventButtons"></div>
     <div class="eventButtons directorButtons" hidden></div>
     <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
@@ -248,7 +255,12 @@ function bindElements() {
   promptInput = sceneCard.querySelector(".promptControl textarea")
   textEventList = sceneCard.querySelector(".textEventList")
   addTextEventButton = sceneCard.querySelector(".textEventAddButton")
-  eventButtons = eventControls.querySelector(".eventButtons")
+  eventButtons = eventControls.querySelector(".eventButtons:not(.actionButtons):not(.directorButtons)")
+  actionButtons = eventControls.querySelector(".actionButtons")
+  // Jump/Crouch render as their own row right after the shared movement
+  // key grid, so they read as part of "movement" rather than the general
+  // event/trigger list below.
+  if (movementControlRows) movementControlRows.after(actionButtons)
   clearEventButton = eventControls.querySelector(".eventButtonClear")
   directorButtons = eventControls.querySelector(".directorButtons")
   controlsModeToggle = eventControls.querySelector(".controlsModeToggle")
@@ -469,7 +481,8 @@ function makeEventButton(item, hotkeyLetter) {
   const button = document.createElement("button")
   button.className = "eventButton"
   button.type = "button"
-  button.textContent = hotkeyLetter ? `${label} (${hotkeyLetter.toUpperCase()})` : label
+  const hotkeyText = hotkeyLetter === "space" ? "Space" : hotkeyLetter ? hotkeyLetter.toUpperCase() : null
+  button.textContent = hotkeyText ? `${label} (${hotkeyText})` : label
   button.classList.toggle("is-active", activeEventId === eventId)
   button.addEventListener("click", () => sendTextEvent(eventId, "trigger"))
   return button
@@ -489,8 +502,9 @@ function renderEventControls() {
 
   // Player events get digit hotkeys (1-9), director events get letter
   // hotkeys from EVENT_HOTKEY_LETTERS -- the two keyspaces never collide,
-  // so both live in the same eventHotkeyMap. Events past either pool's
-  // size still render, just without a hotkey.
+  // so both live in the same eventHotkeyMap. Jump always gets the space
+  // bar instead of a digit. Events past either pool's size still render,
+  // just without a hotkey.
   eventHotkeyMap = new Map()
   let digitIndex = 0
   const nextDigit = () => (digitIndex < 9 ? String(++digitIndex) : null)
@@ -498,12 +512,15 @@ function renderEventControls() {
   const nextLetter = () => EVENT_HOTKEY_LETTERS[letterIndex++] ?? null
 
   eventButtons.replaceChildren()
+  actionButtons.replaceChildren()
   for (const item of playerItems) {
-    const digit = nextDigit()
-    const button = makeEventButton(item, digit)
+    const eventId = String(item.event_id || "").trim()
+    const hotkey = eventId === "jump" ? "space" : nextDigit()
+    const button = makeEventButton(item, hotkey)
     if (!button) continue
-    if (digit) eventHotkeyMap.set(digit, String(item.event_id).trim())
-    eventButtons.append(button)
+    if (hotkey) eventHotkeyMap.set(hotkey, eventId)
+    const container = MOVEMENT_ACTION_EVENT_IDS.has(eventId) ? actionButtons : eventButtons
+    container.append(button)
   }
   clearEventButton.classList.toggle("is-active", activeEventId === null)
 
@@ -531,6 +548,7 @@ function renderEventControls() {
   controlsModeToggle.setAttribute("aria-checked", String(showDirector))
   controlsPanelTitleText.textContent = showDirector ? "Director Controls" : "Player Controls"
   eventButtons.hidden = showDirector
+  actionButtons.hidden = showDirector || actionButtons.children.length === 0
   directorButtons.hidden = !showDirector
   directorPromptGroup.hidden = !showDirector
   playerPromptGroup.hidden = showDirector
@@ -809,13 +827,16 @@ function attachListeners() {
     if (eventControls.hidden) return
     const activeTag = document.activeElement?.tagName
     if (activeTag === "INPUT" || activeTag === "TEXTAREA") return
-    const key = event.key.toLowerCase()
+    const key = event.key === " " ? "space" : event.key.toLowerCase()
     if (key === "c") {
       sendTextEvent(activeEventId || "clear", "clear")
       return
     }
     const eventId = eventHotkeyMap.get(key)
-    if (eventId) sendTextEvent(eventId, "trigger")
+    if (eventId) {
+      if (key === "space") event.preventDefault()
+      sendTextEvent(eventId, "trigger")
+    }
   })
   controlsModeToggle.addEventListener("click", () => setDirectorView(!showingDirectorControls))
   enableDirectorModeButton.addEventListener("click", enableDirectorMode)

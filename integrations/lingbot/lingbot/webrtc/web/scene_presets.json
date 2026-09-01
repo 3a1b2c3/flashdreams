@@ -9,6 +9,12 @@
       { "event_id": "storm", "label": "Storm", "prompt": "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
       { "event_id": "fireworks", "label": "Fireworks", "prompt": "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." }
     ],
+    "directorEvents": [
+      { "event_id": "rivaldragon", "label": "Rival Dragon Appears", "prompt": "A second dragon bursts from the clouds ahead, wings flaring wide, blocking the flight path.", "health": -10 },
+      { "event_id": "windgust", "label": "Wind Gust Rocks Mount", "prompt": "A sudden gust of wind buffets the creature sideways, wings straining to hold a steady course." },
+      { "event_id": "guards", "label": "Castle Guards Fire Arrows", "prompt": "Guards atop the castle ramparts loose a volley of arrows arcing up toward the flying creature.", "health": -10 },
+      { "event_id": "meteor", "label": "Meteor Shower", "prompt": "A shower of meteors streaks down through the clouds, trailing fire and smoke past the flying creature.", "health": -15 }
+    ],
     "hud": { "maxHealth": 100 }
   },
   {
@@ -49,7 +55,9 @@
     "directorEvents": [
       { "event_id": "rain", "label": "Rain Intensifies", "prompt": "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
       { "event_id": "enemiesappear", "label": "Enemies Appear", "prompt": "A group of dark, armed figures appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer." },
-      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." }
+      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." },
+      { "event_id": "chicken", "label": "Chicken Walks In", "prompt": "A live chicken struts calmly into the alley, clucking and pecking at the wet asphalt, weaving between the puddles." },
+      { "event_id": "drone", "label": "Drone Appears", "prompt": "A small surveillance drone descends into the alley, its spotlight sweeping across the wet brick walls and rain." }
     ],
     "hud": { "maxHealth": 100 }
   },

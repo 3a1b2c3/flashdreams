@@ -955,6 +955,12 @@ function disconnectSession({ notify = true } = {}) {
     peerConnection.close()
   }
   resetPeerHandles()
+  // pc.close() stops incoming frames but doesn't reset the <video> element
+  // itself, so without this it just freezes on the last frame instead of
+  // falling back to the idle canvas / preset preview image.
+  remoteVideo.pause()
+  remoteVideo.srcObject = null
+  setVideoVisible(false)
 }
 
 async function connectSession({ attemptsRemaining = 1 } = {}) {
