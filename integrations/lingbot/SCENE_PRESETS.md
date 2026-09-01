@@ -34,20 +34,23 @@ just without a shown hotkey.
 Each preset's events are split into two categories, matching the original
 REACTOR case files' `actor: "character"` (player-triggered) vs.
 `actor: "environment"` (narrative/pacing) events. Both live in the *same*
-Player/Director Controls panel, switched with a **Player / Director tab
-bar** at the top of the panel — not two separate panels:
-- **Player** tab — the regular action buttons + a "Custom Prompt" box.
-- **Director** tab — the environment/pacing events (weather, hazards,
+panel, switched with a single **toggle switch** at the top — not two
+separate panels or tab buttons. The panel's own heading also swaps between
+"Player Controls" / "Director Controls" to match:
+- **Off (Player)** — the regular action buttons + a "Custom Prompt" box +
+  the movement key grid (w/a/s/d/q/e/i/j/k/l).
+- **On (Director)** — the environment/pacing events (weather, hazards,
   wildlife, etc.) + its own separate "Director Prompt" box, so a director
   can send free-form direction text independently of the player's prompt.
+  The movement key grid hides — a director doesn't drive movement.
 
-The tab bar only appears once director mode is on, reached either by
-adding `?director` to the page URL (e.g. `?manual&director`) — which lands
-directly on the Director tab — or by clicking **"Enable Director Mode"**
-in Player Controls for any preset that has director events (no URL edit
-needed). Hotkey letters are assigned across *both* tabs' events together
-(player first) so a letter never maps to two different events even though
-only one tab's buttons are visible at once.
+The toggle only appears once director mode is on, reached either by adding
+`?director` to the page URL (e.g. `?manual&director`) — which starts the
+toggle already on — or by clicking **"Enable Director Mode"** in Player
+Controls for any preset that has director events (no URL edit needed).
+Hotkey letters are assigned across *both* sides' events together (player
+first) so a letter never maps to two different events even though only
+one side's buttons are visible at once.
 
 Both tabs' events are always uploaded to the server together regardless
 of `?director` — the shared WebRTC protocol has no player/director
@@ -101,10 +104,17 @@ Built-in presets live in the `scenePresets` array at the top of
    prose.
 2. **Write 8-10 events**: each a short one-sentence imperative/descriptive
    clause (`{ event_id, label, prompt }`). `event_id` is a short lowercase
-   token, unique within that preset's own `events` array (ids can repeat
-   *across* presets — each preset's list is independent). Mix
-   character-triggered actions (tricks, attacks) with environment beats
-   (weather, other characters/vehicles appearing).
+   token, unique within that preset's own `events`/`directorEvents` arrays
+   combined (ids can repeat *across* presets — each preset's list is
+   independent). Mix character-triggered actions (tricks, attacks) — put
+   these in `events` — with environment beats (weather, other
+   characters/vehicles appearing) — put these in `directorEvents` (see
+   "Director Controls" above). **`events.length + directorEvents.length`
+   must not exceed 12** — that's a hard server-side cap
+   (`_MAX_TEXT_EVENTS` in `session.py`); going over it makes every connect
+   attempt fail with "At most 12 text events are supported." `applyPreset()`
+   also logs a client-side warning at selection time if a preset is over
+   budget, so this should be caught before it reaches a failed connect.
    - If you have access to `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json`
      (a richer, layered `base`/`camera`/`movement`/`events` scene format
      used by a different app), you can mine its `scene.base.default` and
@@ -158,7 +168,7 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
-- **Events**: Jump, Crouch, One-Hand Wave, Donut Spray, Shark Appears, Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Whale Breaches, Island Appears, Sea Turtle, Volcanic Island Erupts, Fuel Runs Low, Thrown from the Jet Ski.
+- **Events**: Jump, Crouch, One-Hand Wave, Donut Spray, Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Volcanic Island Erupts, Fuel Runs Low, Thrown from the Jet Ski. (12 total — the server's hard cap; Shark Appears, Whale Breaches, Island Appears, and Sea Turtle were cut to fit.)
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
@@ -170,7 +180,7 @@ Built-in presets live in the `scenePresets` array at the top of
 
 ### 5. Circuit Racer
 - **Prompt**: "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs."
-- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag, Rabbit on the Track, Puddle on the Track, Oil Slick Ahead, Clear Dry Track.
+- **Events**: Jump, Kick Up Sparks, Lock-Up Smoke, Crash, Rain Sweeps In, Sun Glare, Tunnel Section, Road Fire, Checkered Flag, Rabbit on the Track, Puddle on the Track, Oil Slick Ahead. (12 total — the server's hard cap; Clear Dry Track was cut to fit.)
 
 Noir Alley Combat, Water Blaster, Jet Ski Cruise, and Circuit Racer prompts/events are adapted from the richer layered scene definitions in `REACTOR_js-sdk`'s `lib/lingbot-cases/*.json` (kept as reference copies under `lingbot/webrtc/web/assets/sources/` in this repo) down to this app's flatter prompt+events format. Their start images are hotlinked from that repo's `examples` branch on GitHub rather than committed here.
 

@@ -75,26 +75,49 @@ body.is-ready-preview .firstFramePreview {
 .eventControls[hidden],
 .eventButtons[hidden],
 .promptControlGroup[hidden],
-.controlsTabBar[hidden] {
+.controlsModeToggle[hidden] {
   display: none;
 }
 
-.controlsTabBar {
+.controlsModeToggle {
   display: flex;
+  align-items: center;
   gap: 8px;
   grid-column: 1 / -1;
   margin-bottom: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
-.controlsTab {
-  flex: 1;
-  padding: 6px 10px;
-  opacity: 0.6;
+.controlsModeToggleTrack {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background-color 150ms ease;
+  flex-shrink: 0;
 }
 
-.controlsTab.is-active {
-  opacity: 1;
-  border-bottom: 2px solid currentColor;
+.controlsModeToggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms ease;
+}
+
+.controlsModeToggle.is-on .controlsModeToggleTrack {
+  background: #4caf50;
+}
+
+.controlsModeToggle.is-on .controlsModeToggleKnob {
+  transform: translateX(16px);
 }
 
 .firstFrameSourceRow {

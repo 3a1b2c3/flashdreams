@@ -54,15 +54,11 @@ const scenePresets = [
     // Director/environment events (from the original case's "director" pacing note).
     // health deltas below match the original case's HUD (fuel-as-health).
     directorEvents: [
-      { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
       { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation.", health: 5 },
       { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey.", health: -10 },
       { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead.", health: -15 },
       { event_id: "sharklunge", label: "Shark Lunges", prompt: "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray.", health: -15 },
       { event_id: "waterspout", label: "Waterspout Forms", prompt: "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist.", health: -15 },
-      { event_id: "whale", label: "Whale Breaches", prompt: "A massive whale breaches out of the deep, crashing back down in an explosion of white spray." },
-      { event_id: "island", label: "Island Appears", prompt: "A rocky island rises into view on the horizon, growing larger as the jet ski cruises toward it." },
-      { event_id: "turtle", label: "Sea Turtle", prompt: "A large green sea turtle glides gently through the clear water just ahead of the jet ski." },
       { event_id: "volcano", label: "Volcanic Island Erupts", prompt: "The distant island erupts into a volcano, glowing lava streaming down its slopes and ash rising into the sky.", health: -10 },
       { event_id: "lowfuel", label: "Fuel Runs Low", prompt: "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power.", health: -40 },
       { event_id: "thrown", label: "Thrown from the Jet Ski", prompt: "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water.", health: -30 },
@@ -128,7 +124,6 @@ const scenePresets = [
       { event_id: "rabbit", label: "Rabbit on the Track", prompt: "A rabbit darts out onto the track ahead and stops directly in the car's path." },
       { event_id: "puddle", label: "Puddle on the Track", prompt: "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it.", health: -5 },
       { event_id: "oilslick", label: "Oil Slick Ahead", prompt: "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it.", health: -8 },
-      { event_id: "cleardry", label: "Clear Dry Track", prompt: "The clouds break and the circuit runs clear and dry ahead, bright daylight over dry grey tarmac." },
     ],
     hud: { maxHealth: 100 },
   },
@@ -202,15 +197,17 @@ let clearEventButton = null
 let livePromptInput = null
 let livePromptSubmitButton = null
 let directorButtons = null
-let controlsTabBar = null
-let controlsTabPlayer = null
-let controlsTabDirector = null
+let controlsModeToggle = null
 let enableDirectorModeButton = null
 let playerPromptGroup = null
 // The shared movement key grid (w/a/s/d/q/e/i/j/k/l) lives outside our own
 // panel in the shared page, addressable by its fixed id -- hidden while
 // the Director tab is active since a director doesn't drive movement.
 const movementControlRows = document.getElementById("controlRows")
+// The shared panel's own heading text, also addressable by a fixed id --
+// swapped between "Player Controls" / "Director Controls" to match
+// whichever mode is active.
+const controlsPanelTitleText = document.getElementById("controlsPanelTitleText")
 let healthBarFill = null
 let healthBarValue = null
 let healthBarLabelText = null
@@ -294,10 +291,10 @@ function makeEventControls() {
       </div>
       <div class="healthBarTrack"><div class="healthBarFill"></div></div>
     </div>
-    <div class="controlsTabBar" hidden>
-      <button class="controlsTab controlsTabPlayer is-active" type="button">Player</button>
-      <button class="controlsTab controlsTabDirector" type="button">Director</button>
-    </div>
+    <button class="controlsModeToggle" type="button" role="switch" aria-checked="false" hidden>
+      <span class="controlsModeToggleTrack"><span class="controlsModeToggleKnob"></span></span>
+      <span class="controlsModeToggleLabel">Director Mode</span>
+    </button>
     <div class="eventButtons"></div>
     <div class="eventButtons directorButtons" hidden></div>
     <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
@@ -337,9 +334,7 @@ function bindElements() {
   eventButtons = eventControls.querySelector(".eventButtons")
   clearEventButton = eventControls.querySelector(".eventButtonClear")
   directorButtons = eventControls.querySelector(".directorButtons")
-  controlsTabBar = eventControls.querySelector(".controlsTabBar")
-  controlsTabPlayer = eventControls.querySelector(".controlsTabPlayer")
-  controlsTabDirector = eventControls.querySelector(".controlsTabDirector")
+  controlsModeToggle = eventControls.querySelector(".controlsModeToggle")
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
   healthBarFill = eventControls.querySelector(".healthBarFill")
@@ -592,19 +587,20 @@ function renderEventControls() {
     directorButtons.append(button)
   }
 
-  // In director mode, Player and Director share one panel with a tab bar
-  // on top switching which button grid (and which custom-prompt box) is
-  // visible -- otherwise (the common case) it's just Player Controls with
-  // no tabs at all. When director mode isn't on yet but this preset
-  // actually has director events, offer "Enable Director Mode" instead of
-  // requiring a URL edit.
+  // In director mode, Player and Director share one panel with a single
+  // toggle switch on top swapping which button grid (and which
+  // custom-prompt box) is visible -- otherwise (the common case) it's just
+  // Player Controls with no toggle at all. When director mode isn't on yet
+  // but this preset actually has director events, offer "Enable Director
+  // Mode" instead of requiring a URL edit.
   const hasDirectorContent = directorMode && directorItems.length > 0
   enableDirectorModeButton.hidden = directorMode || directorItems.length === 0
-  controlsTabBar.hidden = !hasDirectorContent
+  controlsModeToggle.hidden = !hasDirectorContent
   if (!hasDirectorContent) showingDirectorControls = false
   const showDirector = hasDirectorContent && showingDirectorControls
-  controlsTabPlayer.classList.toggle("is-active", !showDirector)
-  controlsTabDirector.classList.toggle("is-active", showDirector)
+  controlsModeToggle.classList.toggle("is-on", showDirector)
+  controlsModeToggle.setAttribute("aria-checked", String(showDirector))
+  controlsPanelTitleText.textContent = showDirector ? "Director Controls" : "Player Controls"
   eventButtons.hidden = showDirector
   directorButtons.hidden = !showDirector
   directorPromptGroup.hidden = !showDirector
@@ -666,6 +662,17 @@ function applyPreset(presetIndex) {
   currentPreset = preset
   resetHealth(preset)
   context.logEvent(`preset selected: ${preset.name}`, { source: "client" })
+  // Server hard cap (session.py: _MAX_TEXT_EVENTS). Catch an over-budget
+  // preset here, at selection time, instead of only discovering it via a
+  // failed connect attempt later.
+  const totalEventCount = preset.events.length + (preset.directorEvents?.length ?? 0)
+  if (totalEventCount > 12) {
+    context.logEvent(
+      `preset "${preset.name}" has ${totalEventCount} events (player + director combined), `
+        + "over the server's 12-event limit -- connecting will fail until it's trimmed.",
+      { source: "client", level: "error" },
+    )
+  }
   const url = new URL(window.location.href)
   url.searchParams.set("preset", presetSlug(preset.name))
   window.history.replaceState(null, "", url)
@@ -882,8 +889,7 @@ function attachListeners() {
     const eventId = eventHotkeyMap.get(key)
     if (eventId) sendTextEvent(eventId, "trigger")
   })
-  controlsTabDirector.addEventListener("click", () => setDirectorView(true))
-  controlsTabPlayer.addEventListener("click", () => setDirectorView(false))
+  controlsModeToggle.addEventListener("click", () => setDirectorView(!showingDirectorControls))
   enableDirectorModeButton.addEventListener("click", enableDirectorMode)
   savePresetButton.addEventListener("click", saveCurrentPreset)
   uploadModeButton.addEventListener("click", () => {
