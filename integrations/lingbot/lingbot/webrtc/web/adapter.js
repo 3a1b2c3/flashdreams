@@ -302,6 +302,10 @@ function makeTextEventDraft(item = {}) {
     event_id: String(item.event_id || item.id || "").trim() || makeTextEventId(label),
     label,
     prompt: String(item.prompt || "").trim(),
+    // Player by default -- only true for a preset's own directorEvents
+    // (tagged explicitly in applyPreset) or a custom event flipped via the
+    // Director checkbox in the Text Events editor.
+    isDirector: Boolean(item.isDirector),
   }
 }
 
@@ -384,12 +388,20 @@ function renderTextEventEditor() {
     prompt.maxLength = 1000
     prompt.placeholder = "Event prompt"
     prompt.value = draft.prompt
+    const directorToggle = document.createElement("label")
+    directorToggle.className = "textEventDirectorToggle"
+    const directorCheckbox = document.createElement("input")
+    directorCheckbox.type = "checkbox"
+    directorCheckbox.checked = Boolean(draft.isDirector)
+    const directorToggleText = document.createElement("span")
+    directorToggleText.textContent = "Director"
+    directorToggle.append(directorCheckbox, directorToggleText)
     const remove = document.createElement("button")
     remove.className = "textEventRemoveButton"
     remove.type = "button"
     remove.textContent = "X"
     remove.setAttribute("aria-label", `Remove text event ${index + 1}`)
-    for (const input of [label, prompt]) {
+    for (const input of [label, prompt, directorCheckbox]) {
       input.disabled = initialSceneLocked
       input.addEventListener("focus", context.releaseControls)
     }
@@ -401,13 +413,22 @@ function renderTextEventEditor() {
       draft.prompt = prompt.value
       textEventsEdited = true
     })
+    directorCheckbox.addEventListener("change", () => {
+      draft.isDirector = directorCheckbox.checked
+      textEventsEdited = true
+      // Live Player/Director Controls buttons need to reflect which panel
+      // this event now belongs to immediately, same as label/prompt edits
+      // becoming visible on the next render.
+      renderEventControls()
+    })
     remove.disabled = initialSceneLocked
     remove.addEventListener("click", () => {
       textEventDrafts.splice(index, 1)
       textEventsEdited = true
       renderTextEventEditor()
+      renderEventControls()
     })
-    fields.append(label, prompt)
+    fields.append(label, prompt, directorToggle)
     row.append(fields, remove)
     textEventList.append(row)
   }
@@ -474,6 +495,14 @@ function isDirectorEventId(eventId) {
   return Boolean(currentPreset?.directorEvents?.some((item) => item.event_id === eventId))
 }
 
+// textEventDrafts items carry their own isDirector flag (set in
+// applyPreset()/the Text Events editor's Director checkbox); anything else
+// (e.g. the server-echoed event_catalog, before any draft carries the
+// field) falls back to the preset-membership check above.
+function eventIsDirector(item) {
+  return typeof item.isDirector === "boolean" ? item.isDirector : isDirectorEventId(item.event_id)
+}
+
 function makeEventButton(item, hotkeyLetter) {
   const eventId = String(item.event_id || "").trim()
   if (!eventId) return null
@@ -498,8 +527,8 @@ function renderEventControls() {
   const catalog = textEventsEdited
     ? textEventDrafts
     : Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
-  const playerItems = catalog.filter((item) => !isDirectorEventId(item.event_id))
-  const directorItems = catalog.filter((item) => isDirectorEventId(item.event_id))
+  const playerItems = catalog.filter((item) => !eventIsDirector(item))
+  const directorItems = catalog.filter((item) => eventIsDirector(item))
 
   // Player events get digit hotkeys (1-9), director events get letter
   // hotkeys from EVENT_HOTKEY_LETTERS -- the two keyspaces never collide,
@@ -631,9 +660,10 @@ function applyPreset(presetIndex) {
   // renders in, and whether that panel is visible at all), the shared
   // WebRTC protocol has no such concept, so both must be known server-side
   // for either panel's buttons to actually do anything once clicked.
-  textEventDrafts = [...preset.events, ...(preset.directorEvents ?? [])].map((item) =>
-    makeTextEventDraft(item)
-  )
+  textEventDrafts = [
+    ...preset.events.map((item) => makeTextEventDraft({ ...item, isDirector: false })),
+    ...(preset.directorEvents ?? []).map((item) => makeTextEventDraft({ ...item, isDirector: true })),
+  ]
   textEventsEdited = true
   renderTextEventEditor()
   // Also refresh the live Player Controls buttons immediately, not just
@@ -922,7 +952,7 @@ function attachListeners() {
 
 export default {
   modelName: "Lingbot",
-  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v2", import.meta.url).href,
+  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v3", import.meta.url).href,
   controls,
 
   async mount(sharedContext) {

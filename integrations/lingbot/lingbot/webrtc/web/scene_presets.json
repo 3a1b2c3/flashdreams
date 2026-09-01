@@ -7,13 +7,16 @@
       { "event_id": "jump", "label": "Jump", "prompt": "The creature tucks its wings and launches into a sudden upward leap, gaining height in a single powerful beat." },
       { "event_id": "portal", "label": "Portal", "prompt": "A luminous magical portal opens in the scene, casting colored light and swirling particles into the environment." },
       { "event_id": "storm", "label": "Storm", "prompt": "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
-      { "event_id": "fireworks", "label": "Fireworks", "prompt": "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." }
+      { "event_id": "fireworks", "label": "Fireworks", "prompt": "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." },
+      { "event_id": "barrelroll", "label": "Barrel Roll", "prompt": "The creature snaps into a tight barrel roll, wings tucked as it spins a full rotation before leveling back out.", "health": -5 }
     ],
     "directorEvents": [
       { "event_id": "rivaldragon", "label": "Rival Dragon Appears", "prompt": "A second dragon bursts from the clouds ahead, wings flaring wide, blocking the flight path.", "health": -10 },
       { "event_id": "windgust", "label": "Wind Gust Rocks Mount", "prompt": "A sudden gust of wind buffets the creature sideways, wings straining to hold a steady course." },
       { "event_id": "guards", "label": "Castle Guards Fire Arrows", "prompt": "Guards atop the castle ramparts loose a volley of arrows arcing up toward the flying creature.", "health": -10 },
-      { "event_id": "meteor", "label": "Meteor Shower", "prompt": "A shower of meteors streaks down through the clouds, trailing fire and smoke past the flying creature.", "health": -15 }
+      { "event_id": "meteor", "label": "Meteor Shower", "prompt": "A shower of meteors streaks down through the clouds, trailing fire and smoke past the flying creature.", "health": -15 },
+      { "event_id": "aurora", "label": "Aurora Lights the Sky", "prompt": "Shimmering curtains of green and violet aurora light ripple across the night sky above the floating landmasses." },
+      { "event_id": "griffin", "label": "Griffin Gives Chase", "prompt": "A griffin bursts from a nearby cliffside and swoops in fast pursuit, talons outstretched toward the flying creature.", "health": -10 }
     ],
     "hud": { "maxHealth": 100 }
   },
@@ -23,9 +26,10 @@
     "prompt": "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
-      { "event_id": "crouch", "label": "Crouch", "prompt": "The rider crouches down low, bending into a compact, hunched stance close to the jet ski." },
       { "event_id": "onehand", "label": "One-Hand Wave", "prompt": "Lift one hand and wave it high overhead." },
-      { "event_id": "donut", "label": "Donut Spray", "prompt": "Lean into tight continuous circles carving donuts." }
+      { "event_id": "spin360", "label": "Spin 360", "prompt": "Whip the jet ski into a tight spinning 360, the hull skating around and sweeping a full ring of spray across the water, then settle back facing forward." },
+      { "event_id": "superman", "label": "Superman", "prompt": "Stretch out flat off the back of the jet ski, gripping the seat with both hands as the legs stream out behind, holding the pose as the craft skims forward, then pull back up into the seat." },
+      { "event_id": "jumpoff", "label": "Jump Off", "prompt": "Stand up and leap clean off the jet ski, splashing down into the water and swimming alongside as the now-riderless jet ski coasts to a stop nearby.", "health": -10 }
     ],
     "directorEvents": [
       { "event_id": "dolphins", "label": "Dolphins Leap", "prompt": "Sleek dolphins surface and leap in formation.", "health": 5 },
@@ -33,7 +37,6 @@
       { "event_id": "wave", "label": "Rogue Wave", "prompt": "A towering rogue wave rears up ahead.", "health": -15 },
       { "event_id": "sharklunge", "label": "Shark Lunges", "prompt": "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray.", "health": -15 },
       { "event_id": "waterspout", "label": "Waterspout Forms", "prompt": "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist.", "health": -15 },
-      { "event_id": "volcano", "label": "Volcanic Island Erupts", "prompt": "The distant island erupts into a volcano, glowing lava streaming down its slopes and ash rising into the sky.", "health": -10 },
       { "event_id": "lowfuel", "label": "Fuel Runs Low", "prompt": "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power.", "health": -40 },
       { "event_id": "thrown", "label": "Thrown from the Jet Ski", "prompt": "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water.", "health": -30 }
     ],
@@ -53,11 +56,9 @@
       { "event_id": "dodge", "label": "Dodge Roll", "prompt": "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance.", "health": 10 }
     ],
     "directorEvents": [
-      { "event_id": "rain", "label": "Rain Intensifies", "prompt": "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
+      { "event_id": "falls", "label": "Player Falls to Ground", "prompt": "The officer's footing slips on the wet asphalt and they go down hard, sprawling onto the ground before pushing back up.", "health": -10 },
       { "event_id": "enemiesappear", "label": "Enemies Appear", "prompt": "A group of dark, armed figures appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer." },
-      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." },
-      { "event_id": "chicken", "label": "Chicken Walks In", "prompt": "A live chicken struts calmly into the alley, clucking and pecking at the wet asphalt, weaving between the puddles." },
-      { "event_id": "drone", "label": "Drone Appears", "prompt": "A small surveillance drone descends into the alley, its spotlight sweeping across the wet brick walls and rain." }
+      { "event_id": "enemiesattack", "label": "Enemies Attack", "prompt": "The figures close the distance and attack the officer all at once, fists and clubs swinging in from the darkness." }
     ],
     "hud": { "maxHealth": 100 }
   },
@@ -77,9 +78,7 @@
       { "event_id": "ambush", "label": "Rival Blaster Ambush", "prompt": "A rival pops up from behind a platform and opens fire with their own water blaster.", "health": -12 },
       { "event_id": "soakers", "label": "Bathers Get Super Soakers", "prompt": "Every bather in the park raises a huge super soaker and opens fire at once.", "health": -12 },
       { "event_id": "crocodile", "label": "Crocodile Lunges", "prompt": "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera.", "health": -20 },
-      { "event_id": "wavesurge", "label": "Wave Surge", "prompt": "The calm lake churns into rolling swells, the inflatable platforms pitching hard." },
-      { "event_id": "balloon", "label": "Giant Balloon Drops", "prompt": "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." },
-      { "event_id": "deflate", "label": "Float Deflates", "prompt": "One of the large inflatable platforms splits and rapidly deflates, sinking below the surface." }
+      { "event_id": "balloon", "label": "Giant Balloon Drops", "prompt": "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." }
     ],
     "hud": { "maxHealth": 100 }
   },
@@ -91,7 +90,8 @@
       { "event_id": "jump", "label": "Jump", "prompt": "The track kinks up into a ramp and the car launches off the crest into open sky before slamming back down with a hard jolt." },
       { "event_id": "sparks", "label": "Kick Up Sparks", "prompt": "The floor grounds out on the asphalt, spraying a bright shower of orange sparks past the nose." },
       { "event_id": "lockup", "label": "Lock-Up Smoke", "prompt": "The brakes lock hard into the corner, boiling thick white tyre smoke off the front wheels." },
-      { "event_id": "crash", "label": "Crash", "prompt": "The car slams into the barrier, carbon-fibre debris flying as it grinds to a juddering halt." }
+      { "event_id": "drift", "label": "Drift", "prompt": "The wheel gets thrown hard over and the whole car slews sideways, kerbs and barriers swinging across the windscreen as the rear steps out in a smoking slide, then it snaps back straight down the track.", "health": -5 },
+      { "event_id": "drs", "label": "DRS Boost", "prompt": "A thumb flicks the DRS on the steering wheel and the dash lights up, the car surging away down the straight as drag drops off, the track streaking faster past the windscreen." }
     ],
     "directorEvents": [
       { "event_id": "rain", "label": "Rain Sweeps In", "prompt": "Dark storm clouds roll over and rain sweeps across the windscreen, the track glistening wet." },
@@ -99,7 +99,6 @@
       { "event_id": "tunnel", "label": "Tunnel Section", "prompt": "The track dives into a dark tunnel, strings of overhead lights strobing past overhead." },
       { "event_id": "roadfire", "label": "Road Fire", "prompt": "A wall of orange flame and black smoke erupts across the track directly ahead." },
       { "event_id": "flag", "label": "Checkered Flag", "prompt": "The car sweeps across the start-finish line as a marshal waves the chequered flag overhead." },
-      { "event_id": "rabbit", "label": "Rabbit on the Track", "prompt": "A rabbit darts out onto the track ahead and stops directly in the car's path." },
       { "event_id": "puddle", "label": "Puddle on the Track", "prompt": "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it.", "health": -5 },
       { "event_id": "oilslick", "label": "Oil Slick Ahead", "prompt": "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it.", "health": -8 }
     ],
