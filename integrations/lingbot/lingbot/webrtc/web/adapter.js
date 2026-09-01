@@ -272,13 +272,17 @@ function bindElements() {
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
   healthBar = eventControls.querySelector(".healthBar")
+  // Query healthBar's own descendants BEFORE relocating it below -- once
+  // moved out of eventControls, eventControls.querySelector(...) can no
+  // longer find them (they're no longer inside its subtree), which left
+  // these all null and silently broke every health bar update.
+  healthBarFill = healthBar.querySelector(".healthBarFill")
+  healthBarValue = healthBar.querySelector(".healthBarValue")
+  healthBarLabelText = healthBar.querySelector(".healthBarLabelText")
   // Also moved ahead of the movement grid, right after the toggle (so
   // order is: toggle, health bar, movement grid, then the rest of this
   // panel's own content).
   if (movementControlRows) movementControlRows.before(healthBar)
-  healthBarFill = eventControls.querySelector(".healthBarFill")
-  healthBarValue = eventControls.querySelector(".healthBarValue")
-  healthBarLabelText = eventControls.querySelector(".healthBarLabelText")
   livePromptInput = eventControls.querySelector(".playerPromptGroup .promptControl input")
   livePromptSubmitButton = eventControls.querySelector(".playerPromptGroup .promptSubmitButton")
   directorPromptGroup = eventControls.querySelector(".directorPromptGroup")
@@ -971,7 +975,7 @@ function attachListeners() {
 
 export default {
   modelName: "Lingbot",
-  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v4", import.meta.url).href,
+  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v5", import.meta.url).href,
   controls,
 
   async mount(sharedContext) {

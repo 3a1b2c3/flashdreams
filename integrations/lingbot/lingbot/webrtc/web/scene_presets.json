@@ -48,7 +48,7 @@
     "prompt": "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The officer springs upward off both feet, leaping high off the wet asphalt, then lands and rises back to a normal upright stance." },
-      { "event_id": "pistol", "label": "Draw Pistol", "prompt": "The officer draws a sidearm pistol from its holster, raising it two-handed and aiming it straight ahead down the alley, then fires a shot, muzzle flash lighting up the rain and a spent casing arcing away." },
+      { "event_id": "pistol", "label": "Draw Pistol", "prompt": "The officer draws a sidearm pistol from its holster, raising it two-handed and aiming it straight ahead down the alley, then fires exactly one shot -- a single muzzle flash lighting up the rain and one spent casing arcing away, no second shot.", "health": -8 },
       { "event_id": "crouch", "label": "Crouch", "prompt": "The officer drops into a low, compact crouch, close to the wet asphalt." },
       { "event_id": "punch", "label": "Punch Combo", "prompt": "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles.", "health": -5 },
       { "event_id": "roundhouse", "label": "Roundhouse Kick", "prompt": "Plant the lead foot and whip a fast roundhouse kick through the rain.", "health": -5 },
@@ -58,7 +58,7 @@
     "directorEvents": [
       { "event_id": "falls", "label": "Player Falls to Ground", "prompt": "The officer's footing slips on the wet asphalt and they go down hard, sprawling onto the ground before pushing back up.", "health": -10 },
       { "event_id": "enemyappears", "label": "Enemy Appears", "prompt": "A single dark, armed figure appears far down the alley, silhouetted against the neon glow, and starts advancing toward the officer. Exactly one figure -- no second figure, no group." },
-      { "event_id": "enemyattacks", "label": "Enemy Attacks", "prompt": "The figure closes the distance and attacks the officer, fists swinging in from the darkness. Exactly one attacker -- no second figure, no group." },
+      { "event_id": "enemyattacks", "label": "Enemy Attacks", "prompt": "The figure closes the distance and attacks the officer, fists swinging in from the darkness. Exactly one attacker -- no second figure, no group.", "health": -5 },
       { "event_id": "chicken", "label": "Chicken Walks In", "prompt": "A live chicken struts calmly into the alley, clucking and pecking at the wet asphalt, weaving between the puddles." },
       { "event_id": "drone", "label": "Drone Appears", "prompt": "A small surveillance drone descends into the alley, its spotlight sweeping across the wet brick walls and rain." }
     ],
