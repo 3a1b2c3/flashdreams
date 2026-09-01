@@ -201,15 +201,15 @@ built-in preset has at least 5 player events.
 
 ### 2. Jet Ski Cruise
 - **Prompt**: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times."
-- **Player events (5)**: Jump, One-Hand Wave, Spin 360, Superman, Jump Off.
-- **Director events (7)**: Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Fuel Runs Low, Thrown from the Jet Ski.
-- 5 + 7 = 12 total (at the cap).
+- **Player events (5)**: Jump, One-Hand Wave, Spin 360, Jump Off, Jump Back On.
+- **Director events (9)**: Dolphins Leap, Storm Rolls In, Rogue Wave, Shark Lunges, Waterspout Forms, Fuel Runs Low, Thrown from the Jet Ski, Fuel Cache Spotted, Calm Water Break.
+- 5 + 9 = 14 total. Uses "Fuel" as its HUD label (`hud.healthLabel`) instead of "Health". Jump Off/Jump Back On are a matched risk/recovery pair (-10/+15); One-Hand Wave and Spin 360 award small `+5` trick bonuses; Fuel Cache Spotted (+20) and Calm Water Break (+10) are dedicated recovery beats so a full playthrough always has a way to regain fuel, not just drain it.
 
 ### 3. Noir Alley Combat
 - **Prompt**: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight."
-- **Player events (7)**: Jump, Draw Pistol (now also fires a shot), Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll.
-- **Director events (3)**: Player Falls to Ground, Enemies Appear, Enemies Attack.
-- 7 + 3 = 10 total.
+- **Player events (7)**: Jump, Draw Pistol (fires exactly one shot, health -8), Crouch, Punch Combo, Roundhouse Kick, Baton Strike, Dodge Roll.
+- **Director events (5)**: Player Falls to Ground, Enemy Appears, Enemy Attacks, Chicken Walks In, Drone Appears.
+- 7 + 5 = 12 total. Enemy Appears/Attacks were changed from plural to singular ("a single figure... no second figure, no group") to keep the model from generating a crowd when only one enemy is intended.
 
 ### 4. Water Blaster
 - **Prompt**: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame."

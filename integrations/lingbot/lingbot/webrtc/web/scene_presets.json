@@ -22,7 +22,7 @@
   },
   {
     "name": "Jet Ski Cruise",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/jet-ski-cruise.jpg",
+    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/jet-ski-cruise.jpg",
     "prompt": "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
@@ -33,8 +33,8 @@
     ],
     "directorEvents": [
       { "event_id": "dolphins", "label": "Dolphins Leap", "prompt": "Sleek dolphins surface right alongside the jet ski, leaping in formation beside the rider and diving back in as they keep pace.", "health": 5 },
-      { "event_id": "storm", "label": "Storm Rolls In", "prompt": "Dark clouds roll in, wind whips up, sea churns grey.", "health": -10 },
-      { "event_id": "wave", "label": "Rogue Wave", "prompt": "A towering rogue wave rears up ahead.", "health": -15 },
+      { "event_id": "storm", "label": "Storm Rolls In", "prompt": "Dark storm clouds roll in on the horizon behind the jet ski, wind whipping up and the sea churning grey in the background as the rider presses on ahead of it.", "health": -10 },
+      { "event_id": "wave", "label": "Rogue Wave", "prompt": "A towering rogue wave rears up on the horizon ahead, growing larger as it closes the distance before it finally bears down on the jet ski.", "health": -15 },
       { "event_id": "sharklunge", "label": "Shark Lunges", "prompt": "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray.", "health": -15 },
       { "event_id": "waterspout", "label": "Waterspout Forms", "prompt": "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist.", "health": -15 },
       { "event_id": "lowfuel", "label": "Fuel Runs Low", "prompt": "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power.", "health": -40 },
@@ -46,7 +46,7 @@
   },
   {
     "name": "Noir Alley Combat",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/js-sdk/examples/examples/lingbot-world-2/public/lingbot-cases/noir-alley-combat.jpg",
+    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/noir-alley-combat.jpg",
     "prompt": "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The officer springs upward off both feet, leaping high off the wet asphalt, then lands and rises back to a normal upright stance." },
