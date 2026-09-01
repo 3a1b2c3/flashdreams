@@ -31,6 +31,7 @@ const scenePresets = [
     prompt: "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     events: [
       { event_id: "jump", label: "Jump", prompt: "The jet ski leaps up off the water, the hull lifting clear of the surface before dropping back down with a splash." },
+      { event_id: "crouch", label: "Crouch", prompt: "The rider crouches down low, bending into a compact, hunched stance close to the jet ski." },
       { event_id: "onehand", label: "One-Hand Wave", prompt: "Lift one hand and wave it high overhead." },
       { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
       { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
@@ -45,6 +46,7 @@ const scenePresets = [
     prompt: "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     events: [
       { event_id: "jump", label: "Jump", prompt: "The officer springs upward off both feet, leaping high off the wet asphalt before dropping back into a low crouch." },
+      { event_id: "crouch", label: "Crouch", prompt: "The officer drops into a low, compact crouch, close to the wet asphalt." },
       { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
       { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
       { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
@@ -60,7 +62,7 @@ const scenePresets = [
     prompt: "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     events: [
       { event_id: "jump", label: "Jump", prompt: "The player leaps up and forward off the edge of the platform, sailing over a gap of open water before landing with a splash." },
-      { event_id: "rapidfire", label: "Rapid Fire", prompt: "Pump and unload a rapid burst of water jets across the floats in a scatter of spray." },
+      { event_id: "crouch", label: "Crouch", prompt: "The player crouches down behind the raised edge of an inflatable platform for cover, only the top of the water blaster peeking over." },
       { event_id: "splash", label: "Splash Blast", prompt: "Unleash a wide fan of water, a broad sweeping spray douses the platform ahead." },
       { event_id: "shield", label: "Raise Float Shield", prompt: "Haul up a clear inflatable board as a shield, incoming water jets hammering into it." },
       { event_id: "slime", label: "Green Slime Blast", prompt: "Suck up dark green lake water and unload it as a thick glowing green slime stream." },
