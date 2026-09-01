@@ -26,19 +26,21 @@
     "prompt": "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
-      { "event_id": "onehand", "label": "One-Hand Wave", "prompt": "Lift one hand and wave it high overhead." },
-      { "event_id": "spin360", "label": "Spin 360", "prompt": "Whip the jet ski into a tight spinning 360, the hull skating around and sweeping a full ring of spray across the water, then settle back facing forward." },
+      { "event_id": "onehand", "label": "One-Hand Wave", "prompt": "Lift one hand and wave it high overhead.", "health": 5 },
+      { "event_id": "spin360", "label": "Spin 360", "prompt": "Whip the jet ski into a tight spinning 360, the hull skating around and sweeping a full ring of spray across the water, then settle back facing forward.", "health": 5 },
       { "event_id": "jumpoff", "label": "Jump Off", "prompt": "Stand up and leap clean off the jet ski, splashing down into the water and swimming alongside as the now-riderless jet ski coasts to a stop nearby.", "health": -10 },
       { "event_id": "jumpbackon", "label": "Jump Back On", "prompt": "Swim the last stroke to the drifting jet ski, grab the handlebars and haul back up out of the water onto the seat, settling into riding position and gunning the throttle to surge forward again.", "health": 15 }
     ],
     "directorEvents": [
-      { "event_id": "dolphins", "label": "Dolphins Leap", "prompt": "Sleek dolphins surface and leap in formation.", "health": 5 },
+      { "event_id": "dolphins", "label": "Dolphins Leap", "prompt": "Sleek dolphins surface right alongside the jet ski, leaping in formation beside the rider and diving back in as they keep pace.", "health": 5 },
       { "event_id": "storm", "label": "Storm Rolls In", "prompt": "Dark clouds roll in, wind whips up, sea churns grey.", "health": -10 },
       { "event_id": "wave", "label": "Rogue Wave", "prompt": "A towering rogue wave rears up ahead.", "health": -15 },
       { "event_id": "sharklunge", "label": "Shark Lunges", "prompt": "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray.", "health": -15 },
       { "event_id": "waterspout", "label": "Waterspout Forms", "prompt": "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist.", "health": -15 },
       { "event_id": "lowfuel", "label": "Fuel Runs Low", "prompt": "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power.", "health": -40 },
-      { "event_id": "thrown", "label": "Thrown from the Jet Ski", "prompt": "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water.", "health": -30 }
+      { "event_id": "thrown", "label": "Thrown from the Jet Ski", "prompt": "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water.", "health": -30 },
+      { "event_id": "fuelcache", "label": "Fuel Cache Spotted", "prompt": "A bright floating fuel canister bobs in the water ahead; the rider swings alongside and hauls it aboard, topping off the tank.", "health": 20 },
+      { "event_id": "calmwater", "label": "Calm Water Break", "prompt": "The sea flattens out into glassy, easy water, the jet ski cruising smooth and steady with no chop to fight.", "health": 10 }
     ],
     "hud": { "maxHealth": 100, "healthLabel": "Fuel" }
   },

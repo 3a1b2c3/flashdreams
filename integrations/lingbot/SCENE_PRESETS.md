@@ -133,7 +133,7 @@ one:
    `health` field where it makes narrative sense — negative for a hit/risk
    (e.g. a hazard or a combat move), positive for a recovery/reward beat,
    omit it entirely for a purely cosmetic trick with no stakes. **`events.length
-   + directorEvents.length` must not exceed 12** — that's a hard server-side
+   + directorEvents.length` must not exceed 20** — that's a hard server-side
    cap (`_MAX_TEXT_EVENTS` in `session.py`) applied to the *combined* total,
    not separately per category, since the server has no player/director
    concept at all (only a generic `category` string tag) — both arrays
@@ -189,7 +189,7 @@ one:
 
 ## Built-in Presets
 
-Event counts below are `player + director = total` (against the 12-event
+Event counts below are `player + director = total` (against the 20-event
 combined cap — see step 2 under "Adding a New Built-in Preset"). Every
 built-in preset has at least 5 player events.
 

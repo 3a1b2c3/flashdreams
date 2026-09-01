@@ -98,6 +98,7 @@ let textEventDrafts = []
 let textEventSequence = 0
 
 let preview = null
+let gameOverOverlay = null
 let sceneCard = null
 let presetSelect = null
 let savePresetButton = null
@@ -482,6 +483,7 @@ function resetHealth(preset) {
 }
 
 function renderHealthBar() {
+  if (gameOverOverlay) gameOverOverlay.hidden = currentHealth > 0
   if (!healthBarFill) return
   const pct = maxHealth > 0 ? Math.max(0, Math.min(100, (currentHealth / maxHealth) * 100)) : 0
   healthBarFill.style.width = `${pct}%`
@@ -660,10 +662,10 @@ function applyPreset(presetIndex) {
   // preset here, at selection time, instead of only discovering it via a
   // failed connect attempt later.
   const totalEventCount = preset.events.length + (preset.directorEvents?.length ?? 0)
-  if (totalEventCount > 12) {
+  if (totalEventCount > 20) {
     context.logEvent(
       `preset "${preset.name}" has ${totalEventCount} events (player + director combined), `
-        + "over the server's 12-event limit -- connecting will fail until it's trimmed.",
+        + "over the server's 20-event limit -- connecting will fail until it's trimmed.",
       { source: "client", level: "error" },
     )
   }
@@ -975,7 +977,7 @@ function attachListeners() {
 
 export default {
   modelName: "Lingbot",
-  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v5", import.meta.url).href,
+  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v6", import.meta.url).href,
   controls,
 
   async mount(sharedContext) {
@@ -990,9 +992,13 @@ export default {
     preview.className = "firstFramePreview"
     preview.alt = ""
     preview.setAttribute("aria-hidden", "true")
+    gameOverOverlay = document.createElement("div")
+    gameOverOverlay.className = "gameOverOverlay"
+    gameOverOverlay.textContent = "GAME OVER"
+    gameOverOverlay.hidden = true
     sceneCard = makeSceneCard()
     eventControls = makeEventControls()
-    context.slots.stage.append(preview)
+    context.slots.stage.append(preview, gameOverOverlay)
     context.slots.panel.append(sceneCard)
     context.slots.controls.append(eventControls)
     bindElements()
@@ -1014,6 +1020,11 @@ export default {
   },
 
   async beforeConnect() {
+    // resetHealth() otherwise only runs on preset selection -- reconnecting
+    // without re-picking a preset left currentHealth carried over from
+    // whatever it was at disconnect (e.g. 0, from a prior playthrough),
+    // instead of a fresh session actually starting at full health/fuel.
+    resetHealth(currentPreset)
     await uploadSessionInput({ includeFirstFrame: true })
   },
 
@@ -1026,6 +1037,11 @@ export default {
     if (payload.type === "chunk_done" && Object.prototype.hasOwnProperty.call(payload, "active_event_id")) {
       activeEventId = payload.active_event_id || null
       renderEventControls()
+      // Previously the Initial Scene panel only hid once onActionSent()
+      // fired (the first movement key or event trigger) -- generation
+      // already starts right after connect, so it sat visible/editable
+      // over a live session until the player happened to press something.
+      setSessionLocked(true)
       return false
     }
     if (payload.type === "event_ack") {
