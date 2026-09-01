@@ -94,8 +94,11 @@ Presets are stored as JSON array in `localStorage["lingbot-presets"]`:
 
 ## Adding a New Built-in Preset (Game)
 
-Built-in presets live in the `scenePresets` array at the top of
-`integrations/lingbot/lingbot/webrtc/web/adapter.js`. To add one:
+Built-in presets live in
+`integrations/lingbot/lingbot/webrtc/web/scene_presets.json` — a plain JSON
+array, fetched at page load by `loadScenePresets()` in `adapter.js` (not
+inlined in the JS, so it can be hand-edited without touching code). To add
+one:
 
 1. **Write the base prompt** (1-3 sentences): subject + environment + style,
    third person (or first person for cockpit/POV scenes like Circuit
@@ -130,17 +133,19 @@ Built-in presets live in the `scenePresets` array at the top of
    and **rejects non-publicly-routable hosts** (private/LAN IPs, localhost)
    as an SSRF guard — so an image served by this same box's own private IP
    won't work as a preset `image` URL, but any normal public host will.
-4. **Add the object** to `scenePresets`:
-   ```js
+4. **Add the object** to the array in `scene_presets.json` (strict JSON —
+   double-quoted keys, no trailing commas, no comments):
+   ```json
    {
-     name: "My Game",
-     image: "https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>.jpg",
-     prompt: "...",
-     events: [
-       { event_id: "thing1", label: "Thing One", prompt: "..." },
-       // ...
+     "name": "My Game",
+     "image": "https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>.jpg",
+     "prompt": "...",
+     "events": [
+       { "event_id": "thing1", "label": "Thing One", "prompt": "..." }
      ],
-   },
+     "directorEvents": [],
+     "hud": { "maxHealth": 100 }
+   }
    ```
 5. **(Optional) Make it the default**: the preset at index `0` is
    auto-applied on page load via `presetSelect.value = "0"; applyPreset(0)`
