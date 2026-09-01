@@ -39,6 +39,7 @@ const scenePresets = [
       { event_id: "storm", label: "Storm", prompt: "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
       { event_id: "fireworks", label: "Fireworks", prompt: "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." },
     ],
+    hud: { maxHealth: 100 },
   },
   {
     name: "Jet Ski Cruise",
@@ -51,20 +52,22 @@ const scenePresets = [
       { event_id: "donut", label: "Donut Spray", prompt: "Lean into tight continuous circles carving donuts." },
     ],
     // Director/environment events (from the original case's "director" pacing note).
+    // health deltas below match the original case's HUD (fuel-as-health).
     directorEvents: [
       { event_id: "shark", label: "Shark Appears", prompt: "A tall grey shark fin rises through the water." },
-      { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation." },
-      { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey." },
-      { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead." },
-      { event_id: "sharklunge", label: "Shark Lunges", prompt: "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray." },
-      { event_id: "waterspout", label: "Waterspout Forms", prompt: "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist." },
+      { event_id: "dolphins", label: "Dolphins Leap", prompt: "Sleek dolphins surface and leap in formation.", health: 5 },
+      { event_id: "storm", label: "Storm Rolls In", prompt: "Dark clouds roll in, wind whips up, sea churns grey.", health: -10 },
+      { event_id: "wave", label: "Rogue Wave", prompt: "A towering rogue wave rears up ahead.", health: -15 },
+      { event_id: "sharklunge", label: "Shark Lunges", prompt: "The shark's fin surges fast across the surface straight toward the jet ski, cutting alongside it in a rush of spray.", health: -15 },
+      { event_id: "waterspout", label: "Waterspout Forms", prompt: "A towering waterspout twists up from the sea on the horizon, a swirling column of water and mist.", health: -15 },
       { event_id: "whale", label: "Whale Breaches", prompt: "A massive whale breaches out of the deep, crashing back down in an explosion of white spray." },
       { event_id: "island", label: "Island Appears", prompt: "A rocky island rises into view on the horizon, growing larger as the jet ski cruises toward it." },
       { event_id: "turtle", label: "Sea Turtle", prompt: "A large green sea turtle glides gently through the clear water just ahead of the jet ski." },
-      { event_id: "volcano", label: "Volcanic Island Erupts", prompt: "The distant island erupts into a volcano, glowing lava streaming down its slopes and ash rising into the sky." },
-      { event_id: "lowfuel", label: "Fuel Runs Low", prompt: "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power." },
-      { event_id: "thrown", label: "Thrown from the Jet Ski", prompt: "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water." },
+      { event_id: "volcano", label: "Volcanic Island Erupts", prompt: "The distant island erupts into a volcano, glowing lava streaming down its slopes and ash rising into the sky.", health: -10 },
+      { event_id: "lowfuel", label: "Fuel Runs Low", prompt: "The jet ski's engine begins to strain and sputter as the fuel runs low, coughing and losing power.", health: -40 },
+      { event_id: "thrown", label: "Thrown from the Jet Ski", prompt: "The jet ski bucks hard over a wave and the rider is thrown clean off, crashing into the water.", health: -30 },
     ],
+    hud: { maxHealth: 100, healthLabel: "Fuel" },
   },
   {
     name: "Noir Alley Combat",
@@ -74,14 +77,15 @@ const scenePresets = [
       { event_id: "jump", label: "Jump", prompt: "The officer springs upward off both feet, leaping high off the wet asphalt, then lands and rises back to a normal upright stance." },
       { event_id: "pistol", label: "Draw Pistol", prompt: "The officer draws a sidearm pistol from its holster, raising it two-handed and aiming it straight ahead down the alley." },
       { event_id: "crouch", label: "Crouch", prompt: "The officer drops into a low, compact crouch, close to the wet asphalt." },
-      { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles." },
-      { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain." },
-      { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike." },
-      { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance." },
+      { event_id: "punch", label: "Punch Combo", prompt: "Snap forward with a fast jab, cross, and heavy hook, water spraying off the knuckles.", health: -5 },
+      { event_id: "roundhouse", label: "Roundhouse Kick", prompt: "Plant the lead foot and whip a fast roundhouse kick through the rain.", health: -5 },
+      { event_id: "baton", label: "Baton Strike", prompt: "Flick open a steel baton and swing it down in a swift overhead strike.", health: -8 },
+      { event_id: "dodge", label: "Dodge Roll", prompt: "Drop into a low crouch and roll fast across the wet asphalt, rising back to a ready stance.", health: 10 },
     ],
     directorEvents: [
       { event_id: "rain", label: "Rain Intensifies", prompt: "The rain turns into a heavy downpour, streaking through the neon light and drumming on the puddles." },
     ],
+    hud: { maxHealth: 100 },
   },
   {
     name: "Water Blaster",
@@ -96,13 +100,14 @@ const scenePresets = [
       { event_id: "dive", label: "Dive", prompt: "Plunge underwater, murky green light and rising bubbles closing over the frame." },
     ],
     directorEvents: [
-      { event_id: "ambush", label: "Rival Blaster Ambush", prompt: "A rival pops up from behind a platform and opens fire with their own water blaster." },
-      { event_id: "soakers", label: "Bathers Get Super Soakers", prompt: "Every bather in the park raises a huge super soaker and opens fire at once." },
-      { event_id: "crocodile", label: "Crocodile Lunges", prompt: "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera." },
+      { event_id: "ambush", label: "Rival Blaster Ambush", prompt: "A rival pops up from behind a platform and opens fire with their own water blaster.", health: -12 },
+      { event_id: "soakers", label: "Bathers Get Super Soakers", prompt: "Every bather in the park raises a huge super soaker and opens fire at once.", health: -12 },
+      { event_id: "crocodile", label: "Crocodile Lunges", prompt: "A crocodile surges up out of the water, jaws gaping, lunging straight at the camera.", health: -20 },
       { event_id: "wavesurge", label: "Wave Surge", prompt: "The calm lake churns into rolling swells, the inflatable platforms pitching hard." },
       { event_id: "balloon", label: "Giant Balloon Drops", prompt: "A huge water balloon plummets down and bursts on the platform ahead in an enormous explosion of water." },
       { event_id: "deflate", label: "Float Deflates", prompt: "One of the large inflatable platforms splits and rapidly deflates, sinking below the surface." },
     ],
+    hud: { maxHealth: 100 },
   },
   {
     name: "Circuit Racer",
@@ -116,15 +121,16 @@ const scenePresets = [
     ],
     directorEvents: [
       { event_id: "rain", label: "Rain Sweeps In", prompt: "Dark storm clouds roll over and rain sweeps across the windscreen, the track glistening wet." },
-      { event_id: "glare", label: "Sun Glare", prompt: "The low sun blazes straight into the windscreen, washing out the track ahead in blinding light." },
+      { event_id: "glare", label: "Sun Glare", prompt: "The low sun blazes straight into the windscreen, washing out the track ahead in blinding light.", health: -5 },
       { event_id: "tunnel", label: "Tunnel Section", prompt: "The track dives into a dark tunnel, strings of overhead lights strobing past overhead." },
       { event_id: "roadfire", label: "Road Fire", prompt: "A wall of orange flame and black smoke erupts across the track directly ahead." },
       { event_id: "flag", label: "Checkered Flag", prompt: "The car sweeps across the start-finish line as a marshal waves the chequered flag overhead." },
       { event_id: "rabbit", label: "Rabbit on the Track", prompt: "A rabbit darts out onto the track ahead and stops directly in the car's path." },
-      { event_id: "puddle", label: "Puddle on the Track", prompt: "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it." },
-      { event_id: "oilslick", label: "Oil Slick Ahead", prompt: "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it." },
+      { event_id: "puddle", label: "Puddle on the Track", prompt: "A wide sheet of standing water lies across the track ahead, the car hydroplaning through it.", health: -5 },
+      { event_id: "oilslick", label: "Oil Slick Ahead", prompt: "A dark oil slick spreads across the track ahead, the car slewing sideways as it hits it.", health: -8 },
       { event_id: "cleardry", label: "Clear Dry Track", prompt: "The clouds break and the circuit runs clear and dry ahead, bright daylight over dry grey tarmac." },
     ],
+    hud: { maxHealth: 100 },
   },
 ]
 
@@ -201,6 +207,18 @@ let controlsTabPlayer = null
 let controlsTabDirector = null
 let enableDirectorModeButton = null
 let playerPromptGroup = null
+// The shared movement key grid (w/a/s/d/q/e/i/j/k/l) lives outside our own
+// panel in the shared page, addressable by its fixed id -- hidden while
+// the Director tab is active since a director doesn't drive movement.
+const movementControlRows = document.getElementById("controlRows")
+let healthBarFill = null
+let healthBarValue = null
+let healthBarLabelText = null
+// Purely a client-side cosmetic HUD -- the server/runtime has no concept of
+// health, this just tracks event `health` deltas locally (matching the
+// original REACTOR case files' HUD) so the presets feel game-like.
+let currentHealth = 100
+let maxHealth = 100
 let directorPromptGroup = null
 let directorPromptInput = null
 let directorPromptSubmitButton = null
@@ -269,6 +287,13 @@ function makeEventControls() {
   root.className = "eventControls"
   root.hidden = true
   root.innerHTML = `
+    <div class="healthBar">
+      <div class="healthBarLabel">
+        <span class="healthBarLabelText">Health</span>
+        <span class="healthBarValue">100/100</span>
+      </div>
+      <div class="healthBarTrack"><div class="healthBarFill"></div></div>
+    </div>
     <div class="controlsTabBar" hidden>
       <button class="controlsTab controlsTabPlayer is-active" type="button">Player</button>
       <button class="controlsTab controlsTabDirector" type="button">Director</button>
@@ -317,6 +342,9 @@ function bindElements() {
   controlsTabDirector = eventControls.querySelector(".controlsTabDirector")
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
+  healthBarFill = eventControls.querySelector(".healthBarFill")
+  healthBarValue = eventControls.querySelector(".healthBarValue")
+  healthBarLabelText = eventControls.querySelector(".healthBarLabelText")
   livePromptInput = eventControls.querySelector(".playerPromptGroup .promptControl input")
   livePromptSubmitButton = eventControls.querySelector(".playerPromptGroup .promptSubmitButton")
   directorPromptGroup = eventControls.querySelector(".directorPromptGroup")
@@ -476,6 +504,38 @@ function collectTextEvents() {
 
 let eventHotkeyMap = new Map()
 
+function getEventHealthDelta(eventId) {
+  // Looked up from currentPreset's own definitions (not the transient
+  // render catalog) so it still works once connected, after the server's
+  // echoed event_catalog -- which has no health field -- takes over as the
+  // render source.
+  const fromPlayer = currentPreset?.events?.find((item) => item.event_id === eventId)
+  const fromDirector = currentPreset?.directorEvents?.find((item) => item.event_id === eventId)
+  const health = (fromPlayer ?? fromDirector)?.health
+  return Number.isFinite(health) ? health : 0
+}
+
+function resetHealth(preset) {
+  maxHealth = Number(preset?.hud?.maxHealth) || 100
+  currentHealth = maxHealth
+  if (healthBarLabelText) healthBarLabelText.textContent = preset?.hud?.healthLabel || "Health"
+  renderHealthBar()
+}
+
+function renderHealthBar() {
+  if (!healthBarFill) return
+  const pct = maxHealth > 0 ? Math.max(0, Math.min(100, (currentHealth / maxHealth) * 100)) : 0
+  healthBarFill.style.width = `${pct}%`
+  healthBarFill.classList.toggle("is-low", pct <= 25)
+  healthBarValue.textContent = `${Math.round(currentHealth)}/${Math.round(maxHealth)}`
+}
+
+function applyHealthDelta(delta) {
+  if (!Number.isFinite(delta) || delta === 0) return
+  currentHealth = Math.max(0, Math.min(maxHealth, currentHealth + delta))
+  renderHealthBar()
+}
+
 function isDirectorEventId(eventId) {
   return Boolean(currentPreset?.directorEvents?.some((item) => item.event_id === eventId))
 }
@@ -549,6 +609,7 @@ function renderEventControls() {
   directorButtons.hidden = !showDirector
   directorPromptGroup.hidden = !showDirector
   playerPromptGroup.hidden = showDirector
+  if (movementControlRows) movementControlRows.hidden = showDirector
   eventControls.hidden = playerItems.length === 0 && directorItems.length === 0
 }
 
@@ -603,6 +664,7 @@ function applyPreset(presetIndex) {
   const preset = scenePresets[Number(presetIndex)]
   if (!preset) return
   currentPreset = preset
+  resetHealth(preset)
   context.logEvent(`preset selected: ${preset.name}`, { source: "client" })
   const url = new URL(window.location.href)
   url.searchParams.set("preset", presetSlug(preset.name))
