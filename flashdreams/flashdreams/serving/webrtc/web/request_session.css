@@ -301,6 +301,7 @@ body[data-status="error"] .statusDot {
   font-size: 1.08rem;
   font-weight: 740;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .controlCard h2 span,

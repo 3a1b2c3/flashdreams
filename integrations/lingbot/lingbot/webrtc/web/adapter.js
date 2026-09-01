@@ -208,6 +208,7 @@ const movementControlRows = document.getElementById("controlRows")
 // swapped between "Player Controls" / "Director Controls" to match
 // whichever mode is active.
 const controlsPanelTitleText = document.getElementById("controlsPanelTitleText")
+let healthBar = null
 let healthBarFill = null
 let healthBarValue = null
 let healthBarLabelText = null
@@ -337,6 +338,7 @@ function bindElements() {
   controlsModeToggle = eventControls.querySelector(".controlsModeToggle")
   enableDirectorModeButton = eventControls.querySelector(".enableDirectorModeButton")
   playerPromptGroup = eventControls.querySelector(".playerPromptGroup")
+  healthBar = eventControls.querySelector(".healthBar")
   healthBarFill = eventControls.querySelector(".healthBarFill")
   healthBarValue = eventControls.querySelector(".healthBarValue")
   healthBarLabelText = eventControls.querySelector(".healthBarLabelText")
@@ -606,6 +608,7 @@ function renderEventControls() {
   directorPromptGroup.hidden = !showDirector
   playerPromptGroup.hidden = showDirector
   if (movementControlRows) movementControlRows.hidden = showDirector
+  if (healthBar) healthBar.hidden = showDirector
   eventControls.hidden = playerItems.length === 0 && directorItems.length === 0
 }
 

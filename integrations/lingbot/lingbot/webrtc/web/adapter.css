@@ -75,7 +75,8 @@ body.is-ready-preview .firstFramePreview {
 .eventControls[hidden],
 .eventButtons[hidden],
 .promptControlGroup[hidden],
-.controlsModeToggle[hidden] {
+.controlsModeToggle[hidden],
+.healthBar[hidden] {
   display: none;
 }
 
