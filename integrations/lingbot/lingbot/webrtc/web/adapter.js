@@ -303,16 +303,24 @@ function clearSelectedFile() {
 
 function updatePreview() {
   const selected = selectedFirstFrameUrl && firstFrameSelectionCommitted
+  // A picked preset (or manually typed URL) that hasn't been pushed to the
+  // server yet via "Update" -- must take priority over the server's own
+  // default first-frame endpoint below, otherwise applyInitialScene()'s
+  // unconditional updatePreview() call stomps the just-applied preset
+  // image back to the server default on every load/re-fetch.
+  const pendingUrl = firstFrameUrlEdited && firstFrameUrlInput.value.trim()
   const initial = initialScene?.has_first_frame && initialScene?.first_frame_url
   if (selected) {
     preview.src = selectedFirstFrameUrl
+  } else if (pendingUrl) {
+    preview.src = pendingUrl
   } else if (initial) {
     const separator = initialScene.first_frame_url.includes("?") ? "&" : "?"
     preview.src = `${initialScene.first_frame_url}${separator}t=${Date.now()}`
   }
   document.body.classList.toggle(
     "is-ready-preview",
-    !context.isVideoVisible() && Boolean(selected || initial),
+    !context.isVideoVisible() && Boolean(selected || pendingUrl || initial),
   )
 }
 
@@ -395,7 +403,14 @@ function collectTextEvents() {
 }
 
 function renderEventControls() {
-  const catalog = Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
+  // A picked preset's events (textEventDrafts, not yet pushed to the
+  // server via connect/Send) must take priority over the server's last-
+  // known event_catalog -- otherwise applyInitialScene()'s unconditional
+  // call here stomps the just-applied preset's events back to whatever
+  // the server currently has (its default catalog on first load).
+  const catalog = textEventsEdited
+    ? textEventDrafts
+    : Array.isArray(initialScene?.event_catalog) ? initialScene.event_catalog : []
   eventControls.hidden = catalog.length === 0
   eventButtons.replaceChildren()
   catalog.forEach((item, index) => {
