@@ -83,8 +83,8 @@ declare arguments this command also has.
 
 | Mode | Takes | Input | Ends when |
 | --- | --- | --- | --- |
-| `mp4` (default) | `--output-path` | none | the session reports itself finished |
-| `webrtc` | `--host`, `--port` | keyboard, mouse, focus, reset, close | the browser disconnects, or the session finishes |
+| `mp4` (default) | `--output-path` | none | the application UI finishes |
+| `webrtc` | `--host`, `--port` | keyboard, mouse, focus, reset, close | the application UI finishes or the client closes it |
 
 These override whatever session the application asked for:
 
@@ -100,6 +100,12 @@ Each defaults to asking for nothing, so a run that names none of them gets what
 the application generates. There is no argument for the UI tick rate, and none
 for `run_session`'s `steps` limit — a caller that needs to bound a run by steps
 drives the runtime from Python.
+
+`--timeout SECONDS` bounds the whole application run, including initialization
+and replacement sessions. At the deadline the UI thread signals the session's
+loops to stop and performs their normal cleanup. An in-flight model step must
+return before the process can finish cleaning up. Synchronous application or
+session initialization likewise cannot be interrupted mid-call.
 
 `--stats-path` adds a `MetricsOutputSink`. It receives the **model** loop's
 results as they are published, not the UI loop's output, so a benchmark measures
@@ -150,10 +156,15 @@ neither thread waits on the other to notice.
 
 ## `PresentationManager`
 
-The model thread publishes a list of channels per step into a bounded queue
-(`max_pending`, two by default). The UI thread calls `advance` once per tick,
-which walks the frames within the chunk it is already showing before taking
-another off the queue.
+The model thread publishes a list of channels per step into a bounded chunk
+queue. The queue holds one pending chunk by default. Once the UI thread takes
+that chunk, its remaining frames live in the active presented chunk rather than
+the queue; an empty queue with an active chunk means presentation is keeping up.
+
+`publish` observes model-step timing for cadence, and the UI thread calls
+`advance` once per tick so the manager can decide whether the next presentable
+model frame is due. If the pending chunk queue is full, `advance` ignores the
+normal cadence and drains the active chunk so backlog does not build behind it.
 
 When CUDA is available, the default `PresentationManager` creates a stream at
 the device's highest available priority. `run_session` keeps that one stream
@@ -182,16 +193,20 @@ full:
 `SessionDesc.presentation_mode` decides what the UI does when no new frame is
 ready:
 
-- `CONTINUOUS` runs the UI loop every tick, re-presenting the newest
-  model frame with UI redrawing.
+- `CONTINUOUS` runs the UI loop every tick while inference is active,
+  re-presenting the newest model frame when necessary.
 - `ON_DEMAND` runs the UI loop only when `advance` moves to a new model frame.
+
+While inference has not started or has finished, an unfinished UI runs every
+tick in either mode. The model loop owns `inference_state`; the UI can query it
+through `model_inference_state`. The UI remains active after model output drains
+and may use `is_finished` to declare its own terminal condition.
 
 For output that has to be compared frame by frame, use `BLOCK` with
 `ON_DEMAND`: together they keep every frame in the presentation manager
-and present each exactly once in order. Steps that could not be kept are counted
+and present each exactly once in order. Chunks that could not be kept are counted
 in `dropped_for_space` and `discarded_at_reset`, and logged when the run ends.
-Both count model steps rather than frames, so one step of twelve frames counts
-once.
+Both counters use model chunks as their unit.
 
 ## Presenting and writing
 
@@ -207,9 +222,10 @@ enforces matching dimensions and device instead of silently repairing them.
 
 The default UI loop, `BlitModelOutputToScreenLoop`, composites every model
 channel in list order as if they were image layers and reshapes the result into
-the session's layout. `SlangPyUILoop` is the alternative, for widgets drawn over
-the model output; it returns a `[1, C, H, W]` frame, so a session using it
-declares a `tchw` layout.
+the session's layout.
+
+`SlangPyUILoop` is the alternative for SlangPy's retained
+widget subset. `ImGuiUILoop` exposes the complete ImGui API. Both return a `[1, C, H, W]` frame, so an `ISession` using either should declare a `tchw` output layout.
 
 `IClientWindow` is both an `InputSource` and an `OutputSink`, so a window is
 written to with the same three calls as any sink: `open` with the session
@@ -218,12 +234,17 @@ delegates over the thing that does the work — `Mp4ClientWindow` over
 `Mp4OutputSink`, `WebRTCClientWindow` over `WebRTCServer` — and neither describes
 the output shape, because the session already did.
 
-They differ in what they can do rather than in how they are driven. The MP4
-window reports no input and never sends a close, so a session written to a file
-has to finish on its own. The WebRTC window turns browser keyboard, mouse and
-focus events into input and a disconnecting browser into a close; because those
-arrive on the server's own thread, it queues them and hands them over in batches
-when the session asks.
+They differ in what they can do rather than in how they are driven. A session
+chooses its UI independently of the client window. Browser keyboard, mouse and
+focus events arrive on the server's own thread, so it queues them and hands them
+over in batches when the session asks.
+
+A UI loop may call `request_new_session(session_desc)` during its step with a
+fully resolved replacement description. `run_session` stops and cleans the
+current session, leaves the interactive window open, and returns that
+description unchanged. `ApplicationRunner` creates the replacement from it. A
+WebRTC browser disconnect releases only its peer connection, so refreshing the
+page does not stop the session, server, or application.
 
 The UI thread owns WebRTC cadence. Each `write` synchronously materializes one
 owned video frame and admits it to a two-frame FIFO of unsent frames. The WebRTC
@@ -231,6 +252,10 @@ track returns queued frames to aiortc immediately: it neither sleeps to pace
 them nor repeats the latest frame. If network or encoder congestion fills the
 FIFO, the next write replaces only its oldest unsent frame; a frame already
 handed to aiortc is never overwritten.
+
+When a replacement session reopens the WebRTC window, it keeps the existing
+peer connection and discards frames still queued from the previous session. A
+replacement must keep the negotiated layout, frame rates, width, and height.
 
 What a sink expects of the pixel values it is handed is part of the result
 contract, in [`api_v2`](../api_v2/README.md#what-a-step-returns).

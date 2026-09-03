@@ -25,7 +25,7 @@ from slangpy_ui_demo.model_output_app import (
 from slangpy_ui_demo.text_input_app import TextInputSlangPyUILoop, TextInputState
 
 from flashdreams.runtime_v2.presentation_manager import PresentationManager
-from flashdreams.runtime_v2.session_desc import SessionDesc
+from flashdreams.runtime_v2.session_desc import BackpressureMode, SessionDesc
 from flashdreams.runtime_v2.slangpy_ui_renderer import _route_input_events
 from flashdreams.runtime_v2.user_input_event import (
     KeyboardInputState,
@@ -58,7 +58,7 @@ def test_invoke_async_toggles_model_owned_color_on_w_press() -> None:
         failure_queue=failure_queue,
     )
     ui_loop.register_session_ui_loop_objects(
-        output_layout=desc.output_layout,
+        session_desc=desc,
         presentation_manager=PresentationManager(),
     )
     ui = SimpleNamespace(
@@ -80,16 +80,18 @@ def test_invoke_async_toggles_model_owned_color_on_w_press() -> None:
     ui_loop.step_ui(ui, 0, w_pressed)
     assert not model_state.blue
 
-    step_index = model_loop._begin_run(UserInputEvents([]), generation=0)
-    assert step_index == 0
-    blue_results = model_loop.step(step_index, UserInputEvents([]))
+    run = model_loop._begin_run(UserInputEvents([]), generation=0)
+    assert run.step_index == 0
+    blue_results = model_loop.step(run.step_index, UserInputEvents([]))
     blue = blue_results[0].read_output()
-    model_loop._finish_run(blue_results)
+    model_loop._finish_run(blue_results, step_completed=True)
 
     ui_loop.step_ui(ui, 1, w_pressed)
-    step_index = model_loop._begin_run(UserInputEvents([]), generation=0)
-    assert step_index == 1
-    red_again = model_loop.step(step_index, UserInputEvents([]))[0].read_output()
+    run = model_loop._begin_run(UserInputEvents([]), generation=0)
+    assert run.step_index == 1
+    red_results = model_loop.step(run.step_index, UserInputEvents([]))
+    red_again = red_results[0].read_output()
+    model_loop._finish_run(red_results, step_completed=True)
 
     assert not model_state.blue
     assert torch.equal(red[0, :, 0, 0], torch.tensor([1.0, -1.0, -1.0]))
@@ -109,7 +111,7 @@ def test_text_input_updates_ui_owned_state() -> None:
         failure_queue=queue.Queue(),
     )
     loop.register_session_ui_loop_objects(
-        output_layout=SessionDesc().output_layout,
+        session_desc=SessionDesc(),
         presentation_manager=PresentationManager(),
     )
     ui = SimpleNamespace(
@@ -191,6 +193,11 @@ def test_model_output_emits_repeating_selectable_fade_channels() -> None:
         assert output[0, 3, 0, 0] == (1.0 if index == 0 else 0.5)
         assert torch.equal(output, again.read_output())
 
+    session._presentation_manager.configure(
+        backpressure_mode=BackpressureMode.BLOCK,
+        stop=threading.Event(),
+        put_timeout=0.01,
+    )
     session._presentation_manager.publish(0, chunk)
     assert session._presentation_manager.advance(0)[0]
     frame = ui_loop.presented_model_frame(1)

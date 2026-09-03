@@ -19,9 +19,9 @@ conflicts = [[
 
 [manifest]
 members = [
+    "crazy-robotaxi",
     "flashdreams",
     "flashdreams-cam2v",
-    "flashdreams-cam2v-lingbot",
     "flashdreams-causal-forcing",
     "flashdreams-color-fade",
     "flashdreams-cosmos-predict2",
@@ -38,16 +38,13 @@ members = [
     "flashdreams-self-forcing",
     "flashdreams-slangpy-ui-demo",
     "flashdreams-t2v",
-    "flashdreams-t2v-causal-forcing",
-    "flashdreams-t2v-cosmos-predict2",
-    "flashdreams-t2v-fastvideo-causal-wan22",
-    "flashdreams-t2v-self-forcing",
-    "flashdreams-t2v-wan21",
+    "flashdreams-v2v",
     "flashdreams-wan21",
     "flashdreams-wan22",
     "flashdreams-waypoint",
     "flashdreams-waypoint-v2",
     "ludus-renderer",
+    "omnidreams-game-engine",
 ]
 overrides = [
     { name = "numpy", specifier = ">=1.24,<2.5" },
@@ -678,6 +675,34 @@ wheels = [
 ]
 
 [[package]]
+name = "crazy-robotaxi"
+version = "0.1.0"
+source = { editable = "apps/crazy_robotaxi" }
+dependencies = [
+    { name = "flashdreams", extra = ["local-window"] },
+    { name = "omnidreams-game-engine" },
+    { name = "torch", version = "2.11.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(sys_platform != 'win32' and extra == 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-manual-marker" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "flashdreams", extras = ["local-window"], editable = "flashdreams" },
+    { name = "omnidreams-game-engine", editable = "apps/omnidreams_game_engine" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-manual-marker", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "torch" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "cryptography"
 version = "49.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1144,26 +1169,9 @@ dependencies = [
 requires-dist = [{ name = "flashdreams", extras = ["local-window", "runners", "serving"], editable = "flashdreams" }]
 
 [[package]]
-name = "flashdreams-cam2v-lingbot"
-version = "0.1.0"
-source = { editable = "integrations_v2/cam2v_lingbot" }
-dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-cam2v" },
-    { name = "flashdreams-lingbot" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-cam2v", editable = "apps/cam2v" },
-    { name = "flashdreams-lingbot", editable = "integrations/lingbot" },
-]
-
-[[package]]
 name = "flashdreams-causal-forcing"
 version = "0.1.0"
-source = { editable = "integrations/causal_forcing" }
+source = { editable = "integrations_v2/causal_forcing" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -1200,7 +1208,7 @@ requires-dist = [{ name = "flashdreams", editable = "flashdreams" }]
 [[package]]
 name = "flashdreams-cosmos-predict2"
 version = "0.1.0"
-source = { editable = "integrations/cosmos_predict2" }
+source = { editable = "integrations_v2/cosmos_predict2" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -1228,7 +1236,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "flashdreams-fastvideo-causal-wan22"
 version = "0.1.0"
-source = { editable = "integrations/fastvideo_causal_wan22" }
+source = { editable = "integrations_v2/fastvideo_causal_wan22" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -1252,29 +1260,23 @@ provides-extras = ["dev"]
 [[package]]
 name = "flashdreams-flashvsr"
 version = "0.1.0"
-source = { editable = "integrations/flashvsr" }
+source = { editable = "integrations_v2/flashvsr" }
 dependencies = [
     { name = "flashdreams" },
-    { name = "grpcio" },
-    { name = "mediapy" },
-    { name = "pillow" },
-    { name = "protobuf" },
+    { name = "flashdreams-v2v" },
+    { name = "ninja" },
 ]
 
 [package.optional-dependencies]
 dev = [
-    { name = "grpcio-tools" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "flashdreams", editable = "flashdreams" },
-    { name = "grpcio", specifier = ">=1.80" },
-    { name = "grpcio-tools", marker = "extra == 'dev'", specifier = ">=1.80" },
-    { name = "mediapy", specifier = ">=1.1" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "protobuf", specifier = ">=6.31.1" },
+    { name = "flashdreams-v2v", editable = "apps/v2v" },
+    { name = "ninja", specifier = ">=1.13.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
 ]
 provides-extras = ["dev"]
@@ -1282,15 +1284,12 @@ provides-extras = ["dev"]
 [[package]]
 name = "flashdreams-hy-worldplay"
 version = "0.1.0"
-source = { editable = "integrations/hy_worldplay" }
+source = { editable = "integrations_v2/hy_worldplay" }
 dependencies = [
     { name = "diffusers" },
     { name = "flashdreams" },
+    { name = "flashdreams-cam2v" },
     { name = "flashdreams-wan22" },
-    { name = "imageio", extra = ["ffmpeg"] },
-    { name = "mediapy" },
-    { name = "moviepy" },
-    { name = "opencv-python-headless" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
@@ -1305,11 +1304,8 @@ dev = [
 requires-dist = [
     { name = "diffusers", specifier = ">=0.34" },
     { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-wan22", editable = "integrations/wan22" },
-    { name = "imageio", extras = ["ffmpeg"], specifier = ">=2.31" },
-    { name = "mediapy", specifier = ">=1.1" },
-    { name = "moviepy", specifier = ">=1.0,<2" },
-    { name = "opencv-python-headless" },
+    { name = "flashdreams-cam2v", editable = "apps/cam2v" },
+    { name = "flashdreams-wan22", editable = "integrations_v2/wan22" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "scipy", specifier = ">=1.11" },
 ]
@@ -1348,17 +1344,10 @@ requires-dist = [
 [[package]]
 name = "flashdreams-lingbot"
 version = "0.1.0"
-source = { editable = "integrations/lingbot" }
+source = { editable = "integrations_v2/lingbot" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "aiortc" },
     { name = "flashdreams" },
     { name = "flashdreams-cam2v" },
-    { name = "mediapy" },
-    { name = "opencv-python-headless" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
 ]
 
 [package.optional-dependencies]
@@ -1369,15 +1358,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.9" },
-    { name = "aiortc", specifier = ">=1.9" },
     { name = "flashdreams", editable = "flashdreams" },
     { name = "flashdreams-cam2v", editable = "apps/cam2v" },
-    { name = "mediapy", specifier = ">=1.1" },
-    { name = "opencv-python-headless", specifier = ">=4.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-    { name = "scipy", specifier = ">=1.11" },
 ]
 provides-extras = ["dev"]
 
@@ -1397,6 +1381,7 @@ name = "flashdreams-omnidreams"
 version = "0.1.0"
 source = { editable = "integrations_v2/omnidreams" }
 dependencies = [
+    { name = "crazy-robotaxi" },
     { name = "einops" },
     { name = "flashdreams", extra = ["serving"] },
     { name = "flashdreams-interactive-drive-v2" },
@@ -1408,7 +1393,7 @@ dependencies = [
     { name = "mediapy" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "nvidia-cudnn-cu13", version = "9.23.2.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "nvidia-cudnn-cu13", marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "nvidia-cudnn-frontend" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
@@ -1443,6 +1428,7 @@ rtx-postprocess = [
 
 [package.metadata]
 requires-dist = [
+    { name = "crazy-robotaxi", editable = "apps/crazy_robotaxi" },
     { name = "einops", specifier = ">=0.8" },
     { name = "flashdreams", extras = ["rtx-postprocess"], marker = "extra == 'rtx-postprocess'", editable = "flashdreams" },
     { name = "flashdreams", extras = ["serving"], editable = "flashdreams" },
@@ -1455,7 +1441,7 @@ requires-dist = [
     { name = "ludus-renderer", editable = "integrations_v2/omnidreams/impl/ludus-renderer" },
     { name = "mediapy", specifier = ">=1.1" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "nvidia-cudnn-cu13", marker = "sys_platform == 'win32'", specifier = "==9.23.2.1" },
+    { name = "nvidia-cudnn-cu13", marker = "sys_platform == 'win32'", specifier = "==9.20.0.48" },
     { name = "nvidia-cudnn-frontend", specifier = "==1.22.1" },
     { name = "opencv-python-headless", specifier = ">=4.5" },
     { name = "pillow", specifier = ">=10.0" },
@@ -1529,7 +1515,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "flashdreams-self-forcing"
 version = "0.1.0"
-source = { editable = "integrations/self_forcing" }
+source = { editable = "integrations_v2/self_forcing" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -1569,88 +1555,53 @@ dependencies = [
     { name = "flashdreams", extra = ["local-window", "serving"] },
 ]
 
-[package.metadata]
-requires-dist = [{ name = "flashdreams", extras = ["local-window", "serving"], editable = "flashdreams" }]
-
-[[package]]
-name = "flashdreams-t2v-causal-forcing"
-version = "0.1.0"
-source = { editable = "integrations_v2/t2v_causal_forcing" }
-dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-causal-forcing" },
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "tomli" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-causal-forcing", editable = "integrations/causal_forcing" },
+    { name = "flashdreams", extras = ["local-window", "serving"], editable = "flashdreams" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "tomli", marker = "extra == 'dev'", specifier = ">=2.0" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
-name = "flashdreams-t2v-cosmos-predict2"
+name = "flashdreams-v2v"
 version = "0.1.0"
-source = { editable = "integrations_v2/t2v_cosmos_predict2" }
+source = { editable = "apps/v2v" }
 dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-cosmos-predict2" },
+    { name = "flashdreams", extra = ["local-window", "serving"] },
+    { name = "imageio-ffmpeg" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.11.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(sys_platform != 'win32' and extra == 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-cosmos-predict2", editable = "integrations/cosmos_predict2" },
+    { name = "flashdreams", extras = ["local-window", "serving"], editable = "flashdreams" },
+    { name = "imageio-ffmpeg", specifier = ">=0.5" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "torch", specifier = ">=2.9" },
 ]
-
-[[package]]
-name = "flashdreams-t2v-fastvideo-causal-wan22"
-version = "0.1.0"
-source = { editable = "integrations_v2/t2v_fastvideo_causal_wan22" }
-dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-fastvideo-causal-wan22" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-fastvideo-causal-wan22", editable = "integrations/fastvideo_causal_wan22" },
-]
-
-[[package]]
-name = "flashdreams-t2v-self-forcing"
-version = "0.1.0"
-source = { editable = "integrations_v2/t2v_self_forcing" }
-dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-self-forcing" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-self-forcing", editable = "integrations/self_forcing" },
-]
-
-[[package]]
-name = "flashdreams-t2v-wan21"
-version = "0.1.0"
-source = { editable = "integrations_v2/t2v_wan21" }
-dependencies = [
-    { name = "flashdreams" },
-    { name = "flashdreams-wan21" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "flashdreams", editable = "flashdreams" },
-    { name = "flashdreams-wan21", editable = "integrations/wan21" },
-]
+provides-extras = ["dev"]
 
 [[package]]
 name = "flashdreams-wan21"
 version = "0.1.0"
-source = { editable = "integrations/wan21" }
+source = { editable = "integrations_v2/wan21" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -1676,7 +1627,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "flashdreams-wan22"
 version = "0.1.0"
-source = { editable = "integrations/wan22" }
+source = { editable = "integrations_v2/wan22" }
 dependencies = [
     { name = "flashdreams" },
     { name = "flashdreams-t2v" },
@@ -2646,22 +2597,6 @@ wheels = [
 ]
 
 [[package]]
-name = "moviepy"
-version = "1.0.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "decorator" },
-    { name = "imageio" },
-    { name = "imageio-ffmpeg" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "proglog" },
-    { name = "requests" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/18/54/01a8c4e35c75ca9724d19a7e4de9dc23f0ceb8769102c7de056113af61c3/moviepy-1.0.3.tar.gz", hash = "sha256:2884e35d1788077db3ff89e763c5ba7bfddbd7ae9108c9bc809e7ba58fa433f5", size = 388311, upload-time = "2020-05-07T16:27:46.856Z" }
-
-[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3066,36 +3001,13 @@ wheels = [
 name = "nvidia-cudnn-cu13"
 version = "9.20.0.48"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.12' and sys_platform != 'win32'",
-    "python_full_version == '3.11.*' and sys_platform != 'win32'",
-    "python_full_version < '3.11' and sys_platform != 'win32'",
-]
 dependencies = [
-    { name = "nvidia-cublas", marker = "(sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "nvidia-cublas", marker = "sys_platform == 'win32' or extra == 'extra-11-flashdreams-dev' or extra != 'group-11-flashdreams-cuda12' or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/56/c5/83384d846b2fd17c44bd499b36c75a45ed4f095fbbb2252294e89cea5c5c/nvidia_cudnn_cu13-9.20.0.48-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:e31454ae00094b0c55319d9d15b6fa2fc50a9e1c0f5c8c80fb75258234e731e1", size = 444574296, upload-time = "2026-03-09T19:28:27.751Z" },
     { url = "https://files.pythonhosted.org/packages/6e/5e/edb9c0ae051602c3ccaffe424256463636d639e27d7f302dde9975ef9e7a/nvidia_cudnn_cu13-9.20.0.48-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:0c45dd8eeb50b603f07995b1b300c62ffe6a1980482b82b3bcf94a4ca9d49304", size = 366173588, upload-time = "2026-03-09T19:29:34.474Z" },
     { url = "https://files.pythonhosted.org/packages/78/39/21507455b1bca8b5702a9e9fc6ce73735f216f558dac2c9ede58e4d456b8/nvidia_cudnn_cu13-9.20.0.48-py3-none-win_amd64.whl", hash = "sha256:af8139732b99c0118be65ea5aac97f0d46018f8c552889e49d2fb0c6261a4a24", size = 350712614, upload-time = "2026-03-09T19:31:11.398Z" },
-]
-
-[[package]]
-name = "nvidia-cudnn-cu13"
-version = "9.23.2.1"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.12' and sys_platform == 'win32'",
-    "python_full_version == '3.11.*' and sys_platform == 'win32'",
-    "python_full_version < '3.11' and sys_platform == 'win32'",
-]
-dependencies = [
-    { name = "nvidia-cublas", marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/0f/0234666bed78ecdc767be01b53710a01df2773194ea856ba143eb3e70490/nvidia_cudnn_cu13-9.23.2.1-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:d826a14b848a719ff744c19891b6bcbe0a62cc01cd1d426d7cfd759c67d8d7b8", size = 616916016, upload-time = "2026-06-16T03:54:17.416Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/0f/f9434b616c38ffaf50b389f68e9b7b9977e35b964d8b7bded939369905bc/nvidia_cudnn_cu13-9.23.2.1-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:0c38408c043d67ea8a3cbe61fe272c3cf5c7f5ec466adfe8ac63e91d4f11cdc7", size = 518553472, upload-time = "2026-06-16T04:43:30.541Z" },
-    { url = "https://files.pythonhosted.org/packages/ba/21/1cd2f2789f624c5c4b1f934ca7872bfc372e95f9f6690fdfda7e2031d4e5/nvidia_cudnn_cu13-9.23.2.1-py3-none-win_amd64.whl", hash = "sha256:03d164905021b64acf429f55e1bbbc26be9151299c2b55e71293c5cf2f1a13e6", size = 403307118, upload-time = "2026-06-16T04:48:03.125Z" },
 ]
 
 [[package]]
@@ -3369,6 +3281,49 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/37/b4/58e1bbb8d6fc9ed786564d0878314ea2f2cd458c84861a5130927e431ff6/nvidia_vfx-0.1.0.1.tar.gz", hash = "sha256:8a26bae3a967a2ce29040f17ba9d75e106f3d0c68016d440a77ed9c7eb05daae", size = 2673, upload-time = "2026-03-09T19:29:40.556Z" }
 
 [[package]]
+name = "omnidreams-game-engine"
+version = "0.1.0"
+source = { editable = "apps/omnidreams_game_engine" }
+dependencies = [
+    { name = "filelock" },
+    { name = "flashdreams" },
+    { name = "flashdreams-interactive-drive-v2" },
+    { name = "ludus-renderer" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "pillow" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "shapely" },
+    { name = "torch", version = "2.11.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(sys_platform != 'win32' and extra == 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "torch", version = "2.12.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32' or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-manual-marker" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "filelock", specifier = ">=3" },
+    { name = "flashdreams", editable = "flashdreams" },
+    { name = "flashdreams-interactive-drive-v2", editable = "apps/interactive_drive" },
+    { name = "ludus-renderer", editable = "integrations_v2/omnidreams/impl/ludus-renderer" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pyarrow" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-manual-marker", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "shapely", specifier = ">=2.0" },
+    { name = "torch" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "onnx"
 version = "1.22.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3639,18 +3594,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8e/22/2de9408ac81acbb8a7d05d4cc064a152ccf33b3d480ebe0cd292153db239/pre_commit-4.6.0.tar.gz", hash = "sha256:718d2208cef53fdc38206e40524a6d4d9576d103eb16f0fec11c875e7716e9d9", size = 198525, upload-time = "2026-04-21T20:31:41.613Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/6e/4b28b62ecb6aae56769c34a8ff1d661473ec1e9519e2d5f8b2c150086b26/pre_commit-4.6.0-py2.py3-none-any.whl", hash = "sha256:e2cf246f7299edcabcf15f9b0571fdce06058527f0a06535068a86d38089f29b", size = 226472, upload-time = "2026-04-21T20:31:40.092Z" },
-]
-
-[[package]]
-name = "proglog"
-version = "0.1.12"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/af/c108866c452eda1132f3d6b3cb6be2ae8430c97e9309f38ca9dbd430af37/proglog-0.1.12.tar.gz", hash = "sha256:361ee074721c277b89b75c061336cb8c5f287c92b043efa562ccf7866cda931c", size = 8794, upload-time = "2025-05-09T14:36:18.316Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/1b/f7ea6cde25621cd9236541c66ff018f4268012a534ec31032bcb187dc5e7/proglog-0.1.12-py3-none-any.whl", hash = "sha256:ccaafce51e80a81c65dc907a460c07ccb8ec1f78dc660cfd8f9ec3a22f01b84c", size = 6337, upload-time = "2025-05-09T14:36:16.798Z" },
 ]
 
 [[package]]
@@ -4956,7 +4899,7 @@ dependencies = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (python_full_version < '3.11' and sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (python_full_version >= '3.11' and extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (sys_platform == 'win32' and extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra != 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (python_full_version >= '3.11' and sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (python_full_version < '3.11' and extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (python_full_version < '3.11' and extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13') or (sys_platform == 'win32' and extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra != 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "nvidia-cublas", marker = "(sys_platform != 'win32' and extra == 'extra-11-flashdreams-dev') or (sys_platform != 'win32' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
-    { name = "nvidia-cudnn-cu13", version = "9.20.0.48", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra == 'extra-11-flashdreams-dev') or (sys_platform == 'linux' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
+    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-11-flashdreams-dev') or (sys_platform == 'linux' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-11-flashdreams-dev') or (sys_platform == 'linux' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-11-flashdreams-dev') or (sys_platform == 'linux' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },
     { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-11-flashdreams-dev') or (sys_platform == 'linux' and extra != 'group-11-flashdreams-cuda12') or (extra == 'extra-11-flashdreams-dev' and extra == 'group-11-flashdreams-cuda12') or (extra == 'group-11-flashdreams-cuda12' and extra == 'group-11-flashdreams-cuda13')" },

@@ -13,7 +13,12 @@ members = [
     # Nested sub-packages that the integration globs do not reach.
     "integrations_v2/omnidreams/impl/ludus-renderer",
 ]
-exclude = ["apps/__init__.py", "apps/README.md", "integrations_v2/README.md"]
+exclude = [
+    "apps/__init__.py",
+    "apps/README.md",
+    "integrations/omnidreams",
+    "integrations_v2/README.md",
+]
 
 # Override nvidia-cublas to >=13.4 because transformer-engine-cu13 2.14.0 was
 # compiled against cuBLAS 13.4.x, while torch 2.11 pins nvidia-cublas 13.1.0.3.
@@ -50,29 +55,28 @@ ignore = ["flashdreams/flashdreams/accelerated/multi_head_attention/triton/**", 
 extraPaths = [
     "flashdreams",
     "apps",
+    "apps/cam2v",
+    "apps/t2v",
+    "apps/crazy_robotaxi",
     "apps/interactive_drive",
+    "apps/omnidreams_game_engine",
+    "apps/v2v",
     "integrations_v2",
     "integrations_v2/omnidreams/impl/ludus-renderer",
-    "integrations/causal_forcing",
-    "integrations/cosmos_predict2",
-    "integrations/flashvsr",
-    "integrations/fastvideo_causal_wan22",
-    "integrations/hy_worldplay",
-    "integrations/lingbot",
+    "integrations_v2/causal_forcing",
+    "integrations_v2/cosmos_predict2",
+    "integrations_v2/flashvsr",
+    "integrations_v2/fastvideo_causal_wan22",
+    "integrations_v2/hy_worldplay",
+    "integrations_v2/lingbot",
     "integrations/sana",
-    "integrations/self_forcing",
-    "integrations/wan21",
-    "integrations/wan22",
+    "integrations_v2/self_forcing",
+    "integrations_v2/wan21",
+    "integrations_v2/wan22",
     "integrations/waypoint",
     "integrations_v2/color_fade",
-    "integrations_v2/cam2v_lingbot",
     "integrations_v2/null_model",
     "integrations_v2/red_screen",
-    "integrations_v2/t2v_causal_forcing",
-    "integrations_v2/t2v_cosmos_predict2",
-    "integrations_v2/t2v_fastvideo_causal_wan22",
-    "integrations_v2/t2v_self_forcing",
-    "integrations_v2/t2v_wan21",
     "integrations_v2/slangpy_ui_demo",
     "integrations_v2/waypoint",
 ]
@@ -88,29 +92,28 @@ python-version = "3.10"
 extra-paths = [
     "flashdreams",
     "apps",
+    "apps/cam2v",
+    "apps/t2v",
+    "apps/crazy_robotaxi",
     "apps/interactive_drive",
+    "apps/omnidreams_game_engine",
+    "apps/v2v",
     "integrations_v2",
     "integrations_v2/omnidreams/impl/ludus-renderer",
-    "integrations/causal_forcing",
-    "integrations/cosmos_predict2",
-    "integrations/flashvsr",
-    "integrations/fastvideo_causal_wan22",
-    "integrations/hy_worldplay",
-    "integrations/lingbot",
+    "integrations_v2/causal_forcing",
+    "integrations_v2/cosmos_predict2",
+    "integrations_v2/flashvsr",
+    "integrations_v2/fastvideo_causal_wan22",
+    "integrations_v2/hy_worldplay",
+    "integrations_v2/lingbot",
     "integrations/sana",
-    "integrations/self_forcing",
-    "integrations/wan21",
-    "integrations/wan22",
+    "integrations_v2/self_forcing",
+    "integrations_v2/wan21",
+    "integrations_v2/wan22",
     "integrations/waypoint",
     "integrations_v2/color_fade",
-    "integrations_v2/cam2v_lingbot",
     "integrations_v2/null_model",
     "integrations_v2/red_screen",
-    "integrations_v2/t2v_causal_forcing",
-    "integrations_v2/t2v_cosmos_predict2",
-    "integrations_v2/t2v_fastvideo_causal_wan22",
-    "integrations_v2/t2v_self_forcing",
-    "integrations_v2/t2v_wan21",
     "integrations_v2/slangpy_ui_demo",
     "integrations_v2/waypoint",
 ]
@@ -124,9 +127,20 @@ extra-paths = [
 exclude = [
     "**/protos/*pb2*",
     "apps/interactive_drive/interactive_drive/**",
+    # These map/archive parsers and numerical PhysX adapters intentionally
+    # accept dynamically shaped YAML, Arrow, and NumPy values. Keep the new
+    # V2 application, session, engine contracts, rollout, input, and renderer
+    # boundaries type-checked while isolating that data-oriented edge code.
+    "apps/omnidreams_game_engine/omnidreams_game_engine/game_map/**",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/math_utils.py",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/patterns.py",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/ply_io.py",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/scene_loader.py",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/simulation/components.py",
+    "apps/omnidreams_game_engine/omnidreams_game_engine/simulation/game_physics.py",
     # Bench / parity-debugging scaffolding for the hy_worldplay integration;
     # not shipped product, mirrors the interactive_drive precedent above.
-    "integrations/hy_worldplay/tests/parity_check/**",
+    "integrations_v2/hy_worldplay/tests/parity_check/**",
 ]
 
 [tool.ty.rules]

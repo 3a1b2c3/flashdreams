@@ -12,17 +12,17 @@ from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 
 
 class BackpressureMode(Enum):
-    """What the model thread does when its output queue is full."""
+    """What the model thread does when its presentation chunk queue is full."""
 
     BLOCK = "block"
     """Wait when the presentation queue is full."""
 
     DROP_OLDEST = "drop_oldest"
-    """Drop the oldest queued model step."""
+    """Drop the oldest queued model chunk."""
 
 
 class PresentationMode(Enum):
-    """What the UI loop does when no new model frame is ready."""
+    """Control what the UI loop does when no new model frame is ready."""
 
     ON_DEMAND = "on_demand"
     """Present only when there is a new model frame and it is selected."""
@@ -62,7 +62,7 @@ class SessionDesc:
     """Output video height in pixels."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
-    """Extra values a runtime and an application agree on. Nothing here reads it."""
+    """Runtime and application extension values, including reserved runtime keys."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.backpressure_mode, BackpressureMode):
@@ -89,4 +89,8 @@ class SessionDesc:
             raise ValueError("SessionDesc.video_height must be > 0 when set.")
 
 
-__all__ = ["BackpressureMode", "PresentationMode", "SessionDesc"]
+__all__ = [
+    "BackpressureMode",
+    "PresentationMode",
+    "SessionDesc",
+]

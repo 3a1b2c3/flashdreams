@@ -32,6 +32,7 @@ from omnidreams.impl.native.acceleration import (
 from torch import Tensor
 
 from flashdreams.core.attention.rope import (
+    KVCacheRelativeRotaryPositionEmbedding3D,
     RotaryPositionEmbedding3D,
 )
 from flashdreams.core.checkpoint.load import load_checkpoint
@@ -78,6 +79,26 @@ DEFAULT_CAMERA_VIEW_MAPPING: dict[str, int] = dict(
 
 
 @dataclass(kw_only=True)
+class TextEditGuidance:
+    """Transient old/new prompt guidance for a mid-rollout text edit."""
+
+    scale: float
+    """Strength applied to the new-minus-old flow direction."""
+
+    chunks_remaining: int
+    """Number of upcoming autoregressive chunks to guide."""
+
+    kv_old: list[tuple[Tensor, Tensor]] = field(default_factory=list)
+    """Per-block cross-attention K/V for the pre-edit prompt."""
+
+    kv_new: list[tuple[Tensor, Tensor]] = field(default_factory=list)
+    """Per-block cross-attention K/V for the post-edit prompt."""
+
+    use_lora: bool = False
+    """Whether a distilled LoRA realizes this window with one forward."""
+
+
+@dataclass(kw_only=True)
 class CosmosTransformerCache(TransformerAutoregressiveCache):
     """Long-lived AR cache for the Cosmos transformer."""
 
@@ -87,7 +108,7 @@ class CosmosTransformerCache(TransformerAutoregressiveCache):
     network_cache_uncond: CosmosDiTNetworkCache | None = None
     """Unconditional cache for CFG; ``None`` disables CFG."""
 
-    rope_adapter: RotaryPositionEmbedding3D
+    rope_adapter: RotaryPositionEmbedding3D | KVCacheRelativeRotaryPositionEmbedding3D
     """3D RoPE adapter, advanced via ``shift_t`` each step."""
 
     rope_freqs: Tensor | None = None
@@ -114,7 +135,16 @@ class CosmosTransformerCache(TransformerAutoregressiveCache):
     autoregressive_index: int = -1
     """AR step index for the chunk currently being processed; ``-1`` before the first ``start``."""
 
+    text_edit_guidance: TextEditGuidance | None = None
+    """Transient text guidance, or ``None`` when no edit window is active."""
+
     def start(self, autoregressive_index: int) -> None:
+        guidance = self.text_edit_guidance
+        if guidance is not None and autoregressive_index > self.autoregressive_index:
+            if guidance.chunks_remaining <= 0:
+                self.text_edit_guidance = None
+            else:
+                guidance.chunks_remaining -= 1
         # Hoist KV pre-update and RoPE shift out of the graph-captured forward
         # (predict_flow runs eager_mode=False; cond/uncond share rope_freqs).
         self.rope_freqs = self.rope_adapter.shift_t(autoregressive_index)
@@ -191,6 +221,9 @@ class CosmosTransformerConfig(TransformerConfig):
 
     sink_size_t: int = 0
     """Sink-token count (pre-patchify T)."""
+
+    early_short_history_block_count: int | None = None
+    """Number of initial blocks limited to one chunk of visual history."""
 
     compile_network: bool = True
     """``torch.compile`` the network."""
@@ -295,6 +328,31 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         assert config.len_t % kt == 0, (
             f"len_t ({config.len_t}) must be divisible by patch_temporal ({kt})."
         )
+        if (
+            not config.network.apply_rope_before_kvcache
+            and config.native_dit_acceleration != "disabled"
+        ):
+            raise ValueError(
+                "Cache-relative RoPE is not supported by native DiT acceleration; "
+                "set native_dit_acceleration='disabled'"
+            )
+        if config.early_short_history_block_count is not None:
+            if config.native_dit_acceleration != "disabled":
+                raise ValueError(
+                    "Early short history is not supported by native DiT acceleration; "
+                    "set native_dit_acceleration='disabled'"
+                )
+            if not (
+                1 <= config.early_short_history_block_count <= config.network.num_blocks
+            ):
+                raise ValueError(
+                    "early_short_history_block_count must be between 1 and "
+                    f"num_blocks ({config.network.num_blocks})"
+                )
+            if config.window_size_t < config.len_t:
+                raise ValueError(
+                    "Early short history requires window_size_t to be at least len_t"
+                )
         self._output_height: int | None = None
         self._output_width: int | None = None
 
@@ -345,6 +403,12 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         # Single view: flatten latent to 4D [B, V, L, D] so CP applies on L
         # directly. Multi-view: keep 5D [B, V, T, HW, D] for hierarchical CP.
         self.flatten_thw = config.num_views == 1
+        self._finalizing_kv_cache = False
+        self._text_edit_lora: Any | None = None
+
+    def set_text_edit_lora(self, edit_lora: Any | None) -> None:
+        """Attach a graph-safe distilled text-edit LoRA hook."""
+        self._text_edit_lora = edit_lora
 
     def _configure_optimized_dit_from_config(self) -> None:
         from omnidreams.impl.native import omnidreams_singleview
@@ -528,15 +592,27 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
                 )
 
         head_dim = cfg.network.model_channels // cfg.network.num_heads
-        rope_adapter = RotaryPositionEmbedding3D(
-            len_t=pT,
-            len_h=pH,
-            len_w=pW,
-            head_dim=head_dim,
-            h_extrapolation_ratio=cfg.h_extrapolation_ratio,
-            w_extrapolation_ratio=cfg.w_extrapolation_ratio,
-            device=self.device,
-        )
+        rope_kwargs: dict[str, Any] = {
+            "len_t": pT,
+            "len_h": pH,
+            "len_w": pW,
+            "head_dim": head_dim,
+            "h_extrapolation_ratio": cfg.h_extrapolation_ratio,
+            "w_extrapolation_ratio": cfg.w_extrapolation_ratio,
+            "device": self.device,
+        }
+        if cfg.network.apply_rope_before_kvcache:
+            rope_adapter = RotaryPositionEmbedding3D(**rope_kwargs)
+        else:
+            assert cfg.window_size_t % kt == 0 and cfg.sink_size_t % kt == 0, (
+                "Cache-relative RoPE requires window_size_t and sink_size_t "
+                f"to be divisible by patch_temporal ({kt})"
+            )
+            rope_adapter = KVCacheRelativeRotaryPositionEmbedding3D(
+                **rope_kwargs,
+                window_size_t=cfg.window_size_t // kt,
+                sink_size_t=cfg.sink_size_t // kt,
+            )
         rope_adapter.set_context_parallel_group(cp_group=self.cp_groups.THW_group)
 
         num_tokens_per_view_per_step = pH * pW
@@ -546,6 +622,7 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
             chunk_size=num_tokens_per_view_per_step * pT,
             window_size=num_tokens_per_view_per_step * cfg.window_size_t,
             sink_size=num_tokens_per_view_per_step * cfg.sink_size_t,
+            early_short_history_block_count=cfg.early_short_history_block_count,
             context=text_embeddings,
         )
         network_cache_uncond: CosmosDiTNetworkCache | None = None
@@ -558,6 +635,7 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
                 chunk_size=num_tokens_per_view_per_step * pT,
                 window_size=num_tokens_per_view_per_step * cfg.window_size_t,
                 sink_size=num_tokens_per_view_per_step * cfg.sink_size_t,
+                early_short_history_block_count=cfg.early_short_history_block_count,
                 context=negative_text_embeddings,
             )
 
@@ -600,6 +678,10 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         mask_first_patched = self.patchify_and_maybe_split_cp(mask_first_block)
         mask_other_patched = self.patchify_and_maybe_split_cp(mask_other_blocks)
 
+        text_edit_lora = getattr(self, "_text_edit_lora", None)
+        if text_edit_lora is not None:
+            text_edit_lora.set_active(False)
+
         if self._use_cuda_graph:
             self._cuda_graph_dispatch.reset()
 
@@ -615,6 +697,66 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
         if self._optimized_dit_executor is not None:
             self._optimized_dit_executor.after_initialize_autoregressive_cache(cache)
         return cache
+
+    @torch.no_grad()
+    def replace_text_embeddings(
+        self,
+        cache: CosmosTransformerCache,
+        text_embeddings: Tensor,
+        *,
+        guidance_scale: float = 1.0,
+        guidance_chunks: int = 0,
+    ) -> None:
+        """Replace cached text conditioning while retaining visual history.
+
+        Args:
+            cache: Live autoregressive cache.
+            text_embeddings: Replacement embeddings ``[B, V, L, D]``.
+            guidance_scale: New-minus-old edit strength.
+            guidance_chunks: Number of upcoming chunks to guide.
+        """
+        if self._optimized_dit_executor is not None:
+            raise NotImplementedError(
+                "Text replacement is not available with native DiT acceleration"
+            )
+        cfg = self.config
+        text_embeddings = text_embeddings.to(device=self.device, dtype=cfg.dtype)
+        if self.cp_groups.V_group is not None:
+            text_embeddings = split_inputs_cp(
+                text_embeddings, seq_dim=1, cp_group=self.cp_groups.V_group
+            )
+        use_guidance = guidance_scale != 1.0 and guidance_chunks > 0
+        if use_guidance and cache.network_cache_uncond is not None:
+            raise ValueError(
+                "Text-edit guidance cannot be combined with negative-prompt CFG"
+            )
+        block_caches = cache.network_cache.block_caches
+        if use_guidance and self._text_edit_lora is not None:
+            self.network.replace_text_embeddings(cache.network_cache, text_embeddings)
+            self._text_edit_lora.set_active(True)
+            cache.text_edit_guidance = TextEditGuidance(
+                scale=guidance_scale,
+                chunks_remaining=guidance_chunks,
+                use_lora=True,
+            )
+            return
+        old = (
+            [block.cross_attn.clone_kv() for block in block_caches]
+            if use_guidance
+            else None
+        )
+        self.network.replace_text_embeddings(cache.network_cache, text_embeddings)
+        if old is None:
+            cache.text_edit_guidance = None
+            if self._text_edit_lora is not None:
+                self._text_edit_lora.set_active(False)
+        else:
+            cache.text_edit_guidance = TextEditGuidance(
+                scale=guidance_scale,
+                chunks_remaining=guidance_chunks,
+                kv_old=old,
+                kv_new=[block.cross_attn.clone_kv() for block in block_caches],
+            )
 
     ## Mask-injection helpers
 
@@ -689,6 +831,40 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
                 cache=cache,
                 input=input,
             )
+        guidance = cache.text_edit_guidance
+        if guidance is not None and guidance.use_lora:
+            assert self._text_edit_lora is not None
+            self._text_edit_lora.set_active(True)
+        elif self._text_edit_lora is not None and self._text_edit_lora.active:
+            self._text_edit_lora.set_active(False)
+        if (
+            guidance is not None
+            and not guidance.use_lora
+            and not self._finalizing_kv_cache
+            and cache.network_cache_uncond is None
+        ):
+            blocks = cache.network_cache.block_caches
+            for block, (key, value) in zip(blocks, guidance.kv_old, strict=True):
+                block.cross_attn.overwrite_kv_(key, value)
+            flow_old = self._predict_branch(
+                noisy_latent=noisy_latent,
+                timestep=timestep,
+                cache=cache,
+                network_cache=cache.network_cache,
+                input=input,
+                uncond=False,
+            )
+            for block, (key, value) in zip(blocks, guidance.kv_new, strict=True):
+                block.cross_attn.overwrite_kv_(key, value)
+            flow_new = self._predict_branch(
+                noisy_latent=noisy_latent,
+                timestep=timestep,
+                cache=cache,
+                network_cache=cache.network_cache,
+                input=input,
+                uncond=False,
+            )
+            return flow_old + guidance.scale * (flow_new - flow_old)
         flow_cond = self._predict_branch(
             noisy_latent=noisy_latent,
             timestep=timestep,
@@ -724,7 +900,11 @@ class CosmosTransformer(Transformer[CosmosTransformerCache]):
     ) -> None:
         try:
             if not self.config.skip_finalize_kv_cache:
-                super().finalize_kv_cache(*args, **kwargs)
+                self._finalizing_kv_cache = True
+                try:
+                    super().finalize_kv_cache(*args, **kwargs)
+                finally:
+                    self._finalizing_kv_cache = False
         finally:
             if self._optimized_dit_executor is not None:
                 self._optimized_dit_executor.after_finalize_kv_cache()

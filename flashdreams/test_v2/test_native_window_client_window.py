@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import queue
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
@@ -55,6 +55,14 @@ def _result(value: int = 0) -> StepResult:
     )
 
 
+def _keyboard_edges(events: Sequence[object]) -> list[tuple[str, KeyboardInputState]]:
+    return [
+        (event.key, event.state)
+        for event in events
+        if isinstance(event, KeyboardUserInputEvent)
+    ]
+
+
 class _KeyboardEvent:
     def __init__(self, key: str, *, pressed: bool) -> None:
         self.key = SimpleNamespace(name=key)
@@ -67,6 +75,14 @@ class _KeyboardEvent:
         return not self._pressed
 
     def is_input(self) -> bool:
+        return False
+
+
+class _KeyboardRepeatEvent(_KeyboardEvent):
+    def __init__(self, key: str) -> None:
+        super().__init__(key, pressed=False)
+
+    def is_key_release(self) -> bool:
         return False
 
 
@@ -344,7 +360,7 @@ def test_native_window_reports_input_and_close_from_event_pump() -> None:
         clock_ns=lambda: next(clock_values),
     )
     window.open(_session_desc())
-    presenter.pending_events.put(("keyboard", _KeyboardEvent("w", pressed=True)))
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("up", pressed=True)))
     presenter.pending_events.put(
         (
             "mouse",
@@ -360,7 +376,7 @@ def test_native_window_reports_input_and_close_from_event_pump() -> None:
     keyboard = events[0]
     mouse = events[1]
     assert isinstance(keyboard, KeyboardUserInputEvent)
-    assert keyboard.key == "w"
+    assert keyboard.key == "up"
     assert keyboard.state is KeyboardInputState.PRESSED
     assert isinstance(mouse, MouseUserInputEvent)
     assert mouse.action == "move"
@@ -462,6 +478,105 @@ def test_native_text_input_uses_slangpy_resolved_shift_character() -> None:
         ("A", KeyboardInputState.RELEASED),
         ("Shift", KeyboardInputState.RELEASED),
     ]
+
+
+def test_native_text_input_discards_repeat_callbacks_after_release() -> None:
+    presenter = _Presenter()
+    window = NativeWindowClientWindow(presenter_factory=_presenter_factory(presenter))
+    window.open(_session_desc())
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("d", pressed=True)))
+    presenter.pending_events.put(("keyboard", _TextInputEvent("d")))
+
+    pressed = window.get_user_input_events().get_events()
+    presenter.pending_events.put(("keyboard", _KeyboardRepeatEvent("d")))
+    assert window.get_user_input_events().get_events() == []
+    presenter.pending_events.put(("keyboard", _TextInputEvent("d")))
+    assert window.get_user_input_events().get_events() == []
+
+    presenter.pending_events.put(("keyboard", _KeyboardRepeatEvent("d")))
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("d", pressed=False)))
+    released = window.get_user_input_events().get_events()
+    presenter.pending_events.put(("keyboard", _TextInputEvent("d")))
+    assert window.get_user_input_events().get_events() == []
+    window.close()
+
+    assert _keyboard_edges([*pressed, *released]) == [
+        ("d", KeyboardInputState.PRESSED),
+        ("d", KeyboardInputState.RELEASED),
+    ]
+
+
+@pytest.mark.parametrize("text", ("a", "A"))
+def test_native_text_input_coalesces_across_event_polls(text: str) -> None:
+    presenter = _Presenter()
+    window = NativeWindowClientWindow(presenter_factory=_presenter_factory(presenter))
+    window.open(_session_desc())
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("a", pressed=True)))
+
+    assert window.get_user_input_events().get_events() == []
+
+    presenter.pending_events.put(("keyboard", _TextInputEvent(text)))
+    pressed = window.get_user_input_events().get_events()
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("a", pressed=False)))
+    released = window.get_user_input_events().get_events()
+    window.close()
+
+    assert _keyboard_edges([*pressed, *released]) == [
+        (text, KeyboardInputState.PRESSED),
+        (text, KeyboardInputState.RELEASED),
+    ]
+
+
+def test_native_printable_key_without_text_is_flushed_after_one_poll() -> None:
+    presenter = _Presenter()
+    window = NativeWindowClientWindow(presenter_factory=_presenter_factory(presenter))
+    window.open(_session_desc())
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("w", pressed=True)))
+
+    assert window.get_user_input_events().get_events() == []
+    pressed = window.get_user_input_events().get_events()
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("w", pressed=False)))
+    released = window.get_user_input_events().get_events()
+    window.close()
+
+    assert _keyboard_edges([*pressed, *released]) == [
+        ("w", KeyboardInputState.PRESSED),
+        ("w", KeyboardInputState.RELEASED),
+    ]
+
+
+def test_native_printable_release_flushes_pending_press() -> None:
+    presenter = _Presenter()
+    window = NativeWindowClientWindow(presenter_factory=_presenter_factory(presenter))
+    window.open(_session_desc())
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("z", pressed=True)))
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("z", pressed=False)))
+
+    events = window.get_user_input_events().get_events()
+    window.close()
+
+    assert _keyboard_edges(events) == [
+        ("z", KeyboardInputState.PRESSED),
+        ("z", KeyboardInputState.RELEASED),
+    ]
+
+
+def test_native_close_flushes_pending_printable_press() -> None:
+    presenter = _Presenter()
+    window = NativeWindowClientWindow(presenter_factory=_presenter_factory(presenter))
+    window.open(_session_desc())
+    presenter.pending_events.put(("keyboard", _KeyboardEvent("w", pressed=True)))
+    presenter.pending_events.put(("close", None))
+
+    events = window.get_user_input_events().get_events()
+    window.close()
+
+    assert len(events) == 2
+    pressed, closed = events
+    assert isinstance(pressed, KeyboardUserInputEvent)
+    assert pressed.key == "w"
+    assert pressed.state is KeyboardInputState.PRESSED
+    assert isinstance(closed, CloseUserInputEvent)
 
 
 @pytest.mark.parametrize(

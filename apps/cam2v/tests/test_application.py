@@ -31,6 +31,7 @@ from cam2v import (
     Cam2VUIState,
     Cam2VUIStatus,
     CameraControlInput,
+    CameraPoseIntegrator,
     KeyboardResampler,
 )
 from cam2v.dummy import DummyCam2VPipelineConfig
@@ -133,6 +134,7 @@ class _PipelineConfig:
 
     def __init__(self) -> None:
         self.pipeline = _Pipeline()
+        self.enable_sync_and_profile = False
 
     def setup(self) -> _Pipeline:
         """Return the application-owned pipeline."""
@@ -163,7 +165,7 @@ def test_model_loop_maps_wasd_to_shared_camera_input_and_metrics() -> None:
         failure_queue=failure_queue,
     )
     ui_loop.register_session_ui_loop_objects(
-        output_layout=VideoTensorLayout.tchw,
+        session_desc=SessionDesc(output_layout=VideoTensorLayout.tchw),
         presentation_manager=presentation_manager,
     )
     state = Cam2VModelState(
@@ -343,7 +345,7 @@ def test_slangpy_continuous_redraw_expires_recent_model_rate(
         failure_queue=queue.Queue(),
     )
     ui_loop.register_session_ui_loop_objects(
-        output_layout=VideoTensorLayout.tchw,
+        session_desc=SessionDesc(output_layout=VideoTensorLayout.tchw),
         presentation_manager=PresentationManager(),
     )
     ui = SimpleNamespace(
@@ -458,6 +460,11 @@ def test_slangpy_overlay_tracks_controls_and_model_status() -> None:
     """Keep immediate input display in UI-loop-owned state."""
     state = Cam2VUIState(total_blocks=4, target_fps=16, warmup_blocks=1)
     presentation_manager = PresentationManager()
+    presentation_manager.configure(
+        backpressure_mode=BackpressureMode.BLOCK,
+        stop=threading.Event(),
+        put_timeout=0.01,
+    )
     presentation_manager.publish(
         0,
         [
@@ -469,7 +476,7 @@ def test_slangpy_overlay_tracks_controls_and_model_status() -> None:
             )
         ],
     )
-    assert presentation_manager.advance(0)[0]
+    assert presentation_manager.advance(0, now=1.0)[0]
     ui = SimpleNamespace(
         screen=object(),
         Window=Mock(return_value=object()),
@@ -494,7 +501,7 @@ def test_slangpy_overlay_tracks_controls_and_model_status() -> None:
         failure_queue=queue.Queue(),
     )
     ui_loop.register_session_ui_loop_objects(
-        output_layout=VideoTensorLayout.tchw,
+        session_desc=SessionDesc(output_layout=VideoTensorLayout.tchw),
         presentation_manager=presentation_manager,
     )
     pressed = UserInputEvents(
@@ -606,7 +613,7 @@ def test_slangpy_overlay_tracks_controls_and_model_status() -> None:
     assert not state.held_keys
     assert state.active_keys_widget.text == "Active keys: none"
 
-    assert presentation_manager.advance(0)[0]
+    assert presentation_manager.advance(0, now=1.1)[0]
     ui_loop.step(6, UserInputEvents([]))
     displayed = [widget.text for widget in state.status_widgets]
     assert "Presented: 2 frames (24 generated)" in displayed
@@ -648,6 +655,7 @@ def test_cam2v_session_registers_the_shared_slangpy_ui_loop() -> None:
 def test_application_owns_pipeline_and_resolves_inputs_per_session_desc() -> None:
     """Keep the loaded model application-scoped and rollout inputs session-scoped."""
     pipeline_config = _PipelineConfig()
+    pose_integrator = CameraPoseIntegrator(rotate_speed_rad_per_s=1.25)
     seen: list[Mapping[str, Any]] = []
 
     def resolve(values: Mapping[str, Any]) -> Cam2VConditioning:
@@ -665,6 +673,7 @@ def test_application_owns_pipeline_and_resolves_inputs_per_session_desc() -> Non
             first_frame_interpolation="nearest",
             device="cpu",
             fps=16,
+            pose_integrator_factory=lambda: pose_integrator,
         )
     )
     app.init(["--total-blocks", "2", "--warmup-blocks", "0", "--no-ui"])
@@ -682,8 +691,30 @@ def test_application_owns_pipeline_and_resolves_inputs_per_session_desc() -> Non
     assert pipeline_config.pipeline.device == "cpu"
     assert model_loop.state.config.first_frame_dtype is torch.float64
     assert model_loop.state.config.first_frame_interpolation == "nearest"
+    assert model_loop.state.pose_integrator is pose_integrator
     app.close()
     assert pipeline_config.pipeline.closed
+
+
+def test_application_overrides_shared_pipeline_profiling() -> None:
+    """Expose shared streaming-pipeline profiling without changing defaults."""
+    pipeline_config = _PipelineConfig()
+    app = Cam2VApplication(
+        defaults=Cam2VApplicationDefaults(
+            pipeline_config=pipeline_config,
+            input_resolver=lambda values: _conditioning(),
+            total_blocks=1,
+            pixel_width=1,
+            pixel_height=1,
+            first_frame_dtype=torch.float32,
+            first_frame_interpolation="linear",
+        )
+    )
+
+    app.init(["--sync-and-profile"])
+
+    assert app.pipeline_config.enable_sync_and_profile is True
+    assert pipeline_config.enable_sync_and_profile is False
 
 
 def test_defaults_reject_invalid_timing_configuration() -> None:
