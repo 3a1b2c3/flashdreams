@@ -11,10 +11,11 @@ let directorMode = new URLSearchParams(window.location.search).has("director")
 
 // Letter hotkeys for event buttons, in assignment order. Excludes the
 // reserved movement keys (w/a/s/d/q/e/i/j/k/l) and "c" (Clear's own
-// hotkey) so they never collide with driving input or each other. Letters
+// hotkey) and "r" (Restart's) so they never collide with driving input
+// or each other. Letters
 // run out before director-heavy presets do -- events past the pool size
 // simply render without a hotkey, same as the old 9-key digit cap.
-const EVENT_HOTKEY_LETTERS = ["b", "f", "g", "h", "m", "n", "o", "p", "r", "t", "u", "v", "x", "y", "z"]
+const EVENT_HOTKEY_LETTERS = ["b", "f", "g", "h", "m", "n", "o", "p", "t", "u", "v", "x", "y", "z"]
 
 // Jump/Crouch are player movement actions, not narrative/pacing triggers --
 // rendered in their own row next to the movement key grid instead of the
@@ -88,6 +89,10 @@ let initialScene = null
 let initialSceneLocked = false
 let promptEdited = false
 let textEventsEdited = false
+// The upload that carries the current catalog to the server, if one is
+// still in flight. An event triggered before it lands would be rejected
+// with "Unknown event_id", since the server only knows what it was told.
+let pendingCatalogUpload = null
 let firstFrameUrlEdited = false
 let firstFrameInputMode = "url"
 let selectedFirstFrameFile = null
@@ -117,6 +122,7 @@ let eventControls = null
 let eventButtons = null
 let actionButtons = null
 let clearEventButton = null
+let restartButton = null
 let livePromptInput = null
 let livePromptSubmitButton = null
 let directorButtons = null
@@ -148,6 +154,12 @@ let directorPromptSubmitButton = null
 // explicit toggle click.
 let showingDirectorControls = false
 let currentPreset = null
+// The image the selected preset asks for. Held separately because the
+// firstFrameUrlEdited guard is cleared once an upload completes, after
+// which a scene arriving from the server would overwrite the field with
+// whatever the session happens to be running -- showing dragon.jpg while
+// every other control said Jet Ski Cruise.
+let presetImageUrl = null
 
 function makeSceneCard() {
   const panel = document.createElement("section")
@@ -223,6 +235,7 @@ function makeEventControls() {
     <div class="eventButtons"></div>
     <div class="eventButtons directorButtons" hidden></div>
     <button class="eventButton eventButtonClear" type="button">Clear (C)</button>
+    <button class="eventButton eventButtonRestart" type="button">Restart (R)</button>
     <button class="enableDirectorModeButton" type="button" hidden>Enable Director Mode</button>
     <div class="promptControlGroup playerPromptGroup">
       <label class="promptControl">
@@ -263,6 +276,7 @@ function bindElements() {
   // event/trigger list below.
   if (movementControlRows) movementControlRows.after(actionButtons)
   clearEventButton = eventControls.querySelector(".eventButtonClear")
+  restartButton = eventControls.querySelector(".eventButtonRestart")
   directorButtons = eventControls.querySelector(".directorButtons")
   controlsModeToggle = eventControls.querySelector(".controlsModeToggle")
   // Physically move ahead of the shared movement key grid (a separate,
@@ -332,6 +346,12 @@ function setFirstFrameStatus(message = "", state = "idle") {
 
 function defaultFirstFrameName() {
   return initialScene?.has_first_frame ? "Example Image" : "Choose Image"
+}
+
+function forgetPresetImage() {
+  // A hand-typed URL or an uploaded file replaces the preset's own image, so
+  // it should stop overriding what the panel shows.
+  presetImageUrl = null
 }
 
 function clearSelectedFile() {
@@ -685,6 +705,20 @@ function applyPreset(presetIndex) {
   ]
   textEventsEdited = true
   renderTextEventEditor()
+  // Push the preset to the server now rather than waiting for a connect.
+  // The event buttons are live before connecting, and the server rejects an
+  // id it has not been told about -- "Unknown event_id='jump'" while the page
+  // showed Jump, because the catalog only travelled in beforeConnect.
+  pendingCatalogUpload = uploadSessionInput({ includeFirstFrame: true })
+    .catch((error) => {
+      context.logEvent(`preset not applied: ${error.message}`, {
+        source: "client",
+        level: "error",
+      })
+    })
+    .finally(() => {
+      pendingCatalogUpload = null
+    })
   // Also refresh the live Player Controls buttons immediately, not just
   // the editable Text Events list -- otherwise switching games mid-session
   // only updates on the next connect/upload, not on selection itself.
@@ -694,6 +728,7 @@ function applyPreset(presetIndex) {
     setFirstFrameInputMode("url")
     firstFrameUrlInput.value = preset.image
     firstFrameUrlEdited = true
+    presetImageUrl = preset.image
     firstFrameName.textContent = "Upload Image"
     setFirstFrameStatus("URL not updated", "pending")
     // Show the preset's image immediately, ahead of the "Update" commit
@@ -710,9 +745,13 @@ function applyInitialScene(scene) {
   if (!promptEdited && typeof scene.prompt === "string") {
     promptInput.value = scene.prompt
   }
-  const imageUrl = typeof scene.image_url === "string"
+  const sceneImageUrl = typeof scene.image_url === "string"
     ? scene.image_url
     : (typeof scene.default_image_url === "string" ? scene.default_image_url : "")
+  // A chosen preset wins over the session's own image: the page should show
+  // the scene the user picked, not the one the rollout has not switched to
+  // yet.
+  const imageUrl = presetImageUrl || sceneImageUrl
   if (!selectedFirstFrameFile && !firstFrameUrlEdited && imageUrl) {
     firstFrameUrlInput.value = imageUrl
     setFirstFrameInputMode("url")
@@ -779,12 +818,16 @@ function validateImageUrl(value) {
   const imageUrl = value.trim()
   let parsed = null
   try {
-    parsed = new URL(imageUrl)
+    // Resolved against the page, so a packaged relative path -- which is how
+    // the built-in presets ship their images ("assets/circuit.jpg") -- is as
+    // valid as an absolute URL. The entered value is returned unchanged, so a
+    // relative preset URL stays relative.
+    parsed = new URL(imageUrl, window.location.href)
   } catch {
-    throw new Error("Enter a valid http(s) image URL.")
+    throw new Error("Enter an http(s) image URL or a path like assets/name.jpg.")
   }
   if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Enter a valid http(s) image URL.")
+    throw new Error("Enter an http(s) image URL or a path like assets/name.jpg.")
   }
   return imageUrl
 }
@@ -851,11 +894,16 @@ async function updateFirstFrame() {
   }
 }
 
-function sendTextEvent(eventId, state, promptValue = null) {
+async function sendTextEvent(eventId, state, promptValue = null) {
   const label = state === "clear" ? "clear event" : `event:${eventId}`
   const payload = { type: "event", event_id: eventId, state }
   if (promptValue !== null) {
     payload.prompt = promptValue
+  }
+  // Wait for the catalog this event belongs to, so clicking a button the
+  // moment a preset loads cannot beat its own events to the server.
+  if (pendingCatalogUpload) {
+    await pendingCatalogUpload
   }
   if (!context.sendCommand(payload, label)) {
     return
@@ -892,6 +940,10 @@ function attachListeners() {
       sendTextEvent(activeEventId || "clear", "clear")
       return
     }
+    if (key === "r") {
+      restartButton?.click()
+      return
+    }
     const eventId = eventHotkeyMap.get(key)
     if (eventId) {
       if (key === "space") event.preventDefault()
@@ -911,6 +963,7 @@ function attachListeners() {
   })
   firstFrameInput.addEventListener("change", () => {
     setFirstFrameInputMode("upload")
+    forgetPresetImage()
     const [file] = firstFrameInput.files
     selectedFirstFrameFile = file || null
     firstFrameSelectionCommitted = false
@@ -925,6 +978,7 @@ function attachListeners() {
     setFirstFrameInputMode("url")
     if (selectedFirstFrameFile) clearSelectedFile()
     firstFrameUrlEdited = true
+    forgetPresetImage()
     firstFrameName.textContent = firstFrameUrlInput.value.trim() ? "Upload Image" : defaultFirstFrameName()
     setFirstFrameStatus(firstFrameUrlInput.value.trim() ? "URL not updated" : "", "pending")
   })
@@ -944,6 +998,16 @@ function attachListeners() {
     context.releaseControls()
   })
   clearEventButton.addEventListener("click", () => sendTextEvent(activeEventId || "clear", "clear"))
+  // A reset discards the rollout cache, so the next chunk re-seeds from
+  // the session's first frame. Prompt swaps leave the world looking like
+  // where it started -- a jet ski in a castle jungle -- and this is what
+  // clears that without restarting the server.
+  restartButton.addEventListener("click", () => {
+    if (context.sendCommand({ type: "reset" }, "restart scene")) {
+      resetHealth(currentPreset)
+      context.logEvent("scene restarted", { source: "client" })
+    }
+  })
   const submitLivePrompt = () => {
     const promptText = livePromptInput.value.trim()
     if (promptText) {
@@ -977,7 +1041,7 @@ function attachListeners() {
 
 export default {
   modelName: "Lingbot",
-  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v6", import.meta.url).href,
+  stylesheet: new URL("./adapter.css?v=lingbot-video-size-v13", import.meta.url).href,
   controls,
 
   async mount(sharedContext) {
@@ -1029,8 +1093,10 @@ export default {
   },
 
   onActionSent() {
+    // No updatePreview() here: it refetched the first frame on every key
+    // press, cache-busted, and the preview is hidden behind the video by the
+    // time any action is sent.
     setSessionLocked(true)
-    updatePreview()
   },
 
   onControlMessage(payload) {
@@ -1053,7 +1119,22 @@ export default {
     return false
   },
 
-  onVideoVisibilityChanged() {
+  onInitialScene(scene) {
+    // The v1 server acknowledged a text event over the control channel; the
+    // v2 endpoint answers the POST with the resulting scene instead, so the
+    // active-event highlight is taken from here. Only that is read: the
+    // panel's own fields may hold edits the player is still making.
+    activeEventId = scene?.active_event_id || null
+    renderEventControls()
+  },
+
+  onVideoVisibilityChanged(visible) {
+    // Video becoming visible is what "a session is live" looks like on v2.
+    // The v1 server announced it with a "chunk_done" control message, which
+    // v2 never sends -- so the Initial Scene panel used to sit visible and
+    // editable over a running session until the player happened to press a
+    // key, which is what finally triggered onActionSent().
+    setSessionLocked(Boolean(visible))
     updatePreview()
   },
 

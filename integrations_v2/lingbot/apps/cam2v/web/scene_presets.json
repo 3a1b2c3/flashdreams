@@ -1,14 +1,13 @@
 [
   {
     "name": "Dragon",
-    "image": "https://raw.githubusercontent.com/Robbyant/lingbot-world-v2/main/examples/00/image.jpg",
+    "image": "assets/dragon.jpg",
     "prompt": "A soaring journey through a fantasy jungle on the back of a flying creature. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate, as the aerial voyage carries them toward an ancient gothic castle, its stonework growing clearer as it nears. Floating landmasses and cascading waterfalls fill the fantastical landscape below.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The creature tucks its wings and launches into a sudden upward leap, gaining height in a single powerful beat." },
       { "event_id": "portal", "label": "Portal", "prompt": "A luminous magical portal opens in the scene, casting colored light and swirling particles into the environment." },
       { "event_id": "storm", "label": "Storm", "prompt": "A dramatic storm rolls in with dark clouds, wind, rain, and flashes of lightning reshaping the atmosphere." },
-      { "event_id": "fireworks", "label": "Fireworks", "prompt": "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." },
-      { "event_id": "barrelroll", "label": "Barrel Roll", "prompt": "The creature snaps into a tight barrel roll, wings tucked as it spins a full rotation before leveling back out.", "health": -3 }
+      { "event_id": "fireworks", "label": "Fireworks", "prompt": "Bright fireworks burst overhead, filling the sky with colorful sparks and reflections across the scene." }
     ],
     "directorEvents": [
       { "event_id": "rivaldragon", "label": "Rival Dragon Appears", "prompt": "A second dragon bursts from the clouds ahead, wings flaring wide, blocking the flight path.", "health": -5 },
@@ -22,12 +21,11 @@
   },
   {
     "name": "Jet Ski Cruise",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/jet-ski-cruise.jpg",
+    "image": "assets/jet-ski-cruise.jpg",
     "prompt": "Turquoise water near a sandy beach lined with palm trees. A man in a red life vest riding a white and red jet ski, keeping it on top of the water at all times.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The jet ski leaps up off the water, the hull lifting clear of the surface, then drops back down with a splash and the rider settles upright at the handlebars again." },
       { "event_id": "onehand", "label": "One-Hand Wave", "prompt": "Lift one hand and wave it high overhead.", "health": 3 },
-      { "event_id": "spin360", "label": "Spin 360", "prompt": "Whip the jet ski into a tight spinning 360, the hull skating around and sweeping a full ring of spray across the water, then settle back facing forward.", "health": 3 },
       { "event_id": "jumpoff", "label": "Jump Off", "prompt": "Stand up and leap clean off the jet ski, splashing down into the water and swimming alongside as the now-riderless jet ski coasts to a stop nearby.", "health": -5 },
       { "event_id": "jumpbackon", "label": "Jump Back On", "prompt": "Swim the last stroke to the drifting jet ski, grab the handlebars and haul back up out of the water onto the seat, settling into riding position and gunning the throttle to surge forward again.", "health": 8 }
     ],
@@ -46,7 +44,7 @@
   },
   {
     "name": "Noir Alley Combat",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/noir-alley-combat.jpg",
+    "image": "assets/noir-alley-combat.jpg",
     "prompt": "A narrow urban alley at night, dark brick walls and heavy rain, shiny puddles on wet asphalt, yellow police tape, blue and red ambient light. A lone uniformed police officer in dark blue tactical gear holding a flashlight.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The officer springs upward off both feet, leaping high off the wet asphalt, then lands and rises back to a normal upright stance." },
@@ -68,7 +66,7 @@
   },
   {
     "name": "Water Blaster",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/watergun.jpg",
+    "image": "assets/watergun.jpg",
     "prompt": "First-person point of view aiming out across a colourful floating inflatable aqua park on a calm green quarry lake under bright summer sun. A bare hand grips a blue and red toy water blaster at the lower right of the frame.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The player leaps up and forward off the edge of the platform, sailing over a gap of open water, then lands with a splash and stands back upright." },
@@ -89,7 +87,7 @@
   },
   {
     "name": "Circuit Racer",
-    "image": "https://raw.githubusercontent.com/3a1b2c3/flashdreams/demo/integrations/lingbot/lingbot/webrtc/web/assets/circuit.jpg",
+    "image": "assets/circuit.jpg",
     "prompt": "First-person cockpit view from inside a Formula 1 race car, gloved hands on the wheel and the glowing dash ahead, speeding down a sunlit asphalt racing circuit lined with red-and-white kerbs.",
     "events": [
       { "event_id": "jump", "label": "Jump", "prompt": "The track kinks up into a ramp and the car launches off the crest into open sky before slamming back down with a hard jolt." },

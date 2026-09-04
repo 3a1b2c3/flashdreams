@@ -10,7 +10,16 @@
 
 .stageVideo,
 .firstFramePreview {
-  inset: 50% auto auto 50%;
+  /* One rule for both, so the preview standing in for the video cannot
+     change size or framing on connect. Shown centred at the stream's own
+     pixel size -- taken from the session resolution reported by
+     /api/session/initial_scene (see applyVideoSizing) -- never upscaled, so
+     what reaches the browser is what the model generated. It only shrinks
+     when the window is smaller than the stream. */
+  /* Anchored near the top rather than centred: the Player Controls panel
+     occupies the lower left, and a centred frame put the model's output
+     behind it. Clears the header, then stays put. */
+  inset: clamp(84px, 11vh, 148px) auto auto 50%;
   width: min(
     100vw,
     var(--lingbot-video-width, 832px),
@@ -19,8 +28,8 @@
   height: auto;
   max-height: min(100vh, var(--lingbot-video-height, 464px));
   aspect-ratio: var(--lingbot-video-aspect, 832 / 464);
-  transform: translate(-50%, -50%);
-  object-fit: contain;
+  transform: translateX(-50%);
+  object-fit: cover;
   object-position: center;
 }
 

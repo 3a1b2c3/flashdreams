@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
 # Set up a plain venv + pip environment for the LingBot v2 Cam2V app.
 #
 # Deliberately does NOT use uv -- everything here is `python3 -m venv` plus
