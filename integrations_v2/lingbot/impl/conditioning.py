@@ -58,9 +58,10 @@ def resolve_lingbot_conditioning(values: Mapping[str, Any]) -> Cam2VConditioning
             prompt_path = example_dir / "prompt.txt"
 
     first_frame_path = _require_existing_path(image_path, label="image_path")
-    intrinsics_path = _require_existing_path(
-        intrinsic_path,
-        label="intrinsic_path",
+    intrinsics_path = (
+        _require_existing_path(intrinsic_path, label="intrinsic_path")
+        if intrinsic_path is not None
+        else None
     )
     if not prompt and prompt_path is not None:
         prompt = _read_first_line(
@@ -103,12 +104,27 @@ def _ensure_example_data(example_idx: int) -> Path:
 
 
 def _load_base_intrinsics(
-    path: Path,
+    path: Path | None,
     *,
     pixel_height: int,
     pixel_width: int,
 ) -> torch.Tensor:
-    intrinsics = np.asarray(np.load(path), dtype=np.float32)
+    if path is None:
+        # Canonical calibration for the reference resolution, matching what
+        # the test suite treats as the standard row when a real calibration
+        # isn't the point of the test (see test_cam2v_app.py):
+        # fx=W_ref, fy=H_ref, cx=W_ref/2, cy=H_ref/2.
+        intrinsics = np.array(
+            [[
+                _INTRINSICS_REFERENCE_WIDTH,
+                _INTRINSICS_REFERENCE_HEIGHT,
+                _INTRINSICS_REFERENCE_WIDTH / 2,
+                _INTRINSICS_REFERENCE_HEIGHT / 2,
+            ]],
+            dtype=np.float32,
+        )
+    else:
+        intrinsics = np.asarray(np.load(path), dtype=np.float32)
     if intrinsics.ndim == 1:
         intrinsics = intrinsics[None, :]
     if intrinsics.ndim != 2 or intrinsics.shape[0] == 0 or intrinsics.shape[1] != 4:
