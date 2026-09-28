@@ -105,6 +105,9 @@ class Cam2VUIState:
     postprocess_checkbox: Any | None = field(default=None, init=False, repr=False)
     """Retained post-processing toggle when a preset is configured."""
 
+    new_session_button: Any | None = field(default=None, init=False, repr=False)
+    """Retained button that starts a fresh rollout without a browser reload."""
+
     def update_status(self, status: Cam2VUIStatus) -> None:
         """Replace the displayed model-generation status."""
         self.status = status
@@ -140,6 +143,7 @@ class Cam2VSlangPyUILoop(SlangPyUILoop[Cam2VUIState]):
             self.state,
             sampled_at=sampled_at,
             set_postprocess_enabled=self.set_postprocess_enabled,
+            start_new_rollout=self.start_new_rollout,
             comparison_label=self.comparison_label,
         )
         _refresh_widgets(self.state, sampled_at=sampled_at)
@@ -166,6 +170,15 @@ class Cam2VSlangPyUILoop(SlangPyUILoop[Cam2VUIState]):
             ),
         )
 
+    def start_new_rollout(self) -> None:
+        """Replace this session with a fresh rollout, reusing the WebRTC connection.
+
+        Requests the same session configuration again, so the runtime tears
+        down and re-creates the active :class:`ISession` in place instead of
+        requiring the client to reload the browser.
+        """
+        self.request_new_session(self.session_desc)
+
 
 class Cam2VPostprocessComparisonSlangPyUILoop(Cam2VSlangPyUILoop):
     """Show a labelled original-versus-postprocessed Cam2V comparison canvas."""
@@ -179,6 +192,7 @@ def _ensure_widgets(
     *,
     sampled_at: float,
     set_postprocess_enabled: Callable[[bool], None],
+    start_new_rollout: Callable[[], None],
     comparison_label: str | None,
 ) -> None:
     if state.window is not None:
@@ -187,7 +201,7 @@ def _ensure_widgets(
         ui.screen,
         "Camera controls",
         position=(16, 16),
-        size=(460, 330) if comparison_label is not None else (360, 310),
+        size=(460, 390) if comparison_label is not None else (360, 370),
     )
     state.status_widgets = [
         ui.Text(state.window, line)
@@ -205,6 +219,11 @@ def _ensure_widgets(
             value=state.postprocess_enabled,
             callback=set_postprocess_enabled,
         )
+    state.new_session_button = ui.Button(
+        state.window,
+        "New session",
+        callback=start_new_rollout,
+    )
     ui.Text(state.window, "Click the video before using keyboard controls.")
 
 

@@ -79,3 +79,43 @@ def test_finish_run_advances_and_consumes_input_when_the_step_is_skipped() -> No
     assert first.step_index == 0
     assert second.step_index == 1
     assert loop.user_events.get_events() == []
+
+
+def test_clicking_new_session_with_a_prompt_requests_a_replacement_session() -> None:
+    loop = _loop(T2VUIState())
+    imgui = _imgui(prompt="a cat surfing", submit=True)
+
+    loop.step_ui(imgui, 0, UserInputEvents([]))
+
+    requests = loop.flush_ui_loop_requests()
+    assert requests is not None
+    assert requests.new_session is not None
+    assert requests.new_session.metadata == {
+        "existing": "value",
+        "prompt": "a cat surfing",
+    }
+    assert loop.state.prompt == "a cat surfing"
+    assert loop.state.message == "Starting new session…"
+
+
+def test_clicking_new_session_with_a_blank_prompt_does_not_request_a_replacement() -> (
+    None
+):
+    loop = _loop(T2VUIState())
+    imgui = _imgui(prompt="   ", submit=True)
+
+    loop.step_ui(imgui, 0, UserInputEvents([]))
+
+    assert loop.flush_ui_loop_requests() is None
+    assert loop.state.message == "Enter a prompt before starting a session."
+
+
+def test_not_clicking_new_session_does_not_request_a_replacement() -> None:
+    loop = _loop(T2VUIState())
+    imgui = _imgui(prompt="a cat surfing", submit=False)
+
+    loop.step_ui(imgui, 0, UserInputEvents([]))
+
+    assert loop.flush_ui_loop_requests() is None
+    assert loop.state.prompt == "a cat surfing"
+    assert loop.state.message == ""
