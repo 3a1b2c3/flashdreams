@@ -10,6 +10,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import parse_qs
 
 from torch import Tensor
 
@@ -136,7 +137,12 @@ class Cam2VSlangPyUILoop(SlangPyUILoop[Cam2VUIState]):
     ) -> Tensor | None:
         """Update retained widgets and return the current model frame."""
         del step_index
-        _apply_ui_input(self.state, events)
+        _apply_ui_input(
+            self.state,
+            events,
+            set_postprocess_enabled=self.set_postprocess_enabled,
+            start_new_rollout=self.start_new_rollout,
+        )
         frame = self.presented_model_frame()
         self.state.frames_presented = self._presentation_manager.presented_frame_count
         sampled_at = time.perf_counter()
@@ -291,10 +297,20 @@ def _active_keys_text(state: Cam2VUIState) -> str:
     return f"Active keys: {', '.join(active) if active else 'none'}"
 
 
-def _apply_ui_input(state: Cam2VUIState, events: UserInputEvents) -> None:
+def _apply_ui_input(
+    state: Cam2VUIState,
+    events: UserInputEvents,
+    *,
+    set_postprocess_enabled: Callable[[bool], None],
+    start_new_rollout: Callable[[], None],
+) -> None:
     for event in events.get_events():
         if isinstance(event, QueryStringUserInputEvent):
-            print(f"[cam2v] received query string: {event.query_string!r}")
+            _apply_query_string(
+                event.query_string,
+                set_postprocess_enabled=set_postprocess_enabled,
+                start_new_rollout=start_new_rollout,
+            )
             continue
         if isinstance(event, FocusUserInputEvent) and not event.focused:
             state.held_keys.clear()
@@ -309,6 +325,29 @@ def _apply_ui_input(state: Cam2VUIState, events: UserInputEvents) -> None:
             continue
         state.held_keys.clear()
         state.held_keys.update(state._keyboard_state.snapshot())
+
+
+def _apply_query_string(
+    query_string: str,
+    *,
+    set_postprocess_enabled: Callable[[bool], None],
+    start_new_rollout: Callable[[], None],
+) -> None:
+    """Apply recognized ``key=value`` query-string parameters.
+
+    Unrecognized keys are logged and ignored rather than raising, since a
+    browser URL is untrusted input and one unknown key should not crash the
+    session.
+    """
+    parsed = parse_qs(query_string, keep_blank_values=True)
+    for key, values in parsed.items():
+        value = values[-1]
+        if key == "preset":
+            set_postprocess_enabled(value.lower() not in ("", "0", "false", "off"))
+        elif key in ("session", "new_session"):
+            start_new_rollout()
+        else:
+            print(f"[cam2v] ignoring unrecognized query string key: {key!r}={value!r}")
 
 
 __all__ = [
