@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,6 +21,7 @@ from flashdreams.runtime_v2.user_input_event import (
     FocusUserInputEvent,
     KeyboardInputState,
     KeyboardUserInputEvent,
+    QueryStringUserInputEvent,
 )
 from flashdreams.runtime_v2.user_input_events import UserInputEvents
 
@@ -219,11 +221,18 @@ def _ensure_widgets(
             value=state.postprocess_enabled,
             callback=set_postprocess_enabled,
         )
-    state.new_session_button = ui.Button(
-        state.window,
-        "New session",
-        callback=start_new_rollout,
-    )
+    print(f"[cam2v] creating New session button on window {state.window!r}")
+    try:
+        state.new_session_button = ui.Button(
+            state.window,
+            "New session",
+            start_new_rollout,
+        )
+    except Exception:
+        print("[cam2v] failed to create New session button:")
+        traceback.print_exc()
+        raise
+    print(f"[cam2v] created New session button: {state.new_session_button!r}")
     ui.Text(state.window, "Click the video before using keyboard controls.")
 
 
@@ -284,6 +293,9 @@ def _active_keys_text(state: Cam2VUIState) -> str:
 
 def _apply_ui_input(state: Cam2VUIState, events: UserInputEvents) -> None:
     for event in events.get_events():
+        if isinstance(event, QueryStringUserInputEvent):
+            print(f"[cam2v] received query string: {event.query_string!r}")
+            continue
         if isinstance(event, FocusUserInputEvent) and not event.focused:
             state.held_keys.clear()
             state._keyboard_state = KeyboardState(supported_keys=_CAMERA_KEYS)
