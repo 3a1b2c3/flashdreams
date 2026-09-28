@@ -1,13 +1,9 @@
 [tool.uv.workspace]
 members = [
     "flashdreams",
-    # Each populated subdir under ``integrations/`` or ``integrations_v2/``
-    # is a standalone external integration repo (e.g. ``causal_forcing`` /
-    # ``self_forcing``
-    # plugins, ``omnidreams`` / ``lingbot`` integrations); empty stub
-    # folders alongside them are intentional placeholders for future
-    # extractions and don't ship a ``pyproject.toml`` yet.
-    "integrations/*",
+    # Each populated subdir under ``integrations_v2/`` is a standalone
+    # external integration repo (e.g. ``causal_forcing`` / ``self_forcing``
+    # plugins, ``omnidreams`` / ``lingbot`` integrations).
     "integrations_v2/*",
     "apps/*",
     # Nested sub-packages that the integration globs do not reach.
@@ -16,7 +12,6 @@ members = [
 exclude = [
     "apps/__init__.py",
     "apps/README.md",
-    "integrations/omnidreams",
     "integrations_v2/README.md",
 ]
 
@@ -66,10 +61,11 @@ extraPaths = [
     "integrations_v2/causal_forcing",
     "integrations_v2/cosmos_predict2",
     "integrations_v2/flashvsr",
+    "integrations_v2/swiftvr",
     "integrations_v2/fastvideo_causal_wan22",
     "integrations_v2/hy_worldplay",
     "integrations_v2/lingbot",
-    "integrations/sana",
+    "integrations_v2/sana_wm",
     "integrations_v2/self_forcing",
     "integrations_v2/wan21",
     "integrations_v2/wan22",
@@ -103,10 +99,11 @@ extra-paths = [
     "integrations_v2/causal_forcing",
     "integrations_v2/cosmos_predict2",
     "integrations_v2/flashvsr",
+    "integrations_v2/swiftvr",
     "integrations_v2/fastvideo_causal_wan22",
     "integrations_v2/hy_worldplay",
     "integrations_v2/lingbot",
-    "integrations/sana",
+    "integrations_v2/sana_wm",
     "integrations_v2/self_forcing",
     "integrations_v2/wan21",
     "integrations_v2/wan22",
@@ -126,6 +123,8 @@ extra-paths = [
 exclude = [
     "**/protos/*pb2*",
     "apps/interactive_drive/interactive_drive/**",
+    # Same files as above; tests live beside the package, not inside it.
+    "apps/interactive_drive/tests/**",
     # These map/archive parsers and numerical PhysX adapters intentionally
     # accept dynamically shaped YAML, Arrow, and NumPy values. Keep the new
     # V2 application, session, engine contracts, rollout, input, and renderer
@@ -160,6 +159,7 @@ norecursedirs = [
     "parity_check_v2",
     "baseline_fastvideo",
     "baseline_lightx2v",
+    "3rdparty",
 ]
 markers = [
     "ci_cpu: CPU-safe test, runs on the CPU CI runner",

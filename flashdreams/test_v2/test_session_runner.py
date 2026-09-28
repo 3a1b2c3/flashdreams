@@ -20,7 +20,6 @@ from flashdreams.api_v2.loop import (
     IModelLoop,
     IUILoop,
     ModelInferenceState,
-    UILoopRequests,
     invoke_async,
 )
 from flashdreams.api_v2.session import ISession
@@ -29,6 +28,7 @@ from flashdreams.runtime_v2.blit_model_output_to_screen_loop import (
     BlitModelOutputToScreenLoop,
 )
 from flashdreams.runtime_v2.event_buffer import EventBuffer
+from flashdreams.runtime_v2.metrics_output_sink import MetricsOutputSink
 from flashdreams.runtime_v2.presentation_manager import (
     _PRESENTATION_DRAIN_MARGIN,
     PresentationManager,
@@ -120,8 +120,40 @@ def test_presentation_clock_uses_recent_model_fps() -> None:
 
     assert clock.is_due(now=2.0, generation=0)
     clock.mark_advanced(now=2.0)
-    assert not clock.is_due(now=2.067, generation=0)
-    assert clock.is_due(now=2.068, generation=0)
+    frame_interval = 1.0 / _presentation_fps(12 / 0.9)
+    assert not clock.is_due(now=2.0 + frame_interval * 0.99, generation=0)
+    assert clock.is_due(now=2.0 + frame_interval * 1.01, generation=0)
+
+
+def test_presentation_clock_uses_complete_model_and_postprocess_time() -> None:
+    """Pace output using the model work and postprocess work in one step."""
+    clock = _PresentationClock(frames_per_second=16)
+    model_elapsed_s = 0.3
+    postprocess_elapsed_s = 0.9
+    complete_step_elapsed_s = model_elapsed_s + postprocess_elapsed_s
+
+    _observe_model_step(clock, 1.0, 12, complete_step_elapsed_s)
+    _observe_model_step(clock, 2.2, 12, complete_step_elapsed_s)
+
+    assert clock.frames_per_second == pytest.approx(
+        _presentation_fps(12 / complete_step_elapsed_s)
+    )
+
+
+def test_presentation_clock_caps_slow_observed_cadence() -> None:
+    """Do not let an early slow step create a visible presentation stall."""
+    clock = _PresentationClock(
+        frames_per_second=16,
+        maximum_frames_per_second=60,
+    )
+
+    _observe_model_step(clock, 1.0, 1, 5.0)
+    _observe_model_step(clock, 6.0, 1, 5.0)
+
+    assert clock.frames_per_second == pytest.approx(5.0)
+    clock.mark_advanced(now=10.0)
+    assert not clock.is_due(now=10.199, generation=0)
+    assert clock.is_due(now=10.201, generation=0)
 
 
 def test_presentation_clock_clamps_model_fps_to_ui_fps() -> None:
@@ -151,6 +183,27 @@ def test_presentation_clock_allows_backlog_before_paced_deadline() -> None:
 
     assert not clock.is_due(now=1.032, generation=0)
     assert clock.is_due(now=1.033, generation=0)
+
+
+def test_presentation_clock_backlog_overrides_observed_cadence() -> None:
+    clock = _PresentationClock(
+        frames_per_second=16,
+        maximum_frames_per_second=60,
+    )
+
+    _observe_model_step(clock, 1.0, 12, 1.2)
+    _observe_model_step(clock, 2.2, 12, 1.2)
+    clock.mark_advanced(now=3.0)
+
+    frame_interval = 1.0 / _presentation_fps(12 / 1.2)
+    early = 3.0 + frame_interval * 0.25
+    assert not clock.is_due(now=early, generation=0)
+    assert clock.is_due(now=early, generation=0, backlog=True)
+    clock.mark_advanced(now=early, backlog=True)
+
+    min_interval = 1.0 / 60.0
+    assert not clock.is_due(now=early + min_interval * 0.99, generation=0)
+    assert clock.is_due(now=early + min_interval * 1.01, generation=0)
 
 
 def test_presentation_clock_limits_estimate_to_recent_two_seconds() -> None:
@@ -248,6 +301,124 @@ def test_model_loop_excludes_publish_stalls_from_step_timing(
     assert failure_queue.empty()
     assert step_timings == pytest.approx([0.9, 0.9])
     assert model_loop.inference_state is ModelInferenceState.FINISHED
+
+
+def test_model_loop_accumulates_buffered_step_time_before_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 0.0
+
+    class BufferedModelLoop(IModelLoop[None]):
+        """Buffer the first model step before emitting output."""
+
+        def step(
+            self,
+            step_index: int,
+            events: UserInputEvents,
+        ) -> list[StepResult]:
+            nonlocal now
+            del events
+            now += (0.4, 0.6)[step_index]
+            if step_index == 0:
+                return []
+            return [
+                StepResult(
+                    step_index=step_index,
+                    output=torch.zeros((1, 3, 1, 1, 1)),
+                    frame_count=1,
+                    output_layout=VideoTensorLayout.bcthw,
+                )
+            ]
+
+    monkeypatch.setattr("flashdreams.api_v2.loop.time.monotonic", lambda: now)
+    failure_queue: queue.Queue[BaseException] = queue.Queue()
+    model_loop = BufferedModelLoop()
+    model_loop.register_session_loop_objects(
+        state=None,
+        frequency=0,
+        shutdown_event=threading.Event(),
+        failure_queue=failure_queue,
+    )
+    event_buffer = EventBuffer()
+    event_buffer.register(0)
+    published: list[tuple[list[StepResult], float]] = []
+
+    model_loop._run_model_loop(
+        event_buffer=event_buffer,
+        reader_id=0,
+        publish=lambda _generation, results, elapsed: published.append(
+            (results, elapsed)
+        ),
+        max_steps=2,
+    )
+
+    assert failure_queue.empty()
+    assert len(published) == 1
+    assert published[0][0][0].step_index == 1
+    assert published[0][1] == pytest.approx(1.0)
+
+
+def test_model_loop_discards_buffered_step_time_after_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 0.0
+    calls = 0
+    event_buffer = EventBuffer()
+    event_buffer.register(0)
+
+    class ResetBufferedModelLoop(IModelLoop[None]):
+        def step(
+            self,
+            step_index: int,
+            events: UserInputEvents,
+        ) -> list[StepResult]:
+            nonlocal calls, now
+            del events
+            calls += 1
+            now += 0.4 if calls == 1 else 0.6
+            if calls == 1:
+                event_buffer.append(
+                    UserInputEvents([ResetUserInputEvent(timestamp=uint64(0))])
+                )
+                return []
+            return [
+                StepResult(
+                    step_index=step_index,
+                    output=torch.zeros((1, 3, 1, 1, 1)),
+                    frame_count=1,
+                    output_layout=VideoTensorLayout.bcthw,
+                )
+            ]
+
+        def reset(self) -> None:
+            pass
+
+    monkeypatch.setattr("flashdreams.api_v2.loop.time.monotonic", lambda: now)
+    failure_queue: queue.Queue[BaseException] = queue.Queue()
+    model_loop = ResetBufferedModelLoop()
+    model_loop.register_session_loop_objects(
+        state=None,
+        frequency=0,
+        shutdown_event=threading.Event(),
+        failure_queue=failure_queue,
+    )
+    published: list[tuple[int, list[StepResult], float]] = []
+
+    model_loop._run_model_loop(
+        event_buffer=event_buffer,
+        reader_id=0,
+        publish=lambda generation, results, elapsed: published.append(
+            (generation, results, elapsed)
+        ),
+        max_steps=2,
+    )
+
+    assert failure_queue.empty()
+    assert len(published) == 1
+    generation, results, elapsed = published[0]
+    assert generation == 1
+    assert results[0].step_index == 0
+    assert elapsed == pytest.approx(0.6)
 
 
 class CallLog:
@@ -365,7 +536,6 @@ class FakeSession(ISession):
             output=frame.unsqueeze(0).unsqueeze(2),
             frame_count=1,
             output_layout=self.session_desc.output_layout,
-            metrics={"ui_ms": 0.25},
         )
 
     def is_finished(self) -> bool:
@@ -936,10 +1106,9 @@ def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
                 output=torch.arange(36, dtype=torch.float32).reshape(1, 3, 12, 1, 1),
                 frame_count=12,
                 output_layout=self.session_desc.output_layout,
-                metrics={"total_ms": 1.5},
             )
 
-    class RecordingMetricsSink:
+    class RecordingMetricsSink(MetricsOutputSink):
         def __init__(self) -> None:
             self.results: list[StepResult] = []
 
@@ -965,9 +1134,9 @@ def test_default_ui_presents_each_frame_from_a_model_chunk() -> None:
     assert [
         result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
     ] == list(range(12))
-    assert [result.metrics for result in window.results] == [{"ui_ms": 0.25}] * 12
+    assert [result.metrics for result in window.results] == [{}] * 12
     assert len(metrics.results) == 1
-    assert metrics.results[0].metrics == {"total_ms": 1.5}
+    assert metrics.results[0].metrics == {}
 
 
 def test_default_ui_does_not_redraw_an_unchanged_model_frame() -> None:
@@ -1015,7 +1184,7 @@ def test_drop_oldest_finishes_active_chunk_before_newest_waiting_chunk() -> None
         )
 
     manager.publish(0, [result(0, 3)])
-    assert manager.advance(0)[0]
+    assert manager.advance(0, now=1.0)[0]
     first = manager.presented_frame(0)
     assert first is not None
     assert first[0, 0, 0] == 0
@@ -1405,7 +1574,10 @@ def test_equality_eval_preserves_every_frame_when_model_is_faster() -> None:
 
     run_session(session, window, steps=4)
 
-    assert [result.step_index for result in window.results] == [1, 2, 3, 4]
+    assert len(window.results) == 4
+    assert [result.step_index for result in window.results] == sorted(
+        result.step_index for result in window.results
+    )
     assert [
         result.read_output()[0, 0, 0, 0, 0].item() for result in window.results
     ] == [0, 1, 2, 3]

@@ -10,6 +10,7 @@ run against the window the arguments chose, and closed.
 
 import argparse
 import json
+import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -312,6 +313,12 @@ def _install(
         )
         monkeypatch.setattr(
             T2VImGuiUILoop,
+            "frames_to_blit",
+            BlitModelOutputToScreenLoop.frames_to_blit,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            T2VImGuiUILoop,
             "step",
             BlitModelOutputToScreenLoop.step,
         )
@@ -390,7 +397,17 @@ def test_a_run_can_record_what_generating_the_clip_cost(
 ) -> None:
     """A clip says nothing about what it took to generate, so a benchmark run
     asks for both and the file it writes is the one the harness reads."""
-    _install(monkeypatch, StubT2VApplication(_stand_in()))
+    application = StubT2VApplication(_stand_in())
+    _install(monkeypatch, application)
+    monkeypatch.setenv("FLASHDREAMS_SYNC_AND_PROFILE", "0")
+
+    def create_profiled_application(slug: str) -> IApplication:
+        del slug
+        assert os.environ["FLASHDREAMS_SYNC_AND_PROFILE"] == "1"
+        return application
+
+    monkeypatch.setattr(cli, "create_application", create_profiled_application)
+
     stats_path = tmp_path / "stats_run.json"
     clip_path = tmp_path / "clip.mp4"
 
@@ -452,6 +469,17 @@ def test_a_continuous_application_can_wait_for_its_first_prompt(
 
     assert window.session_desc.presentation_mode is PresentationMode.CONTINUOUS
     assert pipeline.caches == []
+
+
+def test_mp4_mode_defaults_to_on_demand_presentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = RecordingWindow()
+    _install(monkeypatch, StubT2VApplication(_stand_in()), window)
+
+    cli.entrypoint(["stub", "--output-path", "clip.mp4", "--", "--prompt", _PROMPT])
+
+    assert window.session_desc.presentation_mode is PresentationMode.ON_DEMAND
 
 
 ## Describing the session to run

@@ -3,7 +3,9 @@
 
 """CPU tests for Crazy Robotaxi's application boundary against FlashDreams V2."""
 
-from dataclasses import replace
+import queue
+import threading
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -15,44 +17,29 @@ import torch
 from crazy_robotaxi.application import (
     CrazyRobotaxiApplication,
     CrazyRobotaxiApplicationDefaults,
+    _configure_live_edit_pipeline,
     _fit_bev_renderer_to_ui,
 )
+from crazy_robotaxi.controls import BoundActionState, ControlsConfig
 from crazy_robotaxi.dynamics import TaxiVehicleConfig
 from crazy_robotaxi.game_selection import GameSelection
+from crazy_robotaxi.headless_ui import CrazyRobotaxiHeadlessUILoop
+from crazy_robotaxi.live_edit.config import (
+    LiveEditCoinsConfig,
+    LiveEditConfig,
+    LiveEditObstacleConfig,
+    LiveEditStyleConfig,
+    LiveEditWeatherConfig,
+)
 from crazy_robotaxi.physics import TaxiPhysicsWorld
 from crazy_robotaxi.rules import TaxiGameSnapshot
 from crazy_robotaxi.session import (
     CrazyRobotaxiModelLoop,
     CrazyRobotaxiSession,
     ModelState,
-    _restart_requested,
     _taxi_driver_command,
 )
-from crazy_robotaxi.ui import CrazyRobotaxiImGuiUILoop
-from omnidreams.apps.crazy_robotaxi.adapter import (
-    OMNIDREAMS_CRAZY_ROBOTAXI_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_RESPONSIVE_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_GB300_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_GB300_RESPONSIVE_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_RTX_PRO_6000_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_RTX_PRO_6000_RESPONSIVE_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_PERF_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_PERF_RESPONSIVE_DEFAULTS,
-    OMNIDREAMS_CRAZY_ROBOTAXI_RESPONSIVE_DEFAULTS,
-)
-from omnidreams.config import (
-    OMNIDREAMS_FAST_PERF_PIPELINE_CONFIG,
-    OMNIDREAMS_FAST_PERF_RESPONSIVE_PIPELINE_CONFIG,
-    OMNIDREAMS_OPTIMIZED_GB300_PIPELINE_CONFIG,
-    OMNIDREAMS_OPTIMIZED_GB300_RESPONSIVE_PIPELINE_CONFIG,
-    OMNIDREAMS_OPTIMIZED_RTX_PRO_6000_PIPELINE_CONFIG,
-    OMNIDREAMS_OPTIMIZED_RTX_PRO_6000_RESPONSIVE_PIPELINE_CONFIG,
-    OMNIDREAMS_PERF_PIPELINE_CONFIG,
-    OMNIDREAMS_PERF_RESPONSIVE_PIPELINE_CONFIG,
-    OMNIDREAMS_PIPELINE_CONFIG,
-    OMNIDREAMS_RESPONSIVE_PIPELINE_CONFIG,
-)
+from crazy_robotaxi.ui import CrazyRobotaxiImGuiUILoop, TaxiHudState
 from omnidreams_game_engine.config import BevConfig, RasterConfig
 from omnidreams_game_engine.input import DriverInput
 from omnidreams_game_engine.renderer_settings import RendererSettings
@@ -62,14 +49,16 @@ from omnidreams_game_engine.types import (
     DriverCommand,
     SceneDefinition,
 )
+from torch import Tensor
 
-from flashdreams.runtime_v2.native_window_client_window import (
-    NativeWindowClientWindow,
-)
+from flashdreams.api_v2.loop import ModelInferenceState
+from flashdreams.infra.diffusion.model import DiffusionModelConfig
+from flashdreams.infra.diffusion.scheduler.base import SchedulerConfig
+from flashdreams.infra.diffusion.transformer.base import TransformerConfig
+from flashdreams.infra.encoder.base import EncoderConfig
+from flashdreams.infra.pipeline import StreamInferencePipelineConfig
 from flashdreams.runtime_v2.session_desc import PresentationMode
-from flashdreams.runtime_v2.step_result import StepResult
 from flashdreams.runtime_v2.user_input_event import (
-    GamepadUserInputEvent,
     KeyboardInputState,
     KeyboardUserInputEvent,
 )
@@ -86,9 +75,57 @@ _DEMO_RACE_MAP = (
 )
 
 
+@dataclass(kw_only=True)
+class _StubTransformerConfig(TransformerConfig):
+    """Adds the fields CrazyRobotaxiApplication logs unconditionally.
+
+    Placeholder values only; no test in this file inspects them (tests that
+    care about real acceleration/backend settings live under
+    integrations_v2/omnidreams/tests/, since apps/ must not import
+    integrations_v2/).
+    """
+
+    native_dit_acceleration: str | None = None
+    native_dit_backend: str | None = None
+    native_dit_attention_backend: str | None = None
+    skip_finalize_kv_cache: bool = False
+    compile_network: bool = False
+
+
+@dataclass(kw_only=True)
+class _StubEncoderConfig(EncoderConfig):
+    """Adds the fields CrazyRobotaxiApplication logs unconditionally."""
+
+    native_vae_acceleration: str | None = None
+    native_vae_backend: str | None = None
+
+
+@dataclass(kw_only=True)
+class _StubSchedulerConfig(SchedulerConfig):
+    """Adds the field CrazyRobotaxiApplication logs unconditionally."""
+
+    denoising_timesteps: list[int] = field(default_factory=list)
+
+
+_STUB_PIPELINE_CONFIG = StreamInferencePipelineConfig(
+    name="crazy-robotaxi-test-stub",
+    diffusion_model=DiffusionModelConfig(
+        transformer=_StubTransformerConfig(),
+        scheduler=_StubSchedulerConfig(),
+    ),
+    encoder=_StubEncoderConfig(),
+)
+"""A pipeline config with no model behind it, built from base flashdreams
+config classes only. CrazyRobotaxiApplication reads ``.name`` and logs
+several transformer/encoder fields unconditionally, so app-level tests
+need a real, structured pipeline config, not a real *model*."""
+
+_STUB_DEFAULTS = CrazyRobotaxiApplicationDefaults(pipeline_config=_STUB_PIPELINE_CONFIG)
+
+
 def _application(
     *,
-    defaults: CrazyRobotaxiApplicationDefaults = OMNIDREAMS_CRAZY_ROBOTAXI_DEFAULTS,
+    defaults: CrazyRobotaxiApplicationDefaults = _STUB_DEFAULTS,
     **kwargs: Any,
 ) -> CrazyRobotaxiApplication:
     return CrazyRobotaxiApplication(defaults=defaults, **kwargs)
@@ -165,8 +202,30 @@ def test_application_registers_model_and_imgui_ui_loops() -> None:
     assert ui_loop.state.model_loop is model_loop
     assert len(ui_loop.state.map_options) == 2
     assert ui_loop.state.map_options[0].path.name == "boulevard_district.robotaxi.yaml"
+    assert all(
+        option.preview_image_path is not None for option in ui_loop.state.map_options
+    )
+    raceway = next(
+        option
+        for option in ui_loop.state.map_options
+        if option.path.name == "flashdreams_raceway.robotaxi.yaml"
+    )
+    assert raceway.race_courses[0].spawn_id == "race_start"
+    assert raceway.race_courses[0].preview_image_path is not None
     assert ui_loop.state.profile_input_latency
     assert ui_loop.state.show_fps
+    assert ui_loop.state.gamepad_button_style == session._config.gamepad_button_style
+    assert (
+        ui_loop.state.show_live_edit_buttons is session._config.show_live_edit_buttons
+    )
+    assert (
+        ui_loop.state.live_edit_mapping_location
+        == session._config.live_edit_mapping_location
+    )
+    assert (
+        ui_loop.state.native_dit_disabled_for_live_edit
+        is session._config.native_dit_disabled_for_live_edit
+    )
     assert session._config.renderer.bev.width == 234
     assert session._config.renderer.bev.height == 234
 
@@ -213,9 +272,9 @@ def test_complete_cli_game_selection_starts_without_menus(monkeypatch) -> None:
         ]
     )
     assert app._config is not None
-    assert app._config.cli_game_mode == "race"
-    assert app._config.cli_map_path == _DEMO_RACE_MAP.resolve()
-    assert app._config.cli_race_course_id == "grand-prix"
+    assert app._config.initial_game_mode == "race"
+    assert app._config.initial_map_path == _DEMO_RACE_MAP.resolve()
+    assert app._config.initial_race_course_id == "grand-prix"
 
     session = app.create_session(app.session_desc())
     session.init()
@@ -228,44 +287,92 @@ def test_complete_cli_game_selection_starts_without_menus(monkeypatch) -> None:
     assert model_loop.state.config.race_course_id == "grand-prix"
 
 
-def test_pressed_r_requests_a_v2_game_restart() -> None:
-    pressed = KeyboardUserInputEvent(
-        timestamp=np.uint64(1),
-        key="R",
-        state=KeyboardInputState.PRESSED,
+def test_user_config_overrides_model_and_game_without_selecting_menus(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """\
+model:
+  device: cpu
+  pipeline:
+    diffusion_model:
+      seed: 5678
+game:
+  gamepad_button_style: PlayStation
+  taxi:
+    seed: 1234
+presentation:
+  show_live_edit_buttons: false
+  live_edit_mapping_location: control hints
+  show_current_prompt: true
+runtime:
+  prewarm_blocks: 0
+""",
+        encoding="utf-8",
     )
-    released = KeyboardUserInputEvent(
-        timestamp=np.uint64(2),
-        key="r",
-        state=KeyboardInputState.RELEASED,
+    app = _application()
+
+    app.init(["--config", str(config_path)])
+
+    assert app._config is not None
+    assert app._config.initial_game_mode is None
+    assert app._config.initial_map_path is None
+    assert app._config.initial_race_course_id is None
+    assert app._config.model_preset_name == _STUB_PIPELINE_CONFIG.name
+    assert app._config.device == "cpu"
+    assert app._config.game.seed == 1234
+    assert app._config.gamepad_button_style == "PlayStation"
+    assert not app._config.show_live_edit_buttons
+    assert app._config.live_edit_mapping_location == "control hints"
+    assert app._config.show_current_prompt
+    pipeline_config = app._pipeline_config
+    assert pipeline_config is not None
+    assert pipeline_config.diffusion_model.seed == 5678
+    assert app.session_desc().video_width == 1280
+    assert app.session_desc().video_height == 704
+
+
+def test_explicit_cli_overrides_user_config_without_rewriting_it(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """\
+model:
+  device: cuda
+presentation:
+  show_fps: false
+runtime:
+  prewarm_blocks: 7
+""",
+        encoding="utf-8",
+    )
+    app = _application()
+
+    app.init(
+        [
+            "--config",
+            str(config_path),
+            "--device",
+            "cpu",
+            "--show-fps",
+            "--prewarm-blocks",
+            "0",
+        ]
     )
 
-    assert _restart_requested(UserInputEvents([pressed]))
-    assert not _restart_requested(UserInputEvents([released]))
-
-
-def test_pressed_gamepad_start_requests_a_v2_game_restart() -> None:
-    released = (False,) * 10
-    pressed = (*released[:9], True)
-
-    assert _restart_requested(
-        UserInputEvents(
-            [
-                GamepadUserInputEvent(
-                    timestamp=np.uint64(1), action="state", pressed=pressed
-                )
-            ]
-        )
-    )
-    assert not _restart_requested(
-        UserInputEvents(
-            [
-                GamepadUserInputEvent(
-                    timestamp=np.uint64(2), action="state", pressed=released
-                )
-            ]
-        )
-    )
+    assert app._config is not None
+    assert app._config.device == "cpu"
+    assert app._config.show_fps
+    assert app._config.prewarm_blocks == 0
+    document = app._config.settings_document
+    assert document is not None
+    assert document.settings.model.device == "cuda"
+    assert not document.settings.presentation.show_fps
+    assert document.settings.runtime.prewarm_blocks == 7
+    assert document.cli_overrides[("model", "device")] == "cpu"
+    assert document.cli_overrides[("presentation", "show_fps")] is True
 
 
 def test_pressed_r_can_discard_an_unsubmitted_score() -> None:
@@ -291,6 +398,7 @@ def test_pressed_r_can_discard_an_unsubmitted_score() -> None:
 
         def __init__(self) -> None:
             self.driver_input = DriverInput()
+            self.control_actions = BoundActionState(ControlsConfig())
 
         @staticmethod
         def ensure_rollout() -> object:
@@ -322,6 +430,7 @@ def test_model_input_is_applied_before_rollout_work() -> None:
 
         def __init__(self) -> None:
             self.driver_input = DriverInput()
+            self.control_actions = BoundActionState(ControlsConfig())
 
         def ensure_rollout(self) -> None:
             assert self.driver_input.command().throttle == 1.0
@@ -410,7 +519,11 @@ def test_leaderboard_does_not_finish_the_v2_model_loop() -> None:
         scene=cast(Any, object()),
         config=cast(
             Any,
-            SimpleNamespace(total_blocks=None, pipeline_profiling=False),
+            SimpleNamespace(
+                total_blocks=None,
+                pipeline_profiling=False,
+                controls=ControlsConfig(),
+            ),
         ),
         session_desc=cast(
             Any,
@@ -424,6 +537,7 @@ def test_leaderboard_does_not_finish_the_v2_model_loop() -> None:
         ui_loop=cast(Any, ui_loop),
         rollout=cast(Any, rollout),
         last_video=torch.zeros(1, 3, 4, 4),
+        last_hdmap=torch.ones(1, 3, 4, 4),
         last_pose=np.eye(4, dtype=np.float32),
         prewarm_complete=True,
         game_selected=True,
@@ -433,7 +547,8 @@ def test_leaderboard_does_not_finish_the_v2_model_loop() -> None:
 
     results = loop.step(0, UserInputEvents([]))
 
-    assert len(results) == 1
+    assert len(results) == 2
+    assert torch.all(results[1].read_output() == 1.0)
     assert not state.finished
     assert not loop.is_finished()
     assert len(ui_loop.operations) == 1
@@ -446,7 +561,7 @@ def test_leaderboard_does_not_finish_the_v2_model_loop() -> None:
         (["--profile-pipeline"], True),
     ],
 )
-def test_pipeline_profiling_is_an_app_local_opt_in(
+def test_diagnostics_flag_does_not_enable_pipeline_profiling(
     arguments: list[str],
     expected: bool,
 ) -> None:
@@ -461,73 +576,56 @@ def test_pipeline_profiling_is_an_app_local_opt_in(
 
     assert configured == []
     session._pipeline_factory()
-    assert configured[0].enable_sync_and_profile is expected
     assert app._config is not None
     assert app._config.pipeline_profiling is expected
-    assert OMNIDREAMS_PIPELINE_CONFIG.enable_sync_and_profile
 
 
-def test_model_adapters_keep_their_packaged_pipeline_configs() -> None:
-    for defaults, pipeline_config in (
-        (OMNIDREAMS_CRAZY_ROBOTAXI_DEFAULTS, OMNIDREAMS_PIPELINE_CONFIG),
+@pytest.mark.parametrize(
+    ("live_edit", "expected_native_dit"),
+    [
+        (LiveEditConfig(style=LiveEditStyleConfig(enabled=True)), "disabled"),
+        (LiveEditConfig(weather=LiveEditWeatherConfig(enabled=True)), "disabled"),
         (
-            OMNIDREAMS_CRAZY_ROBOTAXI_PERF_DEFAULTS,
-            OMNIDREAMS_PERF_PIPELINE_CONFIG,
+            LiveEditConfig(
+                obstacle=LiveEditObstacleConfig(enabled=True, guide_scale=1.0)
+            ),
+            "disabled",
         ),
+        (LiveEditConfig(coins=LiveEditCoinsConfig(enabled=True)), "required"),
         (
-            OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_DEFAULTS,
-            OMNIDREAMS_FAST_PERF_PIPELINE_CONFIG,
+            LiveEditConfig(
+                obstacle=LiveEditObstacleConfig(enabled=True, guide_scale=0.0)
+            ),
+            "required",
         ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_GB300_DEFAULTS,
-            OMNIDREAMS_OPTIMIZED_GB300_PIPELINE_CONFIG,
+    ],
+)
+def test_live_edit_disables_native_dit_only_when_required(
+    live_edit: LiveEditConfig,
+    expected_native_dit: str,
+) -> None:
+    transformer = replace(
+        cast(
+            _StubTransformerConfig,
+            _STUB_PIPELINE_CONFIG.diffusion_model.transformer,
         ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_RTX_PRO_6000_DEFAULTS,
-            OMNIDREAMS_OPTIMIZED_RTX_PRO_6000_PIPELINE_CONFIG,
-        ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_RESPONSIVE_DEFAULTS,
-            OMNIDREAMS_RESPONSIVE_PIPELINE_CONFIG,
-        ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_PERF_RESPONSIVE_DEFAULTS,
-            OMNIDREAMS_PERF_RESPONSIVE_PIPELINE_CONFIG,
-        ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_RESPONSIVE_DEFAULTS,
-            OMNIDREAMS_FAST_PERF_RESPONSIVE_PIPELINE_CONFIG,
-        ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_GB300_RESPONSIVE_DEFAULTS,
-            OMNIDREAMS_OPTIMIZED_GB300_RESPONSIVE_PIPELINE_CONFIG,
-        ),
-        (
-            OMNIDREAMS_CRAZY_ROBOTAXI_OPTIMIZED_RTX_PRO_6000_RESPONSIVE_DEFAULTS,
-            OMNIDREAMS_OPTIMIZED_RTX_PRO_6000_RESPONSIVE_PIPELINE_CONFIG,
-        ),
-    ):
-        assert defaults.pipeline_config is pipeline_config
-
-
-def test_fast_perf_combines_native_dit_and_native_vae_paths() -> None:
-    pipeline: Any = OMNIDREAMS_FAST_PERF_PIPELINE_CONFIG
-    perf_pipeline: Any = OMNIDREAMS_PERF_PIPELINE_CONFIG
-    assert pipeline.name == "omnidreams-fast-perf"
-    assert pipeline.diffusion_model.seed is None
-    assert pipeline.decoder.use_compile is perf_pipeline.decoder.use_compile
-    assert pipeline.decoder.use_cuda_graph is True
-    assert pipeline.image_encoder.native_vae_acceleration == "required"
-    assert pipeline.image_encoder.native_vae_backend == "fp8"
-    assert pipeline.image_encoder.native_vae_fp8_auto_export is True
-    assert pipeline.encoder.native_vae_acceleration == "required"
-    assert pipeline.encoder.native_vae_backend == "fp8"
-    assert pipeline.encoder.native_vae_fp8_auto_export is True
-    assert pipeline.diffusion_model.transformer.native_dit_acceleration == "required"
-    assert (
-        pipeline.diffusion_model.transformer.native_dit_backend == "fp8_kvcache_cudnn"
+        native_dit_acceleration="required",
     )
-    assert pipeline.diffusion_model.transformer.native_dit_attention_backend == "cudnn"
+    pipeline = replace(
+        _STUB_PIPELINE_CONFIG,
+        diffusion_model=replace(
+            _STUB_PIPELINE_CONFIG.diffusion_model,
+            transformer=transformer,
+        ),
+    )
+
+    configured = _configure_live_edit_pipeline(pipeline, live_edit)
+
+    assert (
+        configured.diffusion_model.transformer.native_dit_acceleration
+        == expected_native_dit
+    )
+    assert configured.encoder == pipeline.encoder
 
 
 @pytest.mark.parametrize("resolution_wh", [(1280, 704), (1168, 640)])
@@ -548,7 +646,7 @@ def test_adapter_dimensions_configure_renderer_geometry(
 
     app = _application(
         defaults=replace(
-            OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_DEFAULTS,
+            _STUB_DEFAULTS,
             width=resolution_wh[0],
             height=resolution_wh[1],
         ),
@@ -584,49 +682,28 @@ def test_adapter_dimensions_configure_renderer_geometry(
     )
 
 
-def test_fast_perf_honors_explicit_pipeline_overrides() -> None:
-    app = _application(
-        defaults=OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_DEFAULTS,
-    )
+def test_live_edit_item_cli_enables_required_abilities(tmp_path: Path) -> None:
+    app = _application()
+    arguments = [
+        "--config",
+        str(tmp_path / "config.yaml"),
+        "--live-edit-items",
+        "--live-edit-item-types",
+        "rain,mystery",
+        "--no-live-edit-style",
+        "--no-live-edit-weather",
+    ]
 
-    app.init(
-        [
-            "--seed",
-            "7",
-            "--no-compile",
-            "--profile-pipeline",
-        ]
-    )
+    with patch(
+        "crazy_robotaxi.application.resolve_live_edit_assets",
+        side_effect=lambda config: config,
+    ):
+        app.init(arguments)
 
-    pipeline = cast(Any, app._pipeline_config)
-    transformer = pipeline.diffusion_model.transformer
-    assert pipeline.diffusion_model.seed == 7
-    assert transformer.compile_network is False
-    assert transformer.native_dit_acceleration == "required"
-    assert transformer.skip_finalize_kv_cache is True
-    assert pipeline.diffusion_model.scheduler.denoising_timesteps == [1000, 100]
-    assert pipeline.enable_sync_and_profile is True
-
-
-def test_map_context_disables_only_native_dit_on_selected_preset() -> None:
-    app = _application(defaults=OMNIDREAMS_CRAZY_ROBOTAXI_FAST_PERF_DEFAULTS)
-
-    app.init(["--live-edit-map-context"])
-
-    pipeline = cast(Any, app._pipeline_config)
-    original: Any = OMNIDREAMS_FAST_PERF_PIPELINE_CONFIG
-    transformer = pipeline.diffusion_model.transformer
     assert app._config is not None
-    assert app._config.scene_request.use_prompt_context
-    assert pipeline.name == original.name
-    assert transformer.native_dit_acceleration == "disabled"
-    assert transformer.native_dit_backend == (
-        original.diffusion_model.transformer.native_dit_backend
-    )
-    assert transformer.skip_finalize_kv_cache is True
-    assert pipeline.diffusion_model.scheduler == original.diffusion_model.scheduler
-    assert pipeline.image_encoder.native_vae_acceleration == "required"
-    assert pipeline.encoder.native_vae_acceleration == "required"
+    assert app._config.live_edit.items.enabled
+    assert app._config.live_edit.style.enabled
+    assert app._config.live_edit.weather.enabled
 
 
 def test_bev_render_fit_preserves_authored_aspect_ratio_and_smaller_sources() -> None:
@@ -700,15 +777,43 @@ def test_input_latency_trace_accepts_an_explicit_path(tmp_path) -> None:
     ],
 )
 def test_fps_counter_is_an_app_local_option(
+    tmp_path: Path,
     arguments: list[str],
     expected: bool,
 ) -> None:
     app = _application()
 
-    app.init(arguments)
+    app.init(["--config", str(tmp_path / "config.yaml"), *arguments])
 
     assert app._config is not None
     assert app._config.show_fps is expected
+
+
+def test_controls_directory_is_a_separate_cli_only_config(tmp_path: Path) -> None:
+    controls_dir = tmp_path / "controls"
+    controls_dir.mkdir()
+    (controls_dir / "keyboard.yaml").write_text(
+        "schema_version: 1\nrestart: [p]\n",
+        encoding="utf-8",
+    )
+    app = _application()
+
+    app.init(
+        [
+            "--config",
+            str(tmp_path / "config.yaml"),
+            "--controls-dir",
+            str(controls_dir),
+        ]
+    )
+
+    assert app._config is not None
+    assert app._config.controls.keyboard.restart[0] is not None
+    assert app._config.controls.keyboard.restart[0].code == "p"
+    assert (
+        app._config.control_documents["keyboard"].path
+        == (controls_dir / "keyboard.yaml").resolve()
+    )
 
 
 @pytest.mark.parametrize("prewarm_blocks", [0, 4, 7])
@@ -875,3 +980,115 @@ def test_application_forces_continuous_presentation_for_interactive_input() -> N
     )
 
     assert session.session_desc.presentation_mode is PresentationMode.CONTINUOUS
+
+
+def test_no_ui_registers_headless_loop_and_keeps_cli_selection() -> None:
+    app = _application(
+        pipeline_factory=lambda config, device: object(),
+        scene_factory=lambda request, raster: _scene(),
+    )
+    app.init(
+        [
+            "--device",
+            "cpu",
+            "--prewarm-blocks",
+            "0",
+            "--no-ui",
+            "--total-blocks",
+            "4",
+            "--game-mode",
+            "race",
+            "--race-course",
+            "grand-prix",
+            "--map",
+            str(_DEMO_RACE_MAP),
+        ]
+    )
+    assert app._config is not None
+    assert app._config.no_ui
+
+    session = app.create_session(app.session_desc())
+    session.init()
+    ui_loop, model_loop = session._take_loops()
+
+    assert isinstance(ui_loop, CrazyRobotaxiHeadlessUILoop)
+    assert isinstance(model_loop, CrazyRobotaxiModelLoop)
+    assert model_loop.state.ui_loop is ui_loop
+    assert ui_loop.state.initial_game_mode == "race"
+    assert ui_loop.state.initial_map_path == _DEMO_RACE_MAP.resolve()
+    assert ui_loop.state.initial_race_course_id == "grand-prix"
+
+
+def test_no_ui_in_race_mode_requires_a_course() -> None:
+    app = _application(
+        pipeline_factory=lambda config, device: object(),
+        scene_factory=lambda request, raster: _scene(),
+    )
+    app.init(
+        [
+            "--device",
+            "cpu",
+            "--no-ui",
+            "--total-blocks",
+            "4",
+            "--game-mode",
+            "race",
+            "--map",
+            str(_DEMO_RACE_MAP),
+        ]
+    )
+
+    session = app.create_session(app.session_desc())
+    with pytest.raises(ValueError, match="requires --race-course"):
+        session.init()
+
+
+def test_no_ui_requires_explicit_mode_map_and_block_count() -> None:
+    app = _application(
+        pipeline_factory=lambda config, device: object(),
+        scene_factory=lambda request, raster: _scene(),
+    )
+    app.init(["--device", "cpu", "--no-ui"])
+
+    session = app.create_session(app.session_desc())
+    with pytest.raises(ValueError, match="--no-ui requires"):
+        session.init()
+
+
+def test_headless_loop_presents_video_channel_and_finishes() -> None:
+    frame = torch.zeros((3, 4, 6))
+    presented: list[tuple[Tensor, ...]] = [(frame, torch.ones((3, 4, 6)))]
+    manager = SimpleNamespace(
+        presented_frames=lambda: presented[0],
+        presented_frame_count=1,
+        composite=lambda background, layer: layer,
+        has_pending_frames=lambda: False,
+    )
+    resets: list[str] = []
+    state = SimpleNamespace(reset=lambda: resets.append("hud"))
+    loop = CrazyRobotaxiHeadlessUILoop()
+    loop.register_session_loop_objects(
+        state=cast(TaxiHudState, state),
+        frequency=0,
+        shutdown_event=threading.Event(),
+        failure_queue=queue.Queue(),
+    )
+    loop.register_session_ui_loop_objects(
+        session_desc=_application().session_desc(),
+        presentation_manager=cast(Any, manager),
+    )
+    loop._set_model_loop(
+        cast(Any, SimpleNamespace(inference_state=ModelInferenceState.FINISHED))
+    )
+
+    result = loop.step(0, UserInputEvents([]))
+
+    assert result is not None
+    output = result.read_output()
+    assert output.shape == (1, 3, 4, 6)
+    assert torch.equal(output[0], frame)
+    assert loop.is_finished()
+    loop.reset()
+    assert resets == ["hud"]
+    presented[0] = ()
+    assert loop.step(1, UserInputEvents([])) is None

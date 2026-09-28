@@ -84,7 +84,11 @@ declare arguments this command also has.
 | Mode | Takes | Input | Ends when |
 | --- | --- | --- | --- |
 | `mp4` (default) | `--output-path` | none | the application UI finishes |
-| `webrtc` | `--host`, `--port` | keyboard, mouse, focus, reset, close | the application UI finishes or the client closes it |
+| `webrtc` | `--host`, `--port` | keyboard, mouse, focus, query string, reset, close | the application UI finishes or the client closes it |
+
+`--host` and `--port` choose the listener. When a browser connects with a
+non-empty query string, an `ILoop` receives a `QueryStringUserInputEvent` whose
+value is the raw string without the leading `?`.
 
 These override whatever session the application asked for:
 
@@ -116,6 +120,9 @@ The runtime augments those model records with step wall time and
 presentation-queue depth/publish-wait measurements under the reserved
 `runtime_` metric prefix. UI and window timings are not folded into a later
 model record because they describe a different frame.
+
+`--stats-path` also sets `FLASHDREAMS_SYNC_AND_PROFILE=1` before constructing the
+application, enabling synchronized per-stage pipeline profiling for the run.
 
 ## Starting and stopping a run
 
@@ -161,10 +168,11 @@ queue. The queue holds one pending chunk by default. Once the UI thread takes
 that chunk, its remaining frames live in the active presented chunk rather than
 the queue; an empty queue with an active chunk means presentation is keeping up.
 
-`publish` observes model-step timing for cadence, and the UI thread calls
-`advance` once per tick so the manager can decide whether the next presentable
-model frame is due. If the pending chunk queue is full, `advance` ignores the
-normal cadence and drains the active chunk so backlog does not build behind it.
+`publish` observes complete model-step timing for cadence, including any
+post-processing performed inside the step. The UI thread calls `advance` once
+per tick so the manager can decide whether the next presentable model frame is
+due. A full pending queue applies the configured backpressure policy without
+bypassing frame pacing.
 
 When CUDA is available, the default `PresentationManager` creates a stream at
 the device's highest available priority. `run_session` keeps that one stream
@@ -175,7 +183,7 @@ Stream priority lets short UI work overtake queued lower-priority kernels, but
 does not preempt a kernel that is already executing.
 
 Frame cadence initially uses `frames_per_second_for_step`, then follows the
-throughput of model steps completed over the trailing two seconds. The estimate
+throughput of complete model steps over the trailing two seconds. The estimate
 uses time spent inside model steps, so presentation-queue backpressure cannot
 feed back into a progressively slower cadence. A late UI tick reanchors the next
 deadline; it never drains multiple model frames into back-to-back writes in one

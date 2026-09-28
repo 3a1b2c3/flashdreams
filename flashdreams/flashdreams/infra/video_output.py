@@ -60,29 +60,6 @@ def infer_video_num_frames(tensor: Tensor, *, layout: VideoTensorLayout) -> int:
     return int(tensor.shape[video_layout_time_dim(layout)])
 
 
-class LazyRGBFrame(LazyCudaFrame):
-    """Defer RGB frame host materialization until a host-only consumer needs it."""
-
-    def __init__(
-        self,
-        frames_hwc_uint8: Any,
-        frame_index: int,
-        *,
-        source_event: object | None = None,
-    ) -> None:
-        super().__init__(
-            frames_hwc_uint8,
-            frame_index,
-            source_event=source_event,
-            lost_source_message=(
-                "Lazy RGB frame lost its source tensor before materialization."
-            ),
-            already_materialized_message=(
-                "Lazy RGB frame was already materialized on the host."
-            ),
-        )
-
-
 def video_tensor_to_hwc_uint8(
     video: Tensor,
     *,
@@ -130,7 +107,7 @@ def lazy_rgb_frames_from_video_tensor(
     batch_index: int = 0,
     view_index: int = 0,
     record_cuda_event: bool = True,
-) -> list[LazyRGBFrame]:
+) -> list[LazyCudaFrame]:
     """Return lazy per-frame RGB handles backed by one video tensor chunk."""
     frames = video_tensor_to_hwc_uint8(
         video,
@@ -143,7 +120,7 @@ def lazy_rgb_frames_from_video_tensor(
         source_event = torch.cuda.Event()
         source_event.record(torch.cuda.current_stream(frames.device))
     return [
-        LazyRGBFrame(frames, frame_index, source_event=source_event)
+        LazyCudaFrame(frames, frame_index, source_event=source_event)
         for frame_index in range(frames.shape[0])
     ]
 
@@ -159,8 +136,18 @@ class VideoOutputStream:
     ) -> None:
         self.postprocess_stream = postprocess_stream
         self.output_layout = output_layout
+        self._postprocess_enabled = postprocess_stream is not None
         self._closed = False
         self._last_step_index: int | None = None
+
+    def set_postprocess_enabled(self, enabled: bool) -> None:
+        """Select post-processed output without resetting the stream."""
+        if enabled and self.postprocess_stream is None:
+            raise RuntimeError("cannot enable an unconfigured post-processing stream")
+        enabled = bool(enabled)
+        if enabled == self._postprocess_enabled:
+            return
+        self._postprocess_enabled = enabled
 
     def process(
         self,
@@ -184,10 +171,11 @@ class VideoOutputStream:
             postprocess_stats = self.postprocess_stream.last_process_stats
             if postprocess_stats is not None:
                 result_metadata["postprocess"] = postprocess_stats.as_dict()
+        output = processed if self._postprocess_enabled else video_chunk
         self._last_step_index = autoregressive_index
         return StepResult.from_video_chunk(
             step_index=autoregressive_index,
-            video_chunk=processed.detach(),
+            video_chunk=output.detach(),
             layout=self.output_layout,
             output_window=output_window,
             metrics=metrics,
@@ -202,7 +190,7 @@ class VideoOutputStream:
         if self.postprocess_stream is None:
             return None
         flushed = self.postprocess_stream.finish()
-        if flushed is None:
+        if not self._postprocess_enabled or flushed is None:
             return None
         if self._last_step_index is None:
             raise RuntimeError("post-processing emitted a tail before any video step")
@@ -308,7 +296,6 @@ def prepare_video_for_mp4(
 
 
 __all__ = [
-    "LazyRGBFrame",
     "VideoOutputStream",
     "VideoResultCollector",
     "infer_video_num_frames",

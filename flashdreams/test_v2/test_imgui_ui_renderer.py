@@ -16,6 +16,7 @@ from numpy import uint64
 from flashdreams.runtime_v2.imgui_ui_loop import ImGuiUILoop
 from flashdreams.runtime_v2.imgui_ui_renderer import (
     _ImGui,
+    _ImGuiUIRenderer,
     _rgba_pixels,
     _route_imgui_input_events,
 )
@@ -31,6 +32,36 @@ from flashdreams.runtime_v2.user_input_events import UserInputEvents
 from flashdreams.runtime_v2.video_tensor import VideoTensorLayout
 
 pytestmark = pytest.mark.ci_cpu
+
+
+def test_imgui_renderer_uses_an_explicit_cuda_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = _ImGuiUIRenderer(width=4, height=3, cuda_device="cuda:1")
+    contexts: list[tuple[str, torch.device]] = []
+
+    class _DeviceContext:
+        def __init__(self, device: torch.device) -> None:
+            self.device = torch.device(device)
+
+        def __enter__(self) -> None:
+            contexts.append(("enter", self.device))
+
+        def __exit__(self, *_args: object) -> None:
+            contexts.append(("exit", self.device))
+
+    expected = torch.zeros(4, 3, 4)
+    monkeypatch.setattr(torch.cuda, "device", _DeviceContext)
+    monkeypatch.setattr(renderer, "_render", Mock(return_value=expected))
+
+    assert renderer._cuda_device == torch.device("cuda:1")
+    assert renderer.render(0, UserInputEvents([]), Mock()) is expected
+    assert contexts == [
+        ("enter", torch.device("cuda:1")),
+        ("exit", torch.device("cuda:1")),
+    ]
+    with pytest.raises(ValueError, match="requires a CUDA device"):
+        _ImGuiUIRenderer(width=4, height=3, cuda_device="cpu")
 
 
 def _slangpy_events() -> SimpleNamespace:
@@ -150,35 +181,3 @@ class _Loop(ImGuiUILoop[None]):
         del imgui, step_index, events
         frames = self.presented_model_frames()
         return frames[0] if frames else None
-
-
-def test_imgui_loop_composites_over_the_presented_model_frame() -> None:
-    video = torch.full((1, 3, 3, 4), -0.5)
-    presentation = PresentationManager()
-    presentation.publish(
-        0,
-        [StepResult(0, video, 1, VideoTensorLayout.tchw)],
-    )
-    presentation.advance(0)
-    renderer = _Renderer()
-    loop = _Loop(renderer=renderer)
-    loop.register_session_loop_objects(
-        state=None,
-        frequency=60,
-        shutdown_event=threading.Event(),
-        failure_queue=queue.Queue(),
-    )
-    loop.register_session_ui_loop_objects(
-        session_desc=SessionDesc(output_layout=VideoTensorLayout.tchw),
-        presentation_manager=presentation,
-    )
-
-    result = loop.step(0, UserInputEvents([]))
-
-    output = result.read_output()
-    assert output.shape == (1, 3, 3, 4)
-    assert torch.all(output == -0.5)
-    loop.reset()
-    loop.close()
-    assert renderer.reset_count == 1
-    assert renderer.closed

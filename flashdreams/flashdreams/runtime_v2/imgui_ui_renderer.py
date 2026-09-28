@@ -93,14 +93,21 @@ class _ImGuiUIRenderer:
         *,
         width: int,
         height: int,
+        cuda_device: str | torch.device | None = None,
         slangpy_module: Any | None = None,
         imgui_module: Any | None = None,
         bridge_module: Any | None = None,
     ) -> None:
         if width <= 0 or height <= 0:
             raise ValueError("ImGui UI render dimensions must be > 0.")
+        resolved_cuda_device = (
+            None if cuda_device is None else torch.device(cuda_device)
+        )
+        if resolved_cuda_device is not None and resolved_cuda_device.type != "cuda":
+            raise ValueError("ImGui UI rendering requires a CUDA device.")
         self.width = int(width)
         self.height = int(height)
+        self._cuda_device = resolved_cuda_device
         self._slangpy = slangpy_module
         self._imgui = imgui_module
         self._bridge = bridge_module
@@ -122,6 +129,18 @@ class _ImGuiUIRenderer:
         step_ui: Callable[[Any, int, UserInputEvents], None],
     ) -> Tensor:
         """Render one transparent immediate-mode UI frame."""
+        if self._cuda_device is not None:
+            with torch.cuda.device(self._cuda_device):
+                return self._render(step_index, events, step_ui)
+        return self._render(step_index, events, step_ui)
+
+    def _render(
+        self,
+        step_index: int,
+        events: UserInputEvents,
+        step_ui: Callable[[Any, int, UserInputEvents], None],
+    ) -> Tensor:
+        """Render while the configured CUDA device is current."""
         self._ensure_initialized()
         assert self._device is not None
         assert self._slangpy is not None
@@ -181,11 +200,83 @@ class _ImGuiUIRenderer:
         self._device.sync_to_device(_current_cuda_stream())
         return _rgba8_to_compositing_frame(self._rgba_tensor)
 
+    def resize(self, width: int, height: int) -> None:
+        """Resize the GPU render target while preserving the ImGui context."""
+        if width <= 0 or height <= 0:
+            raise ValueError("ImGui UI render dimensions must be > 0.")
+        width = int(width)
+        height = int(height)
+        if (width, height) == (self.width, self.height):
+            return
+        if self._cuda_device is not None:
+            with torch.cuda.device(self._cuda_device):
+                self._resize(width, height)
+            return
+        self._resize(width, height)
+
+    def _resize(self, width: int, height: int) -> None:
+        """Resize resources while their CUDA device is current."""
+        if self._device is None:
+            self.width = width
+            self.height = height
+            return
+        assert self._slangpy is not None
+
+        torch.cuda.current_stream().synchronize()
+        self._device.wait_for_idle()
+        target = self._device.create_texture(
+            format=self._slangpy.Format.rgba8_unorm,
+            width=width,
+            height=height,
+            usage=(
+                self._slangpy.TextureUsage.render_target
+                | self._slangpy.TextureUsage.shader_resource
+                | self._slangpy.TextureUsage.copy_source
+            ),
+            label="flashdreams_imgui_ui_target",
+        )
+        layout = target.get_subresource_layout(0)
+        size_bytes = int(layout.size_in_bytes)
+        row_pitch = int(layout.row_pitch)
+        rgba_buffer = self._device.create_buffer(
+            size=size_bytes,
+            usage=(
+                self._slangpy.BufferUsage.shared
+                | self._slangpy.BufferUsage.copy_destination
+            ),
+            label="flashdreams_imgui_ui_rgba",
+        )
+        rgba_tensor = cast(
+            Tensor,
+            rgba_buffer.to_torch(
+                type=self._slangpy.DataType.uint8,
+                shape=[height, width, 4],
+                strides=[row_pitch, 4, 1],
+            ),
+        )
+
+        self.width = width
+        self.height = height
+        self._target = target
+        self._rgba_buffer = rgba_buffer
+        self._rgba_tensor = rgba_tensor
+        self._rgba_buffer_size = size_bytes
+        self._rgba_row_pitch = row_pitch
+        self._has_rendered = False
+
     def reset(self) -> None:
         """Preserve cached textures across model-session resets."""
 
     def close(self) -> None:
         """Release ImGui, UI, and GPU resources after pending work completes."""
+        if self._cuda_device is not None and self._device is not None:
+            with torch.cuda.device(self._cuda_device):
+                self._close()
+            return
+        self._close()
+
+    def _close(self) -> None:
+        """Release resources while their CUDA device is current."""
         if self._device is not None:
             torch.cuda.current_stream().synchronize()
             self._device.wait_for_idle()

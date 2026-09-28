@@ -33,6 +33,7 @@ class RasterConfig:
     width: int = 1280
     height: int = 704
     compute_device: ComputeDeviceName = "cuda"
+    device: str = "cuda:0"
     sync_gpu_timing: bool = False
     perf_log_interval_frames: int = 20
     near_plane_m: float = 0.1
@@ -97,11 +98,6 @@ class VehicleConfig:
 
 
 @dataclass(frozen=True)
-class WorldModelProfileConfig:
-    enabled: bool = False
-
-
-@dataclass(frozen=True)
 class BevConfig:
     """Straight-down HD-map view rendered for the HUD mini-map."""
 
@@ -130,8 +126,9 @@ class AppConfig:
     chunk: ChunkConfig = ChunkConfig()
     raster: RasterConfig = RasterConfig()
     vehicle: VehicleConfig = VehicleConfig()
-    world_model_profile: WorldModelProfileConfig = WorldModelProfileConfig()
     world_model_device: str = "cuda:0"
+    postprocess_preset: str = ""
+    postprocess_device: str = "cuda:0"
     world_model_seed: int | None = None
     world_model_debug_condition_frame_dir: Path | None = None
     postprocess: VideoPostprocessChainConfig = field(
