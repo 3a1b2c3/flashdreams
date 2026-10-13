@@ -2,8 +2,8 @@
 
 Crazy Robotaxi is an interactive FlashDreams V2 application built on the
 OmniDreams world model and `omnidreams-game-engine`. Drive a taxi through
-authored maps, collect fares, or race against the clock using a keyboard,
-gamepad, or steering wheel.
+authored maps, collect fares, race against the clock, or explore freely using a
+keyboard, gamepad, or steering wheel.
 
 ## Requirements
 
@@ -37,8 +37,9 @@ uv run --package flashdreams-omnidreams flashdreams-run-v2 \
 ```
 
 Open `http://127.0.0.1:8089/`, or use the host printed by the runner when
-connecting remotely. Choose **TAXI** or **RACE**, then a map; race mode also asks
-for a course. **CONTROLS** and **OPTIONS** are available from the mode menu.
+connecting remotely. Choose **TAXI**, **RACE**, or **FREE-ROAM**, then a map;
+race mode also asks for a course. **CONTROLS** and **OPTIONS** are available from
+the mode menu.
 The application prepares maps and loads the world model before showing the
 menus. The first launch downloads missing model assets and may take time to
 compile and autotune kernels.
