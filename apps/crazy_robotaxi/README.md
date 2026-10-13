@@ -326,7 +326,7 @@ uv run --package flashdreams-omnidreams flashdreams-run-v2 \
   --live-edit-weather \
   --live-edit-style \
   --live-edit-obstacle \
-  --live-edit-map-context
+  --live-edit-dynamic-prompts
 ```
 
 When enabled, `C` toggles coins, `K` cycles style skins, `V` cycles weather,
@@ -337,12 +337,14 @@ downloaded during application startup when the features are enabled, unless
 explicit checkpoint paths are configured. Downloaded assets are cached under
 `artifacts/crazy_robotaxi/live_edit` relative to the working directory.
 
-Map context appends authored road and landmark descriptions plus topology,
-curve, and vehicle-motion clauses to the active prompt. Complete combined
-prompts are encoded and retained lazily, so the first visit to a new context
-may pause briefly and maps with many unique contexts retain more GPU memory.
+Dynamic prompts append selected fragments for the current road context, next
+map-node type, next map-node context, upcoming road-curve direction, and taxi
+motion state. Each fragment can be included independently in the live settings.
+Complete combined prompts are encoded and retained lazily, so the first visit
+to a new combination may pause briefly and sessions with many unique
+combinations retain more GPU memory.
 
-Style, weather, map context, and obstacles with a positive `guide_scale` need
+Style, weather, dynamic prompts, and obstacles with a positive `guide_scale` need
 the Python transformer hooks. Enabling any of them automatically disables
 native DiT acceleration and logs the reason. Native VAE acceleration remains
 available. Coins, nitro-only items, and unguided obstacles can retain native
@@ -377,5 +379,5 @@ Compiled scene archives are cached under
 the source YAML directly and compiles it as needed.
 
 Each spawn can define both a full `prompt` for normal play and a shorter
-`prompt_context` base for `--live-edit-map-context`; dynamic road and motion
-clauses are appended only to the latter.
+`prompt_context` base for `--live-edit-dynamic-prompts`; selected dynamic
+fragments are appended only to the latter.
